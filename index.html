@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RakshaRide | Safe & Verified Rickshaw Service</title>
+    <meta name="description"
+        content="RakshaRide — trusted platform for safe, verified rickshaw journeys. Real-time tracking, verified drivers, complete transparency.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* ── Extra scoped styles for new modals / dashboards ── */
+        :root {
+            --pri: #FFB300;
+            --pri-dark: #e65100;
+            --acc: #00E676;
+            --dark: #0d1117;
+            --dark2: #161b22;
+            --dark3: #21262d;
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #e6edf3;
+            --text2: #8b949e;
+            --radius: 16px;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+        }
+
+        /* ── Overlay backdrop ── */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.72);
+            backdrop-filter: blur(6px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .modal-backdrop.hidden {
+            display: none;
+        }
+
+        /* ── Modal card ── */
+        .modal-card {
+            background: var(--dark2);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            width: 100%;
+            max-width: 500px;
+            padding: 2.5rem 2.8rem;
+            box-shadow: var(--shadow);
+            animation: slideUp .35s cubic-bezier(.22, 1, .36, 1);
+            position: relative;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px) scale(.97);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .modal-card h2 {
+            font-size: 1.7rem;
+            font-weight: 900;
+            color: var(--pri);
+            margin-bottom: .25rem;
+        }
+
+        .modal-card p.sub {
+            color: var(--text2);
+            font-size: .9rem;
+            margin-bottom: 1.6rem;
+        }
+
+        /* ── Role tabs ── */
+        .role-tabs {
+            display: flex;
+            gap: .6rem;
+            margin-bottom: 1.4rem;
+            background: var(--dark3);
+            border-radius: 12px;
+            padding: .3rem;
+        }
+
+        .role-tab {
+            flex: 1;
+            padding: .6rem;
+            border: none;
+            border-radius: 9px;
+            background: transparent;
+            color: var(--text2);
+            font-family: inherit;
+            font-weight: 700;
+            font-size: .9rem;
+            cursor: pointer;
+            transition: .2s;
+        }
+
+        .role-tab.active {
+            background: var(--pri);
+            color: #000;
+        }
+
+        /* ── Form fields ── */
+        .form-group {
+            margin-bottom: 1.1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: .82rem;
+            font-weight: 700;
+            color: var(--text2);
+            margin-bottom: .45rem;
+            letter-spacing: .5px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: .75rem 1rem;
+            background: var(--dark3);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-size: .95rem;
+            font-family: inherit;
+            outline: none;
+            transition: .2s;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus {
+            border-color: var(--pri);
+            background: #1c2030;
+        }
+
+        .form-group input::placeholder {
+            color: var(--text2);
+        }
+
+        /* ── Buttons ── */
+        .btn-gold {
+            width: 100%;
+            padding: .85rem;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--pri), var(--pri-dark));
+            color: #000;
+            font-weight: 900;
+            font-size: 1rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: .2s;
+            margin-top: .4rem;
+        }
+
+        .btn-gold:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1.5px solid var(--border);
+            color: var(--text2);
+            padding: .6rem 1.2rem;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: .88rem;
+            cursor: pointer;
+            transition: .2s;
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--pri);
+            color: var(--pri);
+        }
+
+        /* ── Error / info msg ── */
+        .form-msg {
+            font-size: .85rem;
+            margin-top: .6rem;
+            display: none;
+            border-radius: 8px;
+            padding: .5rem .8rem;
+        }
+
+        .form-msg.err {
+            color: #ff5252;
+            background: rgba(255, 82, 82, 0.1);
+        }
+
+        .form-msg.ok {
+            color: var(--acc);
+            background: rgba(0, 230, 118, 0.1);
+        }
+
+        /* ── Landing page ── */
+        #landing {
+            display: block;
+        }
+
+        header.site-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 900;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: .9rem 5%;
+            background: rgba(13, 17, 23, .92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo-wrap {
+            display: flex;
+            align-items: center;
+            gap: .7rem;
+            text-decoration: none;
+        }
+
+        .logo-wrap ion-icon {
+            font-size: 1.8rem;
+            color: var(--pri);
+        }
+
+        .logo-wrap span {
+            font-size: 1.4rem;
+            font-weight: 900;
+            color: var(--text);
+        }
+
+        header nav a {
+            color: var(--text2);
+            text-decoration: none;
+            font-weight: 600;
+            margin-left: 1.8rem;
+            font-size: .95rem;
+            transition: .2s;
+        }
+
+        header nav a:hover {
+            color: var(--pri);
+        }
+
+        .header-btns {
+            display: flex;
+            gap: .7rem;
+            align-items: center;
+        }
+
+        .hbtn {
+            padding: .5rem 1.2rem;
+            border-radius: 10px;
+            font-family: inherit;
+            font-weight: 700;
+            font-size: .88rem;
+            cursor: pointer;
+            transition: .2s;
+            border: none;
+        }
+
+        .hbtn-login {
+            background: var(--dark3);
+            color: var(--text);
+            border: 1.5px solid var(--border);
+        }
+
+        .hbtn-login:hover {
+            border-color: var(--pri);
+            color: var(--pri);
+        }
+
+        .hbtn-reg {
+            background: var(--pri);
+            color: #000;
+        }
+
+        .hbtn-reg:hover {
+            filter: brightness(1.1);
+        }
+
+        /* ── Hero ── */
+        .hero-section {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 60%, #1a1f2e 100%);
+            padding: 7rem 5% 5rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse 80% 60% at 50% 20%, rgba(255, 179, 0, 0.08), transparent);
+            pointer-events: none;
+        }
+
+        .hero-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            background: rgba(255, 179, 0, 0.12);
+            border: 1px solid rgba(255, 179, 0, 0.3);
+            color: var(--pri);
+            padding: .4rem 1.1rem;
+            border-radius: 50px;
+            font-size: .85rem;
+            font-weight: 700;
+            margin-bottom: 1.8rem;
+        }
+
+        .hero-section h1 {
+            font-size: clamp(2.2rem, 6vw, 4.2rem);
+            font-weight: 900;
+            color: var(--text);
+            line-height: 1.15;
+            margin-bottom: 1.2rem;
+        }
+
+        .hero-section h1 span {
+            color: var(--pri);
+        }
+
+        .hero-section p.tagline {
+            color: var(--text2);
+            font-size: 1.15rem;
+            max-width: 600px;
+            margin: 0 auto 2.5rem;
+            line-height: 1.8;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .cta-primary {
+            padding: 1rem 2.4rem;
+            border-radius: 14px;
+            border: none;
+            background: linear-gradient(135deg, var(--pri), var(--pri-dark));
+            color: #000;
+            font-weight: 900;
+            font-size: 1.05rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: .25s;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .cta-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(255, 179, 0, 0.35);
+        }
+
+        .cta-secondary {
+            padding: 1rem 2.4rem;
+            border-radius: 14px;
+            border: 1.5px solid var(--border);
+            background: transparent;
+            color: var(--text);
+            font-weight: 700;
+            font-size: 1rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: .25s;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .cta-secondary:hover {
+            border-color: var(--pri);
+            color: var(--pri);
+        }
+
+        /* ── Stats strip ── */
+        .stats-strip {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 4rem;
+            padding: 2rem 3rem;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-num {
+            font-size: 2rem;
+            font-weight: 900;
+            color: var(--pri);
+        }
+
+        .stat-lbl {
+            font-size: .82rem;
+            color: var(--text2);
+            margin-top: .2rem;
+        }
+
+        /* ── Features grid ── */
+        .features-section {
+            padding: 6rem 5%;
+            background: var(--dark2);
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+
+        .section-title h2 {
+            font-size: 2.4rem;
+            font-weight: 900;
+            color: var(--text);
+            margin-bottom: .8rem;
+        }
+
+        .section-title p {
+            color: var(--text2);
+            font-size: 1rem;
+            max-width: 580px;
+            margin: auto;
+            line-height: 1.8;
+        }
+
+        .feat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.8rem;
+            max-width: 1100px;
+            margin: auto;
+        }
+
+        .feat-card {
+            background: var(--dark3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2rem;
+            transition: .25s;
+            cursor: default;
+        }
+
+        .feat-card:hover {
+            border-color: var(--pri);
+            transform: translateY(-4px);
+        }
+
+        .feat-icon {
+            font-size: 2.2rem;
+            margin-bottom: 1rem;
+        }
+
+        .feat-card h3 {
+            font-size: 1.1rem;
+            color: var(--text);
+            margin-bottom: .6rem;
+        }
+
+        .feat-card p {
+            color: var(--text2);
+            font-size: .9rem;
+            line-height: 1.7;
+        }
+
+        /* ── Flow section ── */
+        .flow-section {
+            padding: 5rem 5%;
+            background: var(--dark);
+        }
+
+        .flow-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2.5rem;
+            max-width: 900px;
+            margin: auto;
+        }
+
+        @media(max-width:640px) {
+            .flow-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .flow-card {
+            background: var(--dark2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2.2rem;
+            text-align: center;
+        }
+
+        .flow-card .flow-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .flow-card h3 {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: .8rem;
+        }
+
+        .flow-card ol {
+            text-align: left;
+            padding-left: 1.2rem;
+            color: var(--text2);
+            font-size: .9rem;
+        }
+
+        .flow-card ol li {
+            margin-bottom: .5rem;
+            line-height: 1.6;
+        }
+
+        .flow-card .flow-badge {
+            display: inline-block;
+            font-size: .75rem;
+            font-weight: 700;
+            padding: .25rem .75rem;
+            border-radius: 20px;
+            margin-top: .8rem;
+        }
+
+        .flow-card.driver .flow-badge {
+            background: rgba(255, 179, 0, 0.15);
+            color: var(--pri);
+        }
+
+        .flow-card.passenger .flow-badge {
+            background: rgba(0, 230, 118, 0.15);
+            color: var(--acc);
+        }
+
+        /* ═══════════════════════════════════════════════
+       DRIVER DASHBOARD
+    ═══════════════════════════════════════════════ */
+        #driver-dashboard {
+            display: none;
+            min-height: 100vh;
+            background: var(--dark);
+        }
+
+        #passenger-dashboard {
+            display: none;
+            min-height: 100vh;
+            background: var(--dark);
+        }
+
+        .dash-wrap {
+            display: flex;
+        }
+
+        .dash-sidebar {
+            width: 240px;
+            min-height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background: var(--dark2);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem 1rem;
+            display: flex;
+            flex-direction: column;
+            z-index: 200;
+        }
+
+        .dash-sidebar .sb-logo {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            padding: .6rem .8rem;
+            margin-bottom: 2rem;
+        }
+
+        .dash-sidebar .sb-logo ion-icon {
+            font-size: 1.6rem;
+            color: var(--pri);
+        }
+
+        .dash-sidebar .sb-logo span {
+            font-size: 1.1rem;
+            font-weight: 900;
+            color: var(--text);
+        }
+
+        .sb-nav {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: .3rem;
+        }
+
+        .sb-link {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            padding: .75rem 1rem;
+            border-radius: 10px;
+            color: var(--text2);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: .92rem;
+            transition: .2s;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+        }
+
+        .sb-link ion-icon {
+            font-size: 1.2rem;
+        }
+
+        .sb-link:hover,
+        .sb-link.active {
+            background: rgba(255, 179, 0, 0.12);
+            color: var(--pri);
+        }
+
+        .sb-logout {
+            margin-top: auto;
+            color: #ff5252 !important;
+        }
+
+        .sb-logout:hover {
+            background: rgba(255, 82, 82, 0.1) !important;
+        }
+
+        .dash-main {
+            margin-left: 240px;
+            padding: 2rem 2.5rem;
+            flex: 1;
+        }
+
+        @media(max-width:768px) {
+            .dash-sidebar {
+                width: 100%;
+                min-height: auto;
+                position: relative;
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+
+            .dash-main {
+                margin-left: 0;
+            }
+        }
+
+        .dash-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            padding-bottom: 1.2rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .dash-topbar h1 {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: var(--text);
+        }
+
+        .dash-topbar .user-pill {
+            display: flex;
+            align-items: center;
+            gap: .7rem;
+            background: var(--dark3);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: .4rem 1rem .4rem .4rem;
+        }
+
+        .dash-topbar .user-pill img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .dash-topbar .user-pill span {
+            font-size: .85rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        /* ── Dash views ── */
+        .dash-view {
+            display: none;
+        }
+
+        .dash-view.active {
+            display: block;
+        }
+
+        /* ── Info cards ── */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin-bottom: 2rem;
+        }
+
+        .info-card {
+            background: var(--dark2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.4rem 1.6rem;
+        }
+
+        .info-card .ic-label {
+            font-size: .75rem;
+            color: var(--text2);
+            font-weight: 700;
+            letter-spacing: .5px;
+            text-transform: uppercase;
+            margin-bottom: .4rem;
+        }
+
+        .info-card .ic-val {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: var(--text);
+        }
+
+        .info-card .ic-sub {
+            font-size: .8rem;
+            color: var(--text2);
+            margin-top: .2rem;
+        }
+
+        /* ── Profile detail card ── */
+        .profile-detail {
+            background: var(--dark2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .pd-header {
+            background: linear-gradient(135deg, rgba(255, 179, 0, 0.18), rgba(255, 179, 0, 0.04));
+            padding: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .pd-header img {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--pri);
+        }
+
+        .pd-header-info h2 {
+            font-size: 1.4rem;
+            font-weight: 900;
+            color: var(--text);
+        }
+
+        .pd-header-info p {
+            color: var(--text2);
+            font-size: .88rem;
+        }
+
+        .pd-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            font-size: .78rem;
+            font-weight: 700;
+            padding: .25rem .8rem;
+            border-radius: 20px;
+            margin-top: .4rem;
+        }
+
+        .pd-badge.verified {
+            background: rgba(0, 230, 118, 0.15);
+            color: var(--acc);
+        }
+
+        .pd-body {
+            padding: 1.8rem;
+        }
+
+        .pd-row {
+            display: flex;
+            align-items: center;
+            padding: .7rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .pd-row:last-child {
+            border-bottom: none;
+        }
+
+        .pd-lbl {
+            min-width: 160px;
+            font-size: .82rem;
+            color: var(--text2);
+            font-weight: 700;
+        }
+
+        .pd-val {
+            color: var(--text);
+            font-size: .95rem;
+            font-weight: 600;
+        }
+
+        /* ── QR box ── */
+        .qr-box {
+            background: var(--dark2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.8rem;
+            text-align: center;
+        }
+
+        .qr-box h3 {
+            color: var(--text);
+            font-size: 1rem;
+            margin-bottom: 1.2rem;
+        }
+
+        .qr-box p {
+            color: var(--text2);
+            font-size: .83rem;
+            margin-top: .8rem;
+        }
+
+        /* ── History table ── */
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .history-table th {
+            font-size: .78rem;
+            color: var(--text2);
+            text-align: left;
+            padding: .6rem .8rem;
+            border-bottom: 1px solid var(--border);
+            letter-spacing: .5px;
+            text-transform: uppercase;
+        }
+
+        .history-table td {
+            padding: .75rem .8rem;
+            font-size: .88rem;
+            color: var(--text);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .ht-badge {
+            font-size: .72rem;
+            padding: .2rem .7rem;
+            border-radius: 20px;
+            font-weight: 700;
+        }
+
+        .ht-green {
+            background: rgba(0, 230, 118, 0.15);
+            color: var(--acc);
+        }
+
+        .ht-amber {
+            background: rgba(255, 179, 0, 0.15);
+            color: var(--pri);
+        }
+
+        /* ── Ride & Map zone ── */
+        .map-zone {
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        #d-map,
+        #p-map {
+            height: 320px;
+        }
+
+        /* ── Scanner zone ── */
+        .scan-zone {
+            background: var(--dark2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .scan-zone .scan-title {
+            font-size: 1.2rem;
+            font-weight: 900;
+            color: var(--text);
+            margin-bottom: .6rem;
+        }
+
+        .scan-zone p {
+            color: var(--text2);
+            font-size: .9rem;
+        }
+
+        /* ── Alert banner ── */
+        .alert-banner {
+            display: none;
+            padding: 1rem 1.4rem;
+            background: rgba(255, 82, 82, 0.15);
+            border: 1px solid rgba(255, 82, 82, 0.4);
+            border-radius: 12px;
+            color: #ff5252;
+            font-weight: 700;
+            margin-bottom: 1.2rem;
+            align-items: center;
+            gap: .8rem;
+        }
+
+        .alert-banner.show {
+            display: flex;
+        }
+
+        /* ── Payment section ── */
+        .pay-card {
+            background: var(--dark2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2rem;
+            max-width: 440px;
+        }
+
+        .pay-card h3 {
+            color: var(--text);
+            margin-bottom: 1.2rem;
+        }
+
+        .pay-row {
+            display: flex;
+            justify-content: space-between;
+            padding: .6rem 0;
+            border-bottom: 1px solid var(--border);
+            color: var(--text2);
+            font-size: .9rem;
+        }
+
+        .pay-row .pv {
+            color: var(--text);
+            font-weight: 700;
+        }
+
+        .pay-amount {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: var(--pri);
+            margin: 1rem 0;
+        }
+
+        .pay-btn {
+            width: 100%;
+            padding: .85rem;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--pri), var(--pri-dark));
+            color: #000;
+            font-weight: 900;
+            font-size: 1rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: .2s;
+            margin-top: .4rem;
+        }
+
+        .pay-btn:hover {
+            filter: brightness(1.1);
+        }
+
+        /* ── Footer ── */
+        footer.site-footer {
+            background: var(--dark2);
+            border-top: 1px solid var(--border);
+            padding: 3rem 5%;
+            text-align: center;
+            color: var(--text2);
+            font-size: .9rem;
+        }
+
+        footer.site-footer span {
+            color: var(--pri);
+            font-weight: 700;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║           LANDING PAGE               ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <div id="landing">
+        <header class="site-header">
+            <a class="logo-wrap" href="#">
+                <ion-icon name="shield-checkmark"></ion-icon>
+                <span>RakshaRide</span>
+            </a>
+            <nav>
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How It Works</a>
+            </nav>
+            <div class="header-btns">
+                <button class="hbtn hbtn-login" id="open-login-btn">Sign In</button>
+                <button class="hbtn hbtn-reg" id="open-reg-btn">Register Driver</button>
+            </div>
+        </header>
+
+        <!-- Hero -->
+        <section class="hero-section" id="home">
+            <div>
+                <div class="hero-tag"><ion-icon name="shield-checkmark"></ion-icon> 100% Verified Rickshaws</div>
+                <h1>Your Safety is Our<br><span>Priority</span></h1>
+                <p class="tagline">Ride with confidence. Every journey is verified, tracked, and protected. Drivers
+                    registered by RC, passengers authenticated securely.</p>
+                <div class="hero-cta">
+                    <button class="cta-primary" id="hero-login-btn">
+                        <ion-icon name="log-in-outline"></ion-icon> Sign In
+                    </button>
+                    <button class="cta-secondary" id="hero-reg-btn">
+                        <ion-icon name="car-outline"></ion-icon> Register as Driver
+                    </button>
+                </div>
+                <div class="stats-strip">
+                    <div class="stat-item">
+                        <div class="stat-num">50K+</div>
+                        <div class="stat-lbl">Safe Rides</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-num">4.9★</div>
+                        <div class="stat-lbl">Avg Rating</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-num">50</div>
+                        <div class="stat-lbl">Drivers</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-num">24/7</div>
+                        <div class="stat-lbl">Support</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section class="features-section" id="features">
+            <div class="section-title">
+                <h2>Why RakshaRide?</h2>
+                <p>We are committed to making every rickshaw journey safe, transparent, and reliable.</p>
+            </div>
+            <div class="feat-grid">
+                <div class="feat-card">
+                    <div class="feat-icon">🛡️</div>
+                    <h3>RC-Verified Drivers</h3>
+                    <p>Drivers register through vehicle RC number. Only RC-linked email can access driver account.</p>
+                </div>
+                <div class="feat-card">
+                    <div class="feat-icon">📍</div>
+                    <h3>Real-Time GPS</h3>
+                    <p>Live route tracking with 1km deviation alerts. Journey summary saved after every ride.</p>
+                </div>
+                <div class="feat-card">
+                    <div class="feat-icon">📱</div>
+                    <h3>QR Verification</h3>
+                    <p>Scan driver QR to instantly verify identity, vehicle number and RC details.</p>
+                </div>
+                <div class="feat-card">
+                    <div class="feat-icon">🚨</div>
+                    <h3>Emergency SOS</h3>
+                    <p>One-tap SOS with GPS location shared instantly to emergency contacts.</p>
+                </div>
+                <div class="feat-card">
+                    <div class="feat-icon">💳</div>
+                    <h3>Seamless Payments</h3>
+                    <p>In-app fare payment, wallet top-up and complete payment history.</p>
+                </div>
+                <div class="feat-card">
+                    <div class="feat-icon">⭐</div>
+                    <h3>Ratings & Reviews</h3>
+                    <p>Transparent community ratings keep drivers accountable and passengers safe.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works -->
+        <section class="flow-section" id="how-it-works">
+            <div class="section-title">
+                <h2>How It Works</h2>
+                <p>Two separate flows — one for drivers, one for passengers.</p>
+            </div>
+            <div class="flow-grid">
+                <div class="flow-card driver">
+                    <div class="flow-icon">🚗</div>
+                    <h3>Driver Flow</h3>
+                    <ol>
+                        <li>Register with Vehicle No. &amp; RC number</li>
+                        <li>Provide Name, Age, Mobile, Pick location</li>
+                        <li>Email is tied to RC account automatically</li>
+                        <li>Login via RC-registered email + password</li>
+                        <li>Access driver dashboard &amp; manage rides</li>
+                    </ol>
+                    <span class="flow-badge">Email linked to RC</span>
+                </div>
+                <div class="flow-card passenger">
+                    <div class="flow-icon">👤</div>
+                    <h3>Passenger Flow</h3>
+                    <ol>
+                        <li>Register with Name, Mobile &amp; Email</li>
+                        <li>Login via Email OR Mobile number</li>
+                        <li>Access passenger dashboard</li>
+                        <li>Scan driver QR to verify &amp; book ride</li>
+                        <li>Track journey in real-time</li>
+                    </ol>
+                    <span class="flow-badge">Email or Mobile login</span>
+                </div>
+            </div>
+        </section>
+
+        <footer class="site-footer">
+            <p>© 2026 <span>RakshaRide</span>. Safety First, Always. Building trust, one ride at a time.</p>
+        </footer>
+    </div><!-- /landing -->
+
+
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║       LOGIN MODAL                     ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <div id="login-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <button class="btn-ghost" id="login-close-btn" style="position:absolute;top:1.2rem;right:1.2rem;">✕</button>
+            <h2>Sign In</h2>
+            <p class="sub">Choose your role to continue</p>
+
+            <div class="role-tabs">
+                <button class="role-tab active" id="lt-driver">🚗 Driver</button>
+                <button class="role-tab" id="lt-passenger">👤 Passenger</button>
+            </div>
+
+            <form id="login-form" autocomplete="off">
+                <!-- Driver: only email -->
+                <div class="form-group" id="lf-email">
+                    <label>Email (RC-registered)</label>
+                    <input type="email" id="l-email" placeholder="driver@riksha.in">
+                </div>
+                <!-- Passenger: email OR mobile -->
+                <div class="form-group" id="lf-mobile" style="display:none;">
+                    <label>Email or Mobile</label>
+                    <input type="text" id="l-mobile" placeholder="email@example.com or 98765xxxxx">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="l-password" placeholder="Your password">
+                </div>
+                <button type="submit" class="btn-gold">Sign In →</button>
+                <div class="form-msg err" id="login-err"></div>
+            </form>
+
+            <p style="margin-top:1.2rem; font-size:.85rem; color:var(--text2); text-align:center;">
+                New passenger? <a href="#" id="goto-reg-link" style="color:var(--pri); font-weight:700;">Create
+                    account</a>
+            </p>
+        </div>
+    </div>
+
+
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║   DRIVER REGISTRATION MODAL          ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <div id="drv-reg-modal" class="modal-backdrop hidden">
+        <div class="modal-card" style="max-width:560px;">
+            <button class="btn-ghost" id="drv-reg-close" style="position:absolute;top:1.2rem;right:1.2rem;">✕</button>
+            <h2>Driver Registration</h2>
+            <p class="sub">Register your vehicle to get your RC-linked account</p>
+
+            <form id="drv-reg-form" autocomplete="off">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:.8rem;">
+                    <div class="form-group">
+                        <label>Full Name *</label>
+                        <input type="text" id="dr-name" placeholder="Rajesh Kumar" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Age *</label>
+                        <input type="number" id="dr-age" placeholder="28" min="18" max="70" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Mobile No. *</label>
+                        <input type="tel" id="dr-mobile" placeholder="9876543210" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email *</label>
+                        <input type="email" id="dr-email" placeholder="you@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Vehicle Number *</label>
+                        <input type="text" id="dr-vno" placeholder="MH-12-AB-1234" required>
+                    </div>
+                    <div class="form-group">
+                        <label>RC Number *</label>
+                        <input type="text" id="dr-rc" placeholder="RC100001" required>
+                    </div>
+                    <div class="form-group" style="grid-column:span 2;">
+                        <label>Pick Location *</label>
+                        <input type="text" id="dr-pick" placeholder="Andheri East, Pune Station…" required>
+                    </div>
+                    <div class="form-group" style="grid-column:span 2;">
+                        <label>Password *</label>
+                        <input type="password" id="dr-pass" placeholder="Choose a secure password" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-gold">Register Vehicle &amp; Create Account →</button>
+                <div class="form-msg err" id="drv-reg-err"></div>
+                <div class="form-msg ok" id="drv-reg-ok"></div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║   PASSENGER REGISTRATION MODAL       ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <div id="pax-reg-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <button class="btn-ghost" id="pax-reg-close" style="position:absolute;top:1.2rem;right:1.2rem;">✕</button>
+            <h2>Create Account</h2>
+            <p class="sub">Join as a passenger — fast &amp; free</p>
+
+            <form id="pax-reg-form" autocomplete="off">
+                <div class="form-group">
+                    <label>Full Name *</label>
+                    <input type="text" id="pr-name" placeholder="Your full name" required>
+                </div>
+                <div class="form-group">
+                    <label>Mobile No. *</label>
+                    <input type="tel" id="pr-mobile" placeholder="9876543210" required>
+                </div>
+                <div class="form-group">
+                    <label>Email (optional)</label>
+                    <input type="email" id="pr-email" placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Password *</label>
+                    <input type="password" id="pr-pass" placeholder="Choose a password" required>
+                </div>
+                <button type="submit" class="btn-gold">Create Account →</button>
+                <div class="form-msg err" id="pax-reg-err"></div>
+                <div class="form-msg ok" id="pax-reg-ok"></div>
+            </form>
+
+            <p style="margin-top:1rem; font-size:.85rem; color:var(--text2); text-align:center;">
+                Already have an account? <a href="#" id="goto-login-link"
+                    style="color:var(--pri); font-weight:700;">Sign in</a>
+            </p>
+        </div>
+    </div>
+
+
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║        DRIVER DASHBOARD              ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <div id="driver-dashboard">
+        <div class="dash-wrap">
+            <!-- Sidebar -->
+            <aside class="dash-sidebar">
+                <div class="sb-logo">
+                    <ion-icon name="shield-checkmark"></ion-icon>
+                    <span>RakshaRide</span>
+                </div>
+                <nav class="sb-nav">
+                    <button class="sb-link active" data-dash="driver" data-view="drv-profile"><ion-icon
+                            name="person-outline"></ion-icon> My Profile</button>
+                    <button class="sb-link" data-dash="driver" data-view="drv-vehicle"><ion-icon
+                            name="car-outline"></ion-icon> Vehicle Details</button>
+                    <button class="sb-link" data-dash="driver" data-view="drv-rides"><ion-icon
+                            name="navigate-outline"></ion-icon> Active Ride</button>
+                    <button class="sb-link" data-dash="driver" data-view="drv-history"><ion-icon
+                            name="receipt-outline"></ion-icon> Ride History</button>
+                    <button class="sb-link" data-dash="driver" data-view="drv-earnings"><ion-icon
+                            name="wallet-outline"></ion-icon> Earnings</button>
+                    <button class="sb-link sb-logout" id="drv-logout"><ion-icon name="log-out-outline"></ion-icon>
+                        Logout</button>
+                </nav>
+            </aside>
+
+            <!-- Main content -->
+            <main class="dash-main">
+                <!-- Topbar -->
+                <div class="dash-topbar">
+                    <h1 id="drv-page-title">My Profile</h1>
+                    <div class="user-pill">
+                        <img id="drv-topbar-img" src="https://i.pravatar.cc/60?u=drv" alt="driver">
+                        <span id="drv-topbar-name">Driver</span>
+                    </div>
+                </div>
+
+                <!-- View: Profile -->
+                <div class="dash-view active" id="drv-profile">
+                    <div class="profile-detail">
+                        <div class="pd-header">
+                            <img id="drv-photo" src="https://i.pravatar.cc/90?u=drv" alt="Driver Photo">
+                            <div class="pd-header-info">
+                                <h2 id="drv-name-h">—</h2>
+                                <p id="drv-id-p">ID —</p>
+                                <div><span class="pd-badge verified"><ion-icon name="checkmark-circle"></ion-icon>
+                                        Verified Driver</span></div>
+                            </div>
+                        </div>
+                        <div class="pd-body">
+                            <div class="pd-row"><span class="pd-lbl">Age</span><span class="pd-val"
+                                    id="drv-age">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Mobile</span><span class="pd-val"
+                                    id="drv-mobile">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Email (RC login)</span><span class="pd-val"
+                                    id="drv-email">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Pick Location</span><span class="pd-val"
+                                    id="drv-pick">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Rating</span><span class="pd-val"
+                                    id="drv-rating">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Total Rides</span><span class="pd-val"
+                                    id="drv-rides-count">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Experience</span><span class="pd-val"
+                                    id="drv-exp">—</span></div>
+                        </div>
+                    </div>
+                    <div class="qr-box">
+                        <h3>Your Driver QR Code</h3>
+                        <div id="drv-qr-code" style="display:inline-block;"></div>
+                        <p>Passengers scan this QR to verify your identity before boarding.</p>
+                    </div>
+                </div>
+
+                <!-- View: Vehicle -->
+                <div class="dash-view" id="drv-vehicle">
+                    <div class="profile-detail">
+                        <div class="pd-header"
+                            style="background:linear-gradient(135deg,rgba(33,150,243,0.15),transparent);">
+                            <div style="font-size:4rem;">🚗</div>
+                            <div class="pd-header-info">
+                                <h2 id="drv-vno-h">—</h2>
+                                <p id="drv-vtype-p">Vehicle Type</p>
+                            </div>
+                        </div>
+                        <div class="pd-body">
+                            <div class="pd-row"><span class="pd-lbl">RC Number</span><span class="pd-val"
+                                    id="drv-rc">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Vehicle Number</span><span class="pd-val"
+                                    id="drv-vno">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Vehicle Type</span><span class="pd-val"
+                                    id="drv-vtype">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Last Inspection</span><span class="pd-val"
+                                    id="drv-inspect">—</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View: Active Ride (Map) -->
+                <div class="dash-view" id="drv-rides">
+                    <div class="alert-banner" id="drv-alert">
+                        <ion-icon name="warning"></ion-icon> <span id="drv-alert-msg">Route deviation detected!</span>
+                    </div>
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <div class="ic-label">Distance</div>
+                            <div class="ic-val" id="d-dist">0.00 m</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="ic-label">Timer</div>
+                            <div class="ic-val" id="d-timer">00:00</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="ic-label">Route Integrity</div>
+                            <div class="ic-val" id="d-integrity">100%</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="ic-label">Status</div>
+                            <div class="ic-val" id="d-status" style="color:var(--acc);">Standby</div>
+                        </div>
+                    </div>
+                    <div class="map-zone">
+                        <div id="d-map"></div>
+                    </div>
+                    <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                        <button class="cta-primary" id="drv-start-ride"><ion-icon name="play-circle-outline"></ion-icon>
+                            Start Ride Simulation</button>
+                        <button class="cta-secondary" id="drv-sos"><ion-icon name="warning-outline"></ion-icon>
+                            SOS</button>
+                    </div>
+                </div>
+
+                <!-- View: History -->
+                <div class="dash-view" id="drv-history">
+                    <div class="profile-detail">
+                        <div class="pd-body" style="padding:0;">
+                            <table class="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Passenger</th>
+                                        <th>Distance</th>
+                                        <th>Fare</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="drv-hist-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View: Earnings -->
+                <div class="dash-view" id="drv-earnings">
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <div class="ic-label">Total Earned</div>
+                            <div class="ic-val" id="drv-total-earned">₹ 0</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="ic-label">This Month</div>
+                            <div class="ic-val" id="drv-month-earned">₹ 0</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="ic-label">Rides Done</div>
+                            <div class="ic-val" id="drv-rides-done">0</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="ic-label">Avg per Ride</div>
+                            <div class="ic-val" id="drv-avg-earn">₹ 0</div>
+                        </div>
+                    </div>
+                    <div class="pay-card">
+                        <h3>Simulate Earnings</h3>
+                        <div class="pay-amount" id="drv-earn-display">₹ 0</div>
+                        <button class="pay-btn" id="drv-add-earn">+ Add ₹ 75 (Mock Ride Payment)</button>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div><!-- /driver-dashboard -->
+
+
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║      PASSENGER DASHBOARD             ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <div id="passenger-dashboard">
+        <div class="dash-wrap">
+            <!-- Sidebar -->
+            <aside class="dash-sidebar">
+                <div class="sb-logo">
+                    <ion-icon name="shield-checkmark"></ion-icon>
+                    <span>RakshaRide</span>
+                </div>
+                <nav class="sb-nav">
+                    <button class="sb-link active" data-dash="passenger" data-view="pax-profile"><ion-icon
+                            name="person-outline"></ion-icon> My Profile</button>
+                    <button class="sb-link" data-dash="passenger" data-view="pax-ride"><ion-icon
+                            name="navigate-outline"></ion-icon> Active Ride</button>
+                    <button class="sb-link" data-dash="passenger" data-view="pax-history"><ion-icon
+                            name="receipt-outline"></ion-icon> Ride History</button>
+                    <button class="sb-link" data-dash="passenger" data-view="pax-wallet"><ion-icon
+                            name="wallet-outline"></ion-icon> Wallet</button>
+                    <button class="sb-link sb-logout" id="pax-logout"><ion-icon name="log-out-outline"></ion-icon>
+                        Logout</button>
+                </nav>
+            </aside>
+
+            <!-- Main content -->
+            <main class="dash-main">
+                <div class="dash-topbar">
+                    <h1 id="pax-page-title">My Profile</h1>
+                    <div class="user-pill">
+                        <img id="pax-topbar-img" src="https://i.pravatar.cc/60?u=pax" alt="passenger">
+                        <span id="pax-topbar-name">Passenger</span>
+                    </div>
+                </div>
+
+                <!-- View: Profile -->
+                <div class="dash-view active" id="pax-profile">
+                    <div class="profile-detail">
+                        <div class="pd-header"
+                            style="background:linear-gradient(135deg,rgba(0,230,118,0.12),transparent);">
+                            <img id="pax-photo" src="https://i.pravatar.cc/90?u=pax" alt="Passenger Photo">
+                            <div class="pd-header-info">
+                                <h2 id="pax-name-h">—</h2>
+                                <p id="pax-id-p">ID —</p>
+                                <div><span class="pd-badge verified"><ion-icon name="checkmark-circle"></ion-icon>
+                                        Verified Passenger</span></div>
+                            </div>
+                        </div>
+                        <div class="pd-body">
+                            <div class="pd-row"><span class="pd-lbl">Mobile</span><span class="pd-val"
+                                    id="pax-mobile">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Email</span><span class="pd-val"
+                                    id="pax-email">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Wallet Balance</span><span class="pd-val"
+                                    id="pax-balance">₹ —</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Total Trips</span><span class="pd-val"
+                                    id="pax-trips">—</span></div>
+                            <div class="pd-row"><span class="pd-lbl">Member Since</span><span class="pd-val"
+                                    id="pax-joined">—</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View: Active Ride -->
+                <div class="dash-view" id="pax-ride">
+                    <div class="scan-zone" id="pax-scan-zone">
+                        <div class="scan-title">🔍 Find a Driver</div>
+                        <p>Select a driver from the list below to start your ride.</p>
+                        <div id="driver-list"
+                            style="margin-top:1.5rem; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem; text-align:left;">
+                        </div>
+                    </div>
+                    <div id="pax-ride-active" style="display:none; margin-top:1.5rem;">
+                        <div class="alert-banner" id="pax-alert">
+                            <ion-icon name="warning"></ion-icon> <span id="pax-alert-msg">Route deviation
+                                detected!</span>
+                        </div>
+                        <div class="info-grid">
+                            <div class="info-card">
+                                <div class="ic-label">Distance</div>
+                                <div class="ic-val" id="p-dist">0.00 m</div>
+                            </div>
+                            <div class="info-card">
+                                <div class="ic-label">Timer</div>
+                                <div class="ic-val" id="p-timer">00:00</div>
+                            </div>
+                            <div class="info-card">
+                                <div class="ic-label">Route Integrity</div>
+                                <div class="ic-val" id="p-integrity">100%</div>
+                            </div>
+                            <div class="info-card">
+                                <div class="ic-label">Driver Status</div>
+                                <div class="ic-val" id="p-drv-status" style="color:var(--acc);">Verified</div>
+                            </div>
+                        </div>
+                        <div class="map-zone">
+                            <div id="p-map"></div>
+                        </div>
+                        <div id="pax-driver-info"
+                            style="background:var(--dark2);border:1px solid var(--border);border-radius:var(--radius);padding:1.2rem;display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem;">
+                            <img id="pax-drv-photo" src=""
+                                style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--pri);">
+                            <div>
+                                <div style="font-weight:800;color:var(--text)" id="pax-drv-name">—</div>
+                                <div style="font-size:.8rem;color:var(--text2)" id="pax-drv-vno">—</div>
+                            </div>
+                        </div>
+                        <button class="cta-secondary" id="pax-end-ride"><ion-icon name="stop-circle-outline"></ion-icon>
+                            End Ride</button>
+                    </div>
+                </div>
+
+                <!-- View: History -->
+                <div class="dash-view" id="pax-history">
+                    <div class="profile-detail">
+                        <div class="pd-body" style="padding:0;">
+                            <table class="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Driver</th>
+                                        <th>Distance</th>
+                                        <th>Fare</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pax-hist-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View: Wallet -->
+                <div class="dash-view" id="pax-wallet">
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <div class="ic-label">Wallet Balance</div>
+                            <div class="ic-val" id="pax-wallet-bal">₹ 0</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="ic-label">Total Spent</div>
+                            <div class="ic-val" id="pax-total-spent">₹ 0</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="ic-label">Rides Done</div>
+                            <div class="ic-val" id="pax-rides-done">0</div>
+                        </div>
+                    </div>
+                    <div class="pay-card">
+                        <h3>Top Up Wallet</h3>
+                        <div class="pay-amount" id="pax-topup-display">₹ 0</div>
+                        <button class="pay-btn" id="pax-topup-btn">+ Add ₹ 200 to Wallet</button>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div><!-- /passenger-dashboard -->
+
+    <script src="database.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
