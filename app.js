@@ -9,21 +9,78 @@
     'use strict';
 
     /* ── State ─────────────────────────────────────────────── */
-    let currentRole = null;   // 'driver' | 'passenger'
-    let currentUser = null;   // record from DB
+    let auth = JSON.parse(localStorage.getItem('raksha_auth_state')) || null;
+    let currentRole = auth ? auth.role : null;
+    let currentUser = null;
+    let sessionToken = auth ? auth.token : null;
     let loginRoleTab = 'driver';
 
-    // Ride simulation state
-    let dMap = null, pMap = null;
-    let dMarker = null, pMarker = null;
-    let rideInterval = null, timerInterval = null;
-    let rideSeconds = 0, totalDist = 0, compliance = [];
+    // OTP state
+    let otpExpiryTime = null;
+    let otpInterval = null;
+    let regOtpInterval = null;
+    let isMobileVerified = false;
 
-    // Earnings / wallet (session only)
-    let drvEarnings = 0;
-    let paxWalletBalance = 0;
-    let paxSpent = 0;
-    let drvRidesDone = 0, paxRidesDone = 0;
+    // Seed LocalStorage if empty
+    if (!localStorage.getItem('riksha_drivers')) {
+        localStorage.setItem('riksha_drivers', JSON.stringify(RIKSHA_DB.drivers));
+    }
+    if (!localStorage.getItem('riksha_passengers')) {
+        localStorage.setItem('riksha_passengers', JSON.stringify(RIKSHA_DB.passengers));
+    }
+
+    /* ── View Manager ─────────────────────────────────────── */
+    function switchView(viewId) {
+        // Hide ALL top-level views
+        const views = ['landing', 'driver-dashboard', 'passenger-dashboard'];
+        views.forEach(v => hide(v));
+
+        // Show target
+        show(viewId);
+
+        // Reset scroll
+        window.scrollTo(0, 0);
+
+        // Update nav active states if in dashboard
+        if (viewId.includes('dashboard')) {
+            const role = viewId.split('-')[0];
+            const activeSubView = role === 'driver' ? 'drv-profile' : 'pax-profile';
+            activateSubView(role, activeSubView);
+        }
+    }
+
+    function activateSubView(role, viewId) {
+        const dashEl = $(role === 'driver' ? 'driver-dashboard' : 'passenger-dashboard');
+        dashEl.querySelectorAll('.dash-view').forEach(v => v.classList.remove('active'));
+        const target = $(viewId);
+        if (target) target.classList.add('active');
+
+        // Update sidebar links
+        document.querySelectorAll(`.sb-link[data-dash="${role}"]`).forEach(b => {
+            b.classList.toggle('active', b.getAttribute('data-view') === viewId);
+        });
+    }
+
+    // Persistence Check on Load
+    window.onload = async () => {
+        if (auth && sessionToken) {
+            try {
+                const res = await fetch('/api/me', {
+                    headers: { 'Authorization': `Bearer ${sessionToken}` }
+                });
+                if (!res.ok) throw new Error("Session invalid");
+
+                const profile = await res.json();
+                if (profile.role === 'driver') showDriverDashboard(profile);
+                else showPassengerDashboard(profile);
+            } catch (e) {
+                console.warn("Auth check failed:", e);
+                doLogout();
+            }
+        } else {
+            switchView('landing');
+        }
+    };
 
     /* ── Helpers ───────────────────────────────────────────── */
     const $ = id => document.getElementById(id);
@@ -71,9 +128,48 @@
 
     function openLoginModal(role) {
         clearMsg('login-err');
+        clearMsg('login-ok');
         $('login-form').reset();
+        resetOTPFlow();
+
         openModal('login-modal');
         setLoginTab(role || loginRoleTab);
+    }
+
+    function resetOTPFlow() {
+        if (otpInterval) clearInterval(otpInterval);
+        hide('lf-otp');
+        hide('otp-resend-wrap');
+        showFlex('btn-request-otp');
+        hide('btn-login-submit');
+        $('l-email').disabled = false;
+        $('l-mobile').disabled = false;
+        $('otp-timer-display').textContent = '02:00';
+        $('otp-timer-display').style.color = 'var(--pri)';
+    }
+
+    function startOTPTimer(duration) {
+        if (otpInterval) clearInterval(otpInterval);
+        hide('otp-resend-wrap');
+        let timer = duration;
+        const display = $('otp-timer-display');
+
+        display.style.color = 'var(--pri)';
+        otpExpiryTime = Date.now() + (duration * 1000);
+
+        otpInterval = setInterval(() => {
+            const minutes = Math.floor(timer / 60);
+            const seconds = timer % 60;
+
+            display.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+            if (--timer < 0) {
+                clearInterval(otpInterval);
+                display.textContent = 'EXPIRED';
+                display.style.color = '#ff5252';
+                show('otp-resend-wrap');
+            }
+        }, 1000);
     }
 
     /* ── Login tabs ────────────────────────────────────────── */
@@ -97,121 +193,404 @@
             $('lf-mobile').style.display = 'block';
             $('l-mobile').placeholder = 'email@example.com  or  9876543210';
         }
+
+        // Reset phase when switching tabs
         clearMsg('login-err');
+        clearMsg('login-ok');
+        resetOTPFlow();
     }
 
-    /* ── Login form submit ──────────────────────────────────── */
-    $('login-form').addEventListener('submit', e => {
+    /* ── Two-Phase OTP Login Flow ───────────────────────────── */
+
+    // Unified Login Handler with Device Awareness
+    $('login-form').addEventListener('submit', async e => {
         e.preventDefault();
         clearMsg('login-err');
+        clearMsg('login-ok');
 
+        const credential = loginRoleTab === 'driver' ? $('l-email').value.trim() : $('l-mobile').value.trim();
+        const otp = $('l-otp').value.trim(); // Only if phase 2
         const password = $('l-password').value.trim();
-        if (!password) { showMsg('login-err', 'Password is required.', 'err'); return; }
 
-        if (loginRoleTab === 'driver') {
-            const email = $('l-email').value.trim().toLowerCase();
-            if (!email) { showMsg('login-err', 'Email is required for driver login.', 'err'); return; }
+        // Check for device token
+        const trustToken = localStorage.getItem('raksha_trust_token');
 
-            const drv = RIKSHA_DB.drivers.find(d => d.email.toLowerCase() === email);
-            if (!drv) { showMsg('login-err', 'No driver found with that email.', 'err'); return; }
-            if (drv.password !== password) { showMsg('login-err', 'Incorrect password.', 'err'); return; }
+        try {
+            if (otp && window.loginPendingData) {
+                // PHASE 2: Verify OTP + Trust Device
+                const res = await fetch('/api/auth/verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        credential: window.loginPendingData.credential,
+                        role: window.loginPendingData.role,
+                        password: window.loginPendingData.password,
+                        otp: otp,
+                        device_uuid: trustToken
+                    })
+                });
 
-            currentUser = drv;
-            currentRole = 'driver';
-            closeModal('login-modal');
-            showDriverDashboard(drv);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Invalid OTP');
 
-        } else {
-            const credential = $('l-mobile').value.trim();
-            if (!credential) { showMsg('login-err', 'Enter email or mobile number.', 'err'); return; }
+                // Success! Save trust token and proceed
+                localStorage.setItem('raksha_trust_token', data.device_uuid);
+                handleLoginSuccess(data, window.loginPendingData.role);
+                return;
+            }
 
-            // Check pre-seeded + runtime-registered passengers
-            const allPax = [...RIKSHA_DB.passengers, ...(RIKSHA_DB.registeredPassengers || [])];
-            const pax = allPax.find(p =>
-                (p.email && p.email.toLowerCase() === credential.toLowerCase()) ||
-                (p.mobile && p.mobile === credential)
-            );
-            if (!pax) { showMsg('login-err', 'Passenger not found. Please register first.', 'err'); return; }
-            if (pax.password !== password) { showMsg('login-err', 'Incorrect password.', 'err'); return; }
+            // PHASE 1: Initial Login Check
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    credential: credential,
+                    password: password,
+                    role: loginRoleTab,
+                    device_uuid: trustToken
+                })
+            });
 
-            currentUser = pax;
-            currentRole = 'passenger';
-            closeModal('login-modal');
-            showPassengerDashboard(pax);
+            const data = await res.json();
+
+            if (res.status === 202) {
+                // OTP REQUIRED (New Device)
+                showMsg('login-ok', '🔐 New device detected. Please enter the OTP sent to your phone.', 'ok');
+                window.loginPendingData = { credential, role: loginRoleTab, password };
+
+                // Show OTP input UI
+                hide('btn-request-otp');
+                showFlex('btn-login-submit');
+                show('lf-otp');
+                $('l-otp').focus();
+                startOTPTimer(300);
+                return;
+            }
+
+            if (!res.ok) throw new Error(data.detail || 'Invalid credentials');
+
+            // Success (Trusted Device)
+            handleLoginSuccess(data, loginRoleTab);
+
+        } catch (err) {
+            showMsg('login-err', err.message, 'err');
         }
     });
 
+    async function handleLoginSuccess(data, role) {
+        const authState = {
+            user_id: data.user_id,
+            role: role,
+            token: data.access_token,
+            timestamp: Date.now()
+        };
+
+        auth = authState;
+        sessionToken = data.access_token;
+        currentRole = role;
+
+        localStorage.setItem('raksha_auth_state', JSON.stringify(authState));
+        if (data.device_uuid) localStorage.setItem('raksha_trust_token', data.device_uuid);
+
+        closeModal('login-modal');
+
+        // Fetch full profile to populate dashboard
+        try {
+            const res = await fetch('/api/me', {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            });
+            const profile = await res.json();
+            if (role === 'driver') showDriverDashboard(profile);
+            else showPassengerDashboard(profile);
+        } catch (e) {
+            console.error("Failed to load profile", e);
+            switchView(role === 'driver' ? 'driver-dashboard' : 'passenger-dashboard');
+        }
+    }
+
     /* ── Driver Registration ────────────────────────────────── */
-    $('drv-reg-form').addEventListener('submit', e => {
+    $('drv-reg-form').addEventListener('submit', async e => {
         e.preventDefault();
         clearMsg('drv-reg-err'); clearMsg('drv-reg-ok');
 
-        const name = $('dr-name').value.trim();
-        const age = parseInt($('dr-age').value);
-        const mobile = $('dr-mobile').value.trim();
-        const email = $('dr-email').value.trim().toLowerCase();
-        const vno = $('dr-vno').value.trim().toUpperCase();
-        const rcNo = $('dr-rc').value.trim().toUpperCase();
-        const pick = $('dr-pick').value.trim();
-        const pass = $('dr-pass').value.trim();
-
-        if (!name || !age || !mobile || !email || !vno || !rcNo || !pick || !pass) {
-            showMsg('drv-reg-err', 'All fields are required.', 'err'); return;
-        }
-        // Duplicate check: vehicle number or email
-        const dup = RIKSHA_DB.drivers.find(d => d.vehicleNumber === vno || d.email.toLowerCase() === email);
-        if (dup) { showMsg('drv-reg-err', 'A driver with this Vehicle No. or Email already exists.', 'err'); return; }
-
-        const newId = `DRV-${2001 + RIKSHA_DB.drivers.length}`;
-        const newDriver = {
-            id: newId, name, age, mobile, email, vehicleNumber: vno,
-            pick, rcNo, password: pass,
-            rating: 4.5, totalRides: 0, experience: '0 Years',
-            lastInspection: 'Not yet', photo: `https://i.pravatar.cc/300?u=${newId}`,
-            verified: true, vehicleType: 'Electric Eco-Rickshaw'
+        const formData = {
+            name: $('dr-name').value.trim(),
+            age: parseInt($('dr-age').value),
+            mobile: $('dr-mobile').value.trim(),
+            email: $('dr-email').value.trim().toLowerCase(),
+            vehicle_number: $('dr-vno').value.trim().toUpperCase(),
+            rc_number: $('dr-rc').value.trim().toUpperCase(),
+            pick_location: $('dr-pick').value.trim(),
+            password: $('dr-pass').value.trim()
         };
-        RIKSHA_DB.drivers.push(newDriver);
 
-        showMsg('drv-reg-ok', `✅ Registered! Your ID: ${newId}. Email "${email}" is your login. Password = "${pass}". You can now Sign In.`, 'ok');
-        $('drv-reg-form').reset();
+        if (window.regPendingOTP && $('dr-otp').value) {
+            // VERIFY Phase
+            try {
+                const res = await fetch('/api/register/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        credential: formData.email,
+                        role: 'driver',
+                        password: formData.password,
+                        otp: $('dr-otp').value.trim(),
+                        device_uuid: localStorage.getItem('raksha_trust_token')
+                    })
+                });
+                const data = await res.json();
+
+                if (res.status === 429) {
+                    showMsg('drv-reg-err', '🚨 IP blocked for 10 minutes due to failed attempts.', 'err');
+                    return;
+                }
+
+                if (!res.ok) throw new Error(data.detail || 'Verification failed');
+
+                showMsg('drv-reg-ok', '✅ Verified! You can now complete registration.', 'ok');
+                show('btn-drv-reg-submit');
+                hide('drv-reg-otp-wrap');
+                return;
+            } catch (err) {
+                showMsg('drv-reg-err', err.message, 'err');
+                return;
+            }
+        }
+
+        try {
+            const res = await fetch('/api/register/driver', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Registration failed');
+
+            if (data.status === 'OTP_REQUIRED') {
+                showMsg('drv-reg-ok', '🔐 Registration received. Please enter the OTP sent to your email.', 'ok');
+                window.regPendingOTP = true;
+                show('drv-reg-otp-wrap');
+                $('dr-otp').focus();
+                startDrvResendTimer();
+                return;
+            }
+
+            showMsg('drv-reg-ok', '✅ Registered successfully!', 'ok');
+        } catch (err) {
+            showMsg('drv-reg-err', err.message, 'err');
+        }
     });
 
+    let drvResendInterval = null;
+    function startDrvResendTimer() {
+        if (drvResendInterval) clearInterval(drvResendInterval);
+        let count = 60;
+        show('drv-resend-timer');
+        hide('btn-drv-resend');
+        drvResendInterval = setInterval(() => {
+            $('drv-resend-count').textContent = --count;
+            if (count <= 0) {
+                clearInterval(drvResendInterval);
+                hide('drv-resend-timer');
+                show('btn-drv-resend');
+            }
+        }, 1000);
+    }
+
+    $('btn-drv-resend').onclick = async () => {
+        const email = $('dr-email').value.trim();
+        try {
+            const res = await fetch('/api/generate-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential: email, role: 'driver' })
+            });
+            if (res.ok) {
+                showMsg('drv-reg-ok', '✅ OTP Resent. Check console.', 'ok');
+                startDrvResendTimer();
+            }
+        } catch (e) { }
+    };
+
     /* ── Passenger Registration ─────────────────────────────── */
-    $('pax-reg-form').addEventListener('submit', e => {
+    $('pax-reg-close').addEventListener('click', () => {
+        isMobileVerified = false;
+        if (regOtpInterval) clearInterval(regOtpInterval);
+        resetPaxRegUI();
+    });
+
+    function resetPaxRegUI() {
+        hide('pax-reg-otp-wrap');
+        $('btn-pax-reg-submit').disabled = true;
+        $('btn-pax-reg-submit').style.opacity = '0.5';
+        $('btn-pax-reg-submit').style.cursor = 'not-allowed';
+        $('pr-mobile').disabled = false;
+        $('btn-pax-send-otp').disabled = false;
+        $('btn-pax-send-otp').style.opacity = '1';
+    }
+
+    $('btn-pax-send-otp').addEventListener('click', async () => {
+        const mobile = $('pr-mobile').value.trim();
+        if (!mobile || mobile.length < 10) {
+            showMsg('pax-reg-err', 'Enter a valid 10-digit mobile number.', 'err');
+            return;
+        }
+
+        try {
+            // Trigger backend OTP generation
+            const res = await fetch('/api/register/passenger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: $('pr-name').value.trim() || "Passenger",
+                    mobile: mobile,
+                    password: $('pr-pass').value.trim() || "temp_pass"
+                })
+            });
+            const data = await res.json();
+
+            if (res.status === 429) {
+                showMsg('pax-reg-err', '🚨 Security Alert: Too many attempts. Your IP is blocked for 10 minutes.', 'err');
+                return;
+            }
+
+            if (!res.ok && data.detail !== "Passenger already exists") {
+                throw new Error(data.detail || 'Failed to send OTP');
+            }
+
+            if (data.status === 'OTP_REQUIRED' || data.detail === "Passenger already exists") {
+                showMsg('pax-reg-ok', `✅ OTP sent to ${mobile}. Check server console.`, 'ok');
+                show('pax-reg-otp-wrap');
+                $('btn-pax-send-otp').disabled = true;
+                $('btn-pax-send-otp').style.opacity = '0.5';
+                startRegTimer(300); // 5 minutes
+                startPaxResendTimer(); // 60s
+                window.paxRegPendingOTP = true;
+            }
+        } catch (err) {
+            showMsg('pax-reg-err', err.message, 'err');
+        }
+    });
+
+    let paxResendInterval = null;
+    function startPaxResendTimer() {
+        if (paxResendInterval) clearInterval(paxResendInterval);
+        let count = 60;
+        show('pax-resend-timer');
+        hide('btn-pax-resend');
+        paxResendInterval = setInterval(() => {
+            $('pax-resend-count').textContent = --count;
+            if (count <= 0) {
+                clearInterval(paxResendInterval);
+                hide('pax-resend-timer');
+                show('btn-pax-resend');
+            }
+        }, 1000);
+    }
+
+    $('btn-pax-resend').onclick = async () => {
+        const mobile = $('pr-mobile').value.trim();
+        try {
+            const res = await fetch('/api/generate-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential: mobile, role: 'passenger' })
+            });
+            if (res.ok) {
+                showMsg('pax-reg-ok', '✅ OTP Resent. Check console.', 'ok');
+                startPaxResendTimer();
+            }
+        } catch (e) { }
+    };
+
+    function startRegTimer(duration) {
+        if (regOtpInterval) clearInterval(regOtpInterval);
+        let timer = duration;
+        const display = $('pax-reg-timer');
+        regOtpInterval = setInterval(() => {
+            const m = Math.floor(timer / 60);
+            const s = timer % 60;
+            display.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            if (--timer < 0) {
+                clearInterval(regOtpInterval);
+                display.textContent = 'EXPIRED';
+                resetPaxRegUI();
+            }
+        }, 1000);
+    }
+
+
+    /* ── Passenger Registration ─────────────────────────────── */
+    $('pax-reg-form').addEventListener('submit', async e => {
         e.preventDefault();
         clearMsg('pax-reg-err'); clearMsg('pax-reg-ok');
 
-        const name = $('pr-name').value.trim();
-        const mobile = $('pr-mobile').value.trim();
-        const email = $('pr-email').value.trim().toLowerCase();
-        const pass = $('pr-pass').value.trim();
-
-        if (!name || !mobile || !pass) { showMsg('pax-reg-err', 'Name, Mobile and Password are required.', 'err'); return; }
-
-        const allPax = [...RIKSHA_DB.passengers, ...(RIKSHA_DB.registeredPassengers || [])];
-        const dup = allPax.find(p => p.mobile === mobile || (email && p.email && p.email.toLowerCase() === email));
-        if (dup) { showMsg('pax-reg-err', 'An account with this mobile/email already exists. Please login.', 'err'); return; }
-
-        const newId = `USR-${6001 + (RIKSHA_DB.registeredPassengers || []).length}`;
-        const newPax = {
-            id: newId, name, mobile,
-            email: email || `${name.toLowerCase().replace(/\s+/g, '')}${newId.toLowerCase()}@rider.in`,
-            password: pass, balance: 0, joinedDate: 'Mar 2026', trips: 0,
-            photo: `https://i.pravatar.cc/300?u=${newId}`, verified: true
+        const formData = {
+            name: $('pr-name').value.trim(),
+            mobile: $('pr-mobile').value.trim(),
+            email: $('pr-email').value.trim().toLowerCase() || null,
+            password: $('pr-pass').value.trim()
         };
-        if (!RIKSHA_DB.registeredPassengers) RIKSHA_DB.registeredPassengers = [];
-        RIKSHA_DB.registeredPassengers.push(newPax);
 
-        showMsg('pax-reg-ok', `✅ Account created! ID: ${newId}. Login with your mobile "${mobile}"${email ? ' or email "' + email + '"' : ''} + password.`, 'ok');
-        $('pax-reg-form').reset();
+        if (window.paxRegPendingOTP && $('pr-otp').value) {
+            // VERIFY Phase
+            try {
+                const res = await fetch('/api/register/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        credential: formData.mobile,
+                        role: 'passenger',
+                        password: formData.password,
+                        otp: $('pr-otp').value.trim(),
+                        device_uuid: localStorage.getItem('raksha_trust_token')
+                    })
+                });
+                const data = await res.json();
+
+                if (res.status === 429) {
+                    showMsg('pax-reg-err', '🚨 IP blocked for 10 minutes due to failed attempts.', 'err');
+                    return;
+                }
+
+                if (!res.ok) throw new Error(data.detail || 'Verification failed');
+
+                showMsg('pax-reg-ok', '✅ Verified! You can now complete registration.', 'ok');
+                show('btn-pax-reg-submit'); // User requirement: show only after verification
+                hide('pax-reg-otp-wrap');
+                return;
+            } catch (err) {
+                showMsg('pax-reg-err', err.message, 'err');
+                return;
+            }
+        }
+
+        try {
+            const res = await fetch('/api/register/passenger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Registration failed');
+
+            if (data.status === 'OTP_REQUIRED') {
+                showMsg('pax-reg-ok', '🔐 Sent 6-digit OTP to your mobile.', 'ok');
+                window.paxRegPendingOTP = true;
+                show('pax-reg-otp-wrap');
+                $('pr-otp').focus();
+                return;
+            }
+        } catch (err) {
+            showMsg('pax-reg-err', err.message, 'err');
+        }
     });
 
     /* ════════════════════════════════════════════════════════
        DRIVER DASHBOARD
     ════════════════════════════════════════════════════════ */
     function showDriverDashboard(drv) {
-        hide('landing');
-        show('driver-dashboard');
+        switchView('driver-dashboard');
         paxWalletBalance = drv.balance || 0;
 
         // Topbar
@@ -219,28 +598,28 @@
         $('drv-topbar-name').textContent = drv.name;
 
         // Profile view
-        $('drv-photo').src = drv.photo;
+        $('drv-photo').src = drv.photo || `https://i.pravatar.cc/300?u=${drv.id}`;
         $('drv-name-h').textContent = drv.name;
         $('drv-id-p').textContent = `ID: ${drv.id}`;
         $('drv-age').textContent = drv.age;
         $('drv-mobile').textContent = drv.mobile;
         $('drv-email').textContent = drv.email;
-        $('drv-pick').textContent = drv.pick;
+        $('drv-pick').textContent = drv.pick_location || drv.pick;
         $('drv-rating').textContent = `${drv.rating} ★`;
-        $('drv-rides-count').textContent = drv.totalRides.toLocaleString();
-        $('drv-exp').textContent = drv.experience;
+        $('drv-rides-count').textContent = drv.total_rides || drv.totalRides || 0;
+        $('drv-exp').textContent = drv.experience || '2 Years';
 
         // Vehicle view
-        $('drv-vno-h').textContent = drv.vehicleNumber;
-        $('drv-vtype-p').textContent = drv.vehicleType;
-        $('drv-rc').textContent = drv.rcNo;
-        $('drv-vno').textContent = drv.vehicleNumber;
-        $('drv-vtype').textContent = drv.vehicleType;
-        $('drv-inspect').textContent = drv.lastInspection;
+        $('drv-vno-h').textContent = drv.vehicle_number || drv.vehicleNumber;
+        $('drv-vtype-p').textContent = drv.vehicle_type || drv.vehicleType;
+        $('drv-rc').textContent = drv.rc_number || drv.rcNo;
+        $('drv-vno').textContent = drv.vehicle_number || drv.vehicleNumber;
+        $('drv-vtype').textContent = drv.vehicle_type || drv.vehicleType;
+        $('drv-inspect').textContent = drv.last_inspection || 'Dec 2025';
 
         // Earnings init
-        drvEarnings = drv.totalRides * 65;
-        drvRidesDone = drv.totalRides;
+        drvEarnings = (drv.total_rides || drv.totalRides || 0) * 65;
+        drvRidesDone = drv.total_rides || drv.totalRides || 0;
         refreshDriverEarnings();
 
         // History
@@ -315,27 +694,21 @@
     </tr>`);
     }
 
-    /* ── Driver Ride Simulation ──────────────────────────────── */
-    const SAFE_PATH = [
-        [18.5204, 73.8567], [18.5215, 73.8580], [18.5228, 73.8595],
-        [18.5240, 73.8612], [18.5252, 73.8628], [18.5265, 73.8644]
-    ];
+    /* ── Driver Ride Simulation (now Real GPS) ─────────────── */
+    let watchId = null;
 
     function startDriverRide() {
         $('drv-start-ride').disabled = true;
-        $('drv-start-ride').textContent = 'Ride in Progress…';
+        $('drv-start-ride').textContent = 'Live Tracking…';
         $('drv-alert').classList.remove('show');
 
         totalDist = 0; compliance = []; rideSeconds = 0;
 
-        // Init map
+        // Init map with a default location (Pune)
         if (!dMap) {
-            dMap = L.map('d-map').setView(SAFE_PATH[0], 15);
+            dMap = L.map('d-map').setView([18.5204, 73.8567], 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' }).addTo(dMap);
-            dMarker = L.marker(SAFE_PATH[0]).addTo(dMap).bindPopup('Your Rickshaw').openPopup();
-            L.polyline(SAFE_PATH, { color: '#FFB300', weight: 4, opacity: .5 }).addTo(dMap);
-        } else {
-            dMarker.setLatLng(SAFE_PATH[0]); dMap.setView(SAFE_PATH[0], 15);
+            dMarker = L.marker([18.5204, 73.8567]).addTo(dMap).bindPopup('Your Rickshaw').openPopup();
         }
 
         // Timer
@@ -347,79 +720,71 @@
             $('d-timer').textContent = `${m}:${s}`;
         }, 1000);
 
-        let step = 0;
-        clearInterval(rideInterval);
-        rideInterval = setInterval(() => {
-            if (step >= 14) {
-                clearInterval(rideInterval); clearInterval(timerInterval);
-                $('d-status').textContent = '✅ Ride Complete';
-                $('d-status').style.color = 'var(--acc)';
-                $('drv-start-ride').disabled = false;
-                $('drv-start-ride').textContent = '▶ Start Ride Simulation';
-                drvEarnings += 95; drvRidesDone++;
-                refreshDriverEarnings();
-                addToDriverHistory();
-                return;
-            }
-            const prev = dMarker.getLatLng();
-            let next;
-            if (step >= 8 && step < 11) {
-                next = [prev.lat + 0.0035, prev.lng + 0.0035]; // deviation
-            } else {
-                next = SAFE_PATH[Math.min(step, SAFE_PATH.length - 1)];
-            }
-            const dist = L.latLng(prev).distanceTo(L.latLng(next));
-            totalDist += dist;
-            dMarker.setLatLng(next); dMap.panTo(next);
-            updateRideUI('driver', next);
-            step++;
-        }, 2000);
+        // Real-Time Hardware Hook
+        if (!navigator.geolocation) {
+            $('d-status').textContent = 'GPS NOT SUPPORTED';
+            return;
+        }
+
+        watchId = navigator.geolocation.watchPosition(
+            async position => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+
+                // Sync UI
+                if (dMarker && dMap) {
+                    dMarker.setLatLng([lat, lng]);
+                    dMap.panTo([lat, lng]);
+                }
+
+                if (lastPos) {
+                    const dist = L.latLng(lastPos).distanceTo(L.latLng([lat, lng]));
+                    totalDist += dist;
+                    $('d-dist').textContent = totalDist.toFixed(1) + ' m';
+                }
+                lastPos = [lat, lng];
+
+                // Sync Backend Safety Engine
+                try {
+                    const res = await fetch('/api/location/update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${sessionToken}`
+                        },
+                        body: JSON.stringify({ lat, lng })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.alert) {
+                            $('d-status').textContent = '⚠ DEVATION ALERT';
+                            $('drv-alert').classList.add('show');
+                        }
+                    }
+                } catch (e) { }
+            },
+            err => console.error("GPS Error:", err),
+            { enableHighAccuracy: true, maximumAge: 0 }
+        );
     }
 
-    function updateRideUI(who, pos) {
-        let minDist = Infinity;
-        SAFE_PATH.forEach(p => {
-            const d = L.latLng(pos).distanceTo(L.latLng(p));
-            if (d < minDist) minDist = d;
-        });
-        compliance.push(minDist <= 1000);
-        const integ = Math.round(compliance.filter(Boolean).length / compliance.length * 100);
-
-        if (who === 'driver') {
-            $('d-dist').textContent = totalDist.toFixed(0) + ' m';
-            $('d-integrity').textContent = integ + '%';
-            if (minDist > 1000) {
-                $('d-status').textContent = '⚠ ALERT';
-                $('d-status').style.color = '#ff5252';
-                $('drv-alert-msg').textContent = 'Route deviation > 1km detected!';
-                $('drv-alert').classList.add('show');
-            } else {
-                $('d-status').textContent = 'On Route';
-                $('d-status').style.color = 'var(--acc)';
-                $('drv-alert').classList.remove('show');
-            }
-        } else {
-            $('p-dist').textContent = totalDist.toFixed(0) + ' m';
-            $('p-integrity').textContent = integ + '%';
-            if (minDist > 1000) {
-                $('p-drv-status').textContent = '⚠ THREAT';
-                $('p-drv-status').style.color = '#ff5252';
-                $('pax-alert-msg').textContent = 'Driver deviated > 1km from route!';
-                $('pax-alert').classList.add('show');
-            } else {
-                $('p-drv-status').textContent = 'On Route ✓';
-                $('p-drv-status').style.color = 'var(--acc)';
-                $('pax-alert').classList.remove('show');
-            }
-        }
+    function endRideSuccessfully() {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        clearInterval(timerInterval);
+        $('d-status').textContent = '✅ Ride Complete';
+        $('d-status').style.color = 'var(--acc)';
+        $('drv-start-ride').disabled = false;
+        $('drv-start-ride').textContent = '▶ Start Live Tracking';
+        drvEarnings += 95; drvRidesDone++;
+        refreshDriverEarnings();
+        addToDriverHistory();
     }
 
     /* ════════════════════════════════════════════════════════
        PASSENGER DASHBOARD
     ════════════════════════════════════════════════════════ */
     function showPassengerDashboard(pax) {
-        hide('landing');
-        show('passenger-dashboard');
+        switchView('passenger-dashboard');
         paxWalletBalance = pax.balance || 0;
         paxRidesDone = pax.trips || 0;
 
@@ -449,12 +814,8 @@
         // Sidebar nav
         setupSidebarNav('passenger');
 
-        // Wallet top-up
-        $('pax-topup-btn').onclick = () => {
-            paxWalletBalance += 200;
-            refreshPaxWallet();
-            $('pax-balance').textContent = `₹ ${paxWalletBalance}`;
-        };
+        // Init QR scanner controls (wired once)
+        initScanner();
 
         // End ride
         $('pax-end-ride').onclick = endPaxRide;
@@ -487,26 +848,35 @@
         });
     }
 
-    function buildDriverList() {
+    async function buildDriverList() {
         const container = $('driver-list');
         if (!container) return;
-        container.innerHTML = '';
-        RIKSHA_DB.drivers.slice(0, 9).forEach(drv => {
-            const card = document.createElement('div');
-            card.style.cssText = 'background:var(--dark3);border:1px solid var(--border);border-radius:12px;padding:1rem;cursor:pointer;transition:.2s;';
-            card.innerHTML = `
-        <img src="${drv.photo}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid var(--pri);margin-bottom:.6rem;">
-        <div style="font-weight:800;color:var(--text);font-size:.92rem;">${drv.name}</div>
-        <div style="font-size:.78rem;color:var(--text2);margin:.2rem 0;">${drv.vehicleNumber}</div>
-        <div style="font-size:.78rem;color:var(--text2);">📍 ${drv.pick}</div>
-        <div style="font-size:.78rem;color:var(--pri);margin-top:.3rem;">⭐ ${drv.rating}</div>
-        <button style="margin-top:.8rem;width:100%;padding:.5rem;border:none;border-radius:8px;background:var(--pri);color:#000;font-weight:700;font-size:.82rem;cursor:pointer;">Book Ride</button>
-      `;
-            card.querySelector('button').onclick = () => startPaxRide(drv);
-            card.onmouseenter = () => card.style.borderColor = 'var(--pri)';
-            card.onmouseleave = () => card.style.borderColor = 'var(--border)';
-            container.appendChild(card);
-        });
+        container.innerHTML = '<div style="color:var(--text2);text-align:center;">Loading drivers...</div>';
+
+        try {
+            const res = await fetch('/api/drivers');
+            const drivers = await res.json();
+            container.innerHTML = '';
+
+            drivers.slice(0, 9).forEach(drv => {
+                const card = document.createElement('div');
+                card.style.cssText = 'background:var(--dark3);border:1px solid var(--border);border-radius:12px;padding:1rem;cursor:pointer;transition:.2s;';
+                card.innerHTML = `
+            <img src="${drv.photo || `https://i.pravatar.cc/150?u=${drv.id}`}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid var(--pri);margin-bottom:.6rem;">
+            <div style="font-weight:800;color:var(--text);font-size:.92rem;">${drv.name}</div>
+            <div style="font-size:.78rem;color:var(--text2);margin:.2rem 0;">${drv.vehicle_number || drv.vehicleNumber}</div>
+            <div style="font-size:.78rem;color:var(--text2);">📍 ${drv.pick_location || drv.pick}</div>
+            <div style="font-size:.78rem;color:var(--pri);margin-top:.3rem;">⭐ ${drv.rating}</div>
+            <button style="margin-top:.8rem;width:100%;padding:.5rem;border:none;border-radius:8px;background:var(--pri);color:#000;font-weight:700;font-size:.82rem;cursor:pointer;">Book Ride</button>
+        `;
+                card.querySelector('button').onclick = () => startPaxRide(drv);
+                card.onmouseenter = () => card.style.borderColor = 'var(--pri)';
+                card.onmouseleave = () => card.style.borderColor = 'var(--border)';
+                container.appendChild(card);
+            });
+        } catch (err) {
+            container.innerHTML = '<div style="color:#ff5252;text-align:center;">Failed to load drivers.</div>';
+        }
     }
 
     function startPaxRide(drv) {
@@ -514,22 +884,14 @@
         show('pax-ride-active');
         $('pax-alert').classList.remove('show');
 
-        $('pax-drv-photo').src = drv.photo;
+        // Set driver details
+        $('pax-drv-photo').src = drv.photo || `https://i.pravatar.cc/150?u=${drv.id}`;
         $('pax-drv-name').textContent = drv.name;
-        $('pax-drv-vno').textContent = `${drv.vehicleNumber} • RC: ${drv.rcNo}`;
+        $('pax-drv-vno').textContent = `${drv.vehicle_number || drv.vehicleNumber} • RC: ${drv.rc_number || drv.rcNo}`;
 
         totalDist = 0; compliance = []; rideSeconds = 0;
 
-        // Init map
-        if (!pMap) {
-            pMap = L.map('p-map').setView(SAFE_PATH[0], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' }).addTo(pMap);
-            pMarker = L.marker(SAFE_PATH[0]).addTo(pMap).bindPopup(`Riding with ${drv.name}`).openPopup();
-            L.polyline(SAFE_PATH, { color: '#00E676', weight: 4, opacity: .5 }).addTo(pMap);
-        } else {
-            pMarker.setLatLng(SAFE_PATH[0]); pMap.setView(SAFE_PATH[0], 15);
-        }
-
+        // Visual timer handling
         clearInterval(timerInterval);
         timerInterval = setInterval(() => {
             rideSeconds++;
@@ -538,33 +900,8 @@
                 String(rideSeconds % 60).padStart(2, '0');
         }, 1000);
 
-        let step = 0;
-        clearInterval(rideInterval);
-        rideInterval = setInterval(() => {
-            if (step >= 14) {
-                clearInterval(rideInterval); clearInterval(timerInterval);
-                $('p-drv-status').textContent = '✅ Arrived!';
-                $('p-drv-status').style.color = 'var(--acc)';
-                const fare = 60 + Math.floor(totalDist / 100) * 5;
-                paxSpent += fare; paxWalletBalance = Math.max(0, paxWalletBalance - fare);
-                paxRidesDone++;
-                refreshPaxWallet();
-                addToPaxHistory(drv, fare);
-                return;
-            }
-            const prev = pMarker.getLatLng();
-            let next;
-            if (step >= 8 && step < 11) {
-                next = [prev.lat + 0.0035, prev.lng + 0.0035];
-            } else {
-                next = SAFE_PATH[Math.min(step, SAFE_PATH.length - 1)];
-            }
-            const dist = L.latLng(prev).distanceTo(L.latLng(next));
-            totalDist += dist;
-            pMarker.setLatLng(next); pMap.panTo(next);
-            updateRideUI('passenger', next);
-            step++;
-        }, 2000);
+        $('p-drv-status').textContent = 'En Route';
+        $('p-drv-status').style.color = 'var(--acc)';
     }
 
     function endPaxRide() {
@@ -590,26 +927,19 @@
             btn.addEventListener('click', () => {
                 const view = btn.getAttribute('data-view');
                 if (!view) return;
-                // Deactivate all
-                document.querySelectorAll(`.sb-link[data-dash="${dash}"]`).forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                // Hide all views in this dashboard
-                const dashEl = $(dash === 'driver' ? 'driver-dashboard' : 'passenger-dashboard');
-                dashEl.querySelectorAll('.dash-view').forEach(v => v.classList.remove('active'));
-                const target = $(view);
-                if (target) target.classList.add('active');
+                activateSubView(dash, view);
 
                 // Update page title
                 const titles = {
                     'drv-profile': 'My Profile', 'drv-vehicle': 'Vehicle Details',
                     'drv-rides': 'Active Ride', 'drv-history': 'Ride History', 'drv-earnings': 'Earnings',
-                    'pax-profile': 'My Profile', 'pax-ride': 'Find a Ride',
-                    'pax-history': 'Ride History', 'pax-wallet': 'Wallet'
+                    'pax-profile': 'My Profile', 'pax-ride': 'Active Ride',
+                    'pax-history': 'Ride History', 'pax-scanner': 'Scan Driver QR'
                 };
                 const titleEl = $(dash === 'driver' ? 'drv-page-title' : 'pax-page-title');
                 if (titleEl) titleEl.textContent = titles[view] || '';
 
-                // Invalidate map size if switching to ride view
+                // Invalidate map size
                 if (view === 'drv-rides' && dMap) setTimeout(() => dMap.invalidateSize(), 120);
                 if (view === 'pax-ride' && pMap) setTimeout(() => pMap.invalidateSize(), 120);
             });
@@ -618,13 +948,185 @@
 
     /* ── Logout ──────────────────────────────────────────────── */
     function doLogout() {
-        currentUser = null; currentRole = null;
-        clearInterval(rideInterval); clearInterval(timerInterval);
-        dMap = null; pMap = null;
-        hide('driver-dashboard');
-        hide('passenger-dashboard');
-        show('landing');
-        window.scrollTo(0, 0);
+        // Reset: Clear all intervals and state
+        const highestId = window.setInterval(() => { }, 0);
+        for (let i = 0; i <= highestId; i++) {
+            window.clearInterval(i);
+        }
+
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+
+        auth = null;
+        sessionToken = null;
+        currentRole = null;
+
+        localStorage.removeItem('raksha_auth_state');
+        // Keep trust token for fingerprinting but reset path
+        switchView('landing');
+    }
+
+
+    /* ════════════════════════════════════════════════════════
+       QR SCANNER  (passenger side)
+    ════════════════════════════════════════════════════════ */
+    let qrStream = null;     // active MediaStream (camera)
+    let qrAnimId = null;     // requestAnimationFrame id
+    let scannerReady = false;  // guard: init only once per login
+    let scannedDriver = null;  // last driver resolved from QR
+
+    function initScanner() {
+        if (scannerReady) return;
+        scannerReady = true;
+
+        const toggleBtn = $('pax-scan-toggle');
+        const viewport = $('qr-viewport');
+        const statusBadge = $('pax-scan-status');
+        const resultCard = $('drv-result-card');
+
+        // ── Start / Stop toggle ────────────────────────────
+        toggleBtn.onclick = () => {
+            if (qrStream) {
+                stopCamera();
+                toggleBtn.innerHTML = '<ion-icon name="qr-code-outline"></ion-icon> Start Scanning';
+                toggleBtn.classList.remove('stop');
+                viewport.classList.remove('active');
+                statusBadge.style.display = 'none';
+            } else {
+                resultCard.classList.remove('visible');
+                startCamera();
+            }
+        };
+
+        // ── Book this driver ───────────────────────────────
+        $('drc-book-btn').onclick = () => {
+            if (!scannedDriver) return;
+            const rideBtn = document.querySelector('.sb-link[data-dash="passenger"][data-view="pax-ride"]');
+            if (rideBtn) rideBtn.click();
+            setTimeout(() => startPaxRide(scannedDriver), 80);
+        };
+
+        // ── Scan again ─────────────────────────────────────
+        $('drc-rescan-btn').onclick = () => {
+            scannedDriver = null;
+            resultCard.classList.remove('visible');
+            startCamera();
+        };
+    }
+
+    function startCamera() {
+        const toggleBtn = $('pax-scan-toggle');
+        const viewport = $('qr-viewport');
+        const statusBadge = $('pax-scan-status');
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            statusBadge.style.display = 'inline-flex';
+            setStatus('error', '⚠️ Camera not supported by this browser.');
+            return;
+        }
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+            .then(stream => {
+                qrStream = stream;
+                const video = $('qr-video');
+                video.srcObject = stream;
+                viewport.classList.add('active');
+                toggleBtn.innerHTML = '<ion-icon name="stop-circle-outline"></ion-icon> Stop Camera';
+                toggleBtn.classList.add('stop');
+                statusBadge.style.display = 'inline-flex';
+                setStatus('detecting', '<ion-icon name="scan-outline"></ion-icon> Scanning for QR code…');
+                video.onloadedmetadata = () => runQRScan(video);
+            })
+            .catch(err => {
+                statusBadge.style.display = 'inline-flex';
+                setStatus('error', '⚠️ Camera access denied. Please allow camera permission.');
+                console.warn('Camera error:', err);
+            });
+    }
+
+    function stopCamera() {
+        if (qrAnimId) { cancelAnimationFrame(qrAnimId); qrAnimId = null; }
+        if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
+        const video = $('qr-video');
+        if (video) video.srcObject = null;
+    }
+
+    function runQRScan(video) {
+        const canvas = $('qr-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function tick() {
+            if (!qrStream) return;   // camera was stopped
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0);
+
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imgData.data, imgData.width, imgData.height, {
+                    inversionAttempts: 'dontInvert'
+                });
+
+                if (code && code.data) {
+                    stopCamera();
+                    showDriverFromQR(code.data);
+                    return;
+                }
+            }
+            qrAnimId = requestAnimationFrame(tick);
+        }
+        qrAnimId = requestAnimationFrame(tick);
+    }
+
+    async function showDriverFromQR(driverId) {
+        const toggleBtn = $('pax-scan-toggle');
+        const viewport = $('qr-viewport');
+        const statusBadge = $('pax-scan-status');
+        const resultCard = $('drv-result-card');
+
+        // Reset toggle button
+        toggleBtn.innerHTML = '<ion-icon name="qr-code-outline"></ion-icon> Start Scanning';
+        toggleBtn.classList.remove('stop');
+        viewport.classList.remove('active');
+
+        try {
+            const res = await fetch('/api/drivers');
+            const allDrivers = await res.json();
+            const drv = allDrivers.find(d => d.id === driverId.trim());
+
+            if (!drv) {
+                statusBadge.style.display = 'inline-flex';
+                setStatus('error', `❌ Unknown QR: "${driverId}". No matching driver found.`);
+                return;
+            }
+
+            scannedDriver = drv;
+
+            // Populate result card
+            $('drc-photo').src = drv.photo || `https://i.pravatar.cc/150?u=${drv.id}`;
+            $('drc-name').textContent = drv.name;
+            $('drc-id').textContent = `ID: ${drv.id}`;
+            $('drc-vno').textContent = drv.vehicle_number || drv.vehicleNumber;
+            $('drc-rc').textContent = drv.rc_number || drv.rcNo;
+            $('drc-vtype').textContent = drv.vehicle_type || drv.vehicleType || 'Eco-Rickshaw';
+            $('drc-pick').textContent = drv.pick_location || drv.pick;
+            $('drc-mobile').textContent = drv.mobile;
+            $('drc-rating').textContent = `${drv.rating} ★`;
+            $('drc-rides').textContent = drv.total_rides || drv.totalRides || 0;
+
+            resultCard.classList.add('visible');
+            statusBadge.style.display = 'inline-flex';
+            setStatus('found', '✅ Driver verified successfully!');
+        } catch (err) {
+            statusBadge.style.display = 'inline-flex';
+            setStatus('error', '❌ Network error looking up driver.');
+        }
+    }
+
+    function setStatus(type, html) {
+        const el = $('pax-scan-status');
+        if (!el) return;
+        el.className = `scanner-status ${type}`;
+        el.innerHTML = html;
     }
 
     /* ── Smooth scroll for nav links ─────────────────────────── */
@@ -636,8 +1138,8 @@
     });
 
     /* ── Test credentials helper in console ─────────────────── */
-    console.log('%c RakshaRide — Test Credentials ', 'background:#FFB300;color:#000;font-weight:bold;font-size:14px;padding:4px 8px;');
-    console.log(`Driver login → Email: ${RIKSHA_DB.drivers[0].email} | Password: ${RIKSHA_DB.drivers[0].password}`);
-    console.log(`Passenger login → Mobile: ${RIKSHA_DB.passengers[0].mobile} | Password: ${RIKSHA_DB.passengers[0].password}`);
+    console.log('%c RakshaRide — Production API Connected ', 'background:#00E676;color:#000;font-weight:bold;font-size:14px;padding:4px 8px;');
+    console.log(`Backend connected: Fetching live data via Flask API.`);
+
 
 })();

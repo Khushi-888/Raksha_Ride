@@ -1,74 +1,41 @@
-#!/usr/bin/env python3
-"""
-Simple static file server with a tiny JSON API for drivers/users (mock).
-Run: python server.py
-"""
-import json
+from fastapi import FastAPI, Body
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import uvicorn
 import os
-from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse
 
-PORT = 8000
+# Import the existing backend app from main.py
+from main import app as api_app
 
-# Mock data (small subset)
-MOCK = {
-    "drivers": [
-        {"id": "DRV-1001", "name": "Kavita Choudhary", "vehicleNumber": "MH-20-AW-8254", "rating": 4.9},
-        {"id": "DRV-1002", "name": "Suresh Verma", "vehicleNumber": "MH-79-BF-7237", "rating": 4.9}
-    ],
-    "users": [
-        {"id": "USR-5001", "name": "John Doe", "email": "john@example.com", "balance": 500}
-    ]
-}
+# The main app is the api_app itself
+app = api_app
 
-class APIRequestHandler(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        if parsed.path.startswith('/api/'):
-            self.handle_api(parsed.path)
-        else:
-            # Serve static files from current directory
-            return SimpleHTTPRequestHandler.do_GET(self)
+# Serve current directory for static assets (app.js, styles, etc)
+base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    def handle_api(self, path):
-        if path == '/api/drivers':
-            self.respond_json(MOCK['drivers'])
-        elif path == '/api/users':
-            self.respond_json(MOCK['users'])
-        elif path.startswith('/api/driver/'):
-            did = path.split('/')[-1]
-            item = next((d for d in MOCK['drivers'] if d['id'] == did), None)
-            self.respond_json(item or {})
-        else:
-            self.send_response(404)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "not found"}).encode('utf-8'))
+# We mount the static files at root, but AFTER the API routes are registered
+# to avoid conflicts. FastAPI checks routes in order.
+# Since routes are already in api_app, we just add the static files at the end.
+app.mount("/", StaticFiles(directory=base_dir, html=True), name="static")
 
-    def respond_json(self, obj):
-        payload = json.dumps(obj)
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(payload.encode('utf-8'))))
-        self.end_headers()
-        self.wfile.write(payload.encode('utf-8'))
+@app.get("/", include_in_schema=False)
+async def read_index():
+    return FileResponse(os.path.join(base_dir, 'index.html'))
 
+@app.post("/api/generate-otp")
+async def generate_otp_api(credential: str = Body(...), role: str = Body(...)):
+    """Dedicated endpoint to trigger OTP generation."""
+    from database import SessionLocal
+    from otp_manager import OTPManager
+    async with SessionLocal() as db:
+        otp = await OTPManager.create_otp(db, credential, role)
+        return {"status": "success", "message": f"OTP sent to {credential}"}
 
-def get_mock_data():
-    return MOCK
-
-
-def run(port=PORT):
-    os.chdir(os.path.dirname(os.path.abspath(__file__)) or '.')
-    addr = ('', port)
-    httpd = HTTPServer(addr, APIRequestHandler)
-    print(f"Serving on http://localhost:{port} (static + /api/drivers /api/users)")
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print('\nShutting down')
-        httpd.server_close()
-
-
-if __name__ == '__main__':
-    run()
+if __name__ == "__main__":
+    print("\nRakshaRide Production Environment Initializing...")
+    print("URL: http://localhost:8000")
+    print("GPS: Live Geolocation Enabled")
+    print("Persistence: SQLite (production_database.db)")
+    print("Serving Static Files from: " + base_dir)
+    print("--------------------------------------------------\n")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
