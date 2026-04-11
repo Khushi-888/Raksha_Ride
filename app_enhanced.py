@@ -407,11 +407,11 @@ def init_db():
     # â”€â”€ Seed default admin if none exists â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     c.execute('SELECT COUNT(*) FROM admins')
     if c.fetchone()[0] == 0:
-        import hashlib as _hl
-        default_pw = _hl.sha256(b'admin@RakshaRide2024').hexdigest()
-        c.execute("INSERT INTO admins (username, password) VALUES (?, ?)",
-                  ('admin', default_pw))
-        print("[OK] Default admin created -> username: admin | password: admin@RakshaRide2024")
+        import hashlib as _hl, os as _os
+        admin_pw_raw = _os.environ.get('ADMIN_PASSWORD', 'RakshaAdmin@2024#Secure!')
+        default_pw = _hl.sha256(admin_pw_raw.encode()).hexdigest()
+        c.execute("INSERT INTO admins (username, password) VALUES (?, ?)", ('admin', default_pw))
+        print("[OK] Admin created — use ADMIN_PASSWORD env var to set password")
 
     # ── Performance indexes (safe to run every startup) ──────────────────────
     indexes = [
@@ -4415,6 +4415,43 @@ def api_sos_alert():
 
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+
+# ============================================================================
+# GLOBAL ERROR HANDLERS — always return JSON, never HTML error pages
+# ============================================================================
+
+@app.errorhandler(400)
+def bad_request(e):
+    return jsonify({"success": False, "error": "Bad request", "message": str(e)}), 400
+
+@app.errorhandler(401)
+def unauthorized(e):
+    return jsonify({"success": False, "error": "Unauthorized", "message": "Login required"}), 401
+
+@app.errorhandler(403)
+def forbidden(e):
+    return jsonify({"success": False, "error": "Forbidden", "message": "Admin access required"}), 403
+
+@app.errorhandler(404)
+def not_found(e):
+    # Return HTML for page routes, JSON for API routes
+    if request.path.startswith('/api/'):
+        return jsonify({"success": False, "error": "Not found", "message": f"Route {request.path} not found"}), 404
+    return render_template('index.html'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    print(f"[ERROR 500] {request.path}: {e}")
+    return jsonify({"success": False, "error": "Server error", "message": "An internal error occurred. Please try again."}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Catch-all: ensures no unhandled exception returns HTML to the frontend."""
+    import traceback
+    print(f"[UNHANDLED] {request.path}: {traceback.format_exc()}")
+    if request.path.startswith('/api/'):
+        return jsonify({"success": False, "error": "Server error", "message": str(e)}), 500
+    return render_template('index.html'), 500
 
 # ============================================================================
 # Run Application

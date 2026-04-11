@@ -5,7 +5,7 @@ services:
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app_enhanced:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    startCommand: gunicorn app_enhanced:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --preload
     envVars:
       - key: FLASK_ENV
         value: production
@@ -19,3 +19,5 @@ services:
         value: 3.11.0
       - key: APP_URL
         value: https://raksharide.onrender.com
+      - key: ADMIN_PASSWORD
+        value: RakshaAdmin@2024#Secure!
