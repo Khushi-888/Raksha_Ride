@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RakshaRide | Verified Safety Protocol</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Phosphor Icons (High End) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="brand">
+            <i class="ph-fill ph-shield-checkered"></i>
+            RAKSHARIDE
+        </a>
+        <div class="nav-links">
+            {% if session.get('user_id') %}
+                {% if session.get('role') == 'driver' %}
+                    <a href="{{ url_for('driver_dashboard') }}">Dashboard</a>
+                {% else %}
+                    <a href="{{ url_for('passenger_dashboard') }}">Services</a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}" style="color: var(--error);">Logout</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Sign In</a>
+                <a href="{{ url_for('register') }}" class="btn btn-primary" style="padding: 10px 20px;">Join Now</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="alert-float">
+                {% for category, message in messages %}
+                    <div class="alert-item" {% if category == 'error' %}style="border-color: var(--error);"{% else %}style="border-color: var(--primary);"{% endif %}>
+                        <strong>{% if category == 'error' %}Alert{% else %}Success{% endif %}</strong>
+                        <p>{{ message }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <div id="content-area">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Script to auto-remove alerts -->
+    <script>
+        setTimeout(() => {
+            const alerts = document.querySelectorAll('.alert-item');
+            alerts.forEach(a => a.style.opacity = '0');
+            setTimeout(() => {
+                const float = document.querySelector('.alert-float');
+                if (float) float.remove();
+            }, 500);
+        }, 3000);
+
+        lucide.createIcons();
+    </script>
+</body>
+</html>

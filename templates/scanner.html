@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner - RakshaRide Safety Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <style>
+        :root {
+            --primary: #003366;
+            --accent: #ff9933;
+            --bg-dark: #0a0e17;
+            --card-glass: rgba(255, 255, 255, 0.05);
+            --border-glass: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+            background: var(--card-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 24px;
+            padding: 40px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+        }
+
+        .header h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        #reader {
+            width: 100%;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid var(--accent) !important;
+            box-shadow: 0 0 20px rgba(255,153,51,0.2);
+        }
+
+        #reader__dashboard_section_csr button {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        .status-box {
+            margin-top: 24px;
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.4);
+            font-size: 14px;
+            color: #ff9933;
+        }
+
+        .btn-back {
+            margin-top: 32px;
+            color: #94a3b8;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-back:hover {
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-camera"></i> Scan Driver ID</h1>
+            <p>Position the driver's QR code within the focus area to instantly verify credentials and start your tracked journey.</p>
+        </div>
+
+        <div id="reader"></div>
+
+        <div id="status" class="status-box">
+            <i class="fas fa-info-circle"></i> Waiting for camera access...
+        </div>
+
+        <a href="/" class="btn-back">
+            <i class="fas fa-arrow-left"></i> Back to Homepage
+        </a>
+    </div>
+
+    <script>
+        function onScanSuccess(decodedText, decodedResult) {
+            // Log for debugging
+            console.log(`Scan result: ${decodedText}`, decodedResult);
+            
+            document.getElementById('status').innerHTML = `<i class="fas fa-check-circle"></i> Result Found: <b>${decodedText}</b>. Redirecting...`;
+            document.getElementById('status').style.color = '#10b981';
+
+            // Stop scanner
+            html5QrcodeScanner.clear().then(_ => {
+                // Determine destination
+                // Example format from RakshaRide: DRVxxx
+                if(decodedText.includes('DRV') || decodedText.includes('track')) {
+                    // If it's a tracking URL, go directly
+                    if(decodedText.startsWith('http')) {
+                        window.location.href = decodedText;
+                    } else {
+                        // If it's just the ID, go to verification
+                        window.location.href = `/verify_driver/${decodedText}`;
+                    }
+                } else {
+                    alert('Invalid RakshaRide ID Scanned.');
+                    location.reload();
+                }
+            }).catch(error => {
+                console.error('Failed to clear scanner.', error);
+            });
+        }
+
+        function onScanFailure(error) {
+            // silent fail for constant scanning
+        }
+
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", 
+            { fps: 10, qrbox: {width: 250, height: 250} }, 
+            /* verbose= */ false
+        );
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    </script>
+</body>
+</html>

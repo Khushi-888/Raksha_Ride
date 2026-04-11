@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Enrollment | RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-animated-parent">
+    <div class="bg-animated"></div>
+    <div class="center-container">
+        <div class="card glass animate-fade-up" style="max-width: 600px; width: 100%; padding: 40px; margin: 40px 0;">
+            <div class="header text-center mb-4">
+                <img src="/static/img/logo_premium.png" alt="Logo" style="height: 50px; margin-bottom: 10px;">
+                <h2 style="font-family: 'Outfit'; color: var(--primary);">Driver Partner Enrollment</h2>
+                <p style="font-size: 0.9rem; color: var(--text-muted);">Register as an Official RakshaRide Partner</p>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-error mb-4">{{ error }}</div>
+            {% endif %}
+            {% if success %}
+            <div class="alert alert-success mb-4">{{ success }}</div>
+            {% endif %}
+
+            <form action="/register/driver" method="POST">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="form-group">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" name="name" class="form-input" placeholder="Rajesh Kumar" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" name="email" class="form-input" placeholder="rajesh@partner.in" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="form-group">
+                        <label class="form-label">Phone Number</label>
+                        <input type="tel" name="phone" class="form-input" placeholder="9876543210" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Create Password</label>
+                        <input type="password" name="password" class="form-input" placeholder="••••••" required minlength="6">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Select Partner Type</label>
+                    <div style="display: flex; gap: 20px; margin-top: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="driver_type" value="owner" checked onclick="toggleOwnerEmail(false)">
+                            <span style="font-weight: 700; color: var(--primary);">Vehicle Owner</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="driver_type" value="renter" onclick="toggleOwnerEmail(true)">
+                            <span style="font-weight: 700; color: var(--secondary);">Vehicle Renter</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="owner-email-group" class="form-group" style="display: none;">
+                    <label class="form-label">Vehicle Owner's Email (for approval)</label>
+                    <input type="email" name="owner_email" id="owner_email_input" class="form-input" placeholder="owner@raksharide.in">
+                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 5px;">We will send an approval link to the owner to verify your association.</p>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; font-weight: 800; padding: 18px; font-size: 1rem; margin-top: 20px;">
+                    🚀 Submit Partner Application
+                </button>
+            </form>
+
+            <p class="text-center mt-4">
+                Already registered? <a href="/login/driver" style="font-weight: 700; color: var(--primary);">Partner Login</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        function toggleOwnerEmail(show) {
+            const group = document.getElementById('owner-email-group');
+            const input = document.getElementById('owner_email_input');
+            group.style.display = show ? 'block' : 'none';
+            input.required = show;
+        }
+    </script>
+</body>
+</html>

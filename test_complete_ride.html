@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Complete Ride</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .card {
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #ffc107;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #aaa;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background: #1a1a1a;
+            color: #fff;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #ffc107, #ff9800);
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4);
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .success {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid #22c55e;
+            color: #22c55e;
+        }
+        .error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid #ef4444;
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🚗 Complete Active Ride</h1>
+        <p style="color: #aaa; margin-bottom: 30px;">
+            Use this page to complete your current active ride and see the payment modal.
+        </p>
+
+        <div class="form-group">
+            <label>Ride ID (usually 1 for first ride)</label>
+            <input type="number" id="ride-id" value="1">
+        </div>
+
+        <div class="form-group">
+            <label>Distance Traveled (km)</label>
+            <input type="number" id="distance" value="5" step="0.1">
+        </div>
+
+        <button onclick="completeRide()">✅ Complete Ride & Show Payment</button>
+        <button onclick="cancelRide()" style="background: linear-gradient(135deg, #ef4444, #dc2626);">❌ Cancel Ride</button>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        async function completeRide() {
+            const rideId = document.getElementById('ride-id').value;
+            const distance = document.getElementById('distance').value;
+            const resultDiv = document.getElementById('result');
+
+            try {
+                const response = await fetch('http://localhost:5000/api/complete_ride', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        ride_id: parseInt(rideId),
+                        distance_km: parseFloat(distance)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.style.display = 'block';
+                    resultDiv.innerHTML = `
+                        <h3>✅ Ride Completed!</h3>
+                        <p><strong>Distance:</strong> ${data.ride.distance_km} km</p>
+                        <p><strong>Duration:</strong> ${data.ride.duration_minutes} minutes</p>
+                        <p><strong>Fare:</strong> ₹${data.ride.fare}</p>
+                        <p style="margin-top: 15px;">Now fetching driver's payment QR...</p>
+                    `;
+
+                    // Get driver's payment QR
+                    setTimeout(() => showPaymentModal(data.ride), 1000);
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.style.display = 'block';
+                    resultDiv.innerHTML = `<strong>Error:</strong> ${data.message}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = `<strong>Error:</strong> ${error.message}<br><br>Make sure you're logged in as passenger and have an active ride.`;
+            }
+        }
+
+        async function cancelRide() {
+            const rideId = document.getElementById('ride-id').value;
+            const resultDiv = document.getElementById('result');
+
+            if (!confirm('Are you sure you want to cancel this ride?')) return;
+
+            try {
+                const response = await fetch('http://localhost:5000/api/complete_ride', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        ride_id: parseInt(rideId),
+                        distance_km: 0,
+                        status: 'cancelled'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.style.display = 'block';
+                    resultDiv.innerHTML = `<h3>✅ Ride Cancelled</h3>`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.style.display = 'block';
+                    resultDiv.innerHTML = `<strong>Error:</strong> ${data.message}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
+            }
+        }
+
+        async function showPaymentModal(ride) {
+            try {
+                // Try to get driver's payment QR
+                const response = await fetch(`http://localhost:5000/api/get_driver_payment_qr?driver_id=${ride.driver_id || 1}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                let paymentQRHtml = '';
+                if (data.success && data.payment_qr_image) {
+                    paymentQRHtml = `
+                        <img src="${data.payment_qr_image}" style="max-width: 300px; width: 100%; border-radius: 12px; background: white; padding: 16px; margin: 20px 0;">
+                        <p>Scan this QR code with any UPI app to pay</p>
+                    `;
+                } else {
+                    paymentQRHtml = `
+                        <div style="background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                            <p style="color: #ef4444;">⚠️ Driver hasn't uploaded payment QR yet</p>
+                            <p style="margin-top: 8px;">Please pay via cash or ask driver for UPI ID</p>
+                        </div>
+                    `;
+                }
+
+                // Create modal
+                const modal = document.createElement('div');
+                modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 20px;';
+                modal.innerHTML = `
+                    <div style="background: #2a2a2a; border-radius: 20px; padding: 32px; max-width: 500px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.5); border: 1px solid #444;">
+                        <h2 style="color: #ffc107; margin-bottom: 16px; text-align: center;">💳 Payment</h2>
+                        
+                        <div style="background: rgba(34, 197, 94, 0.2); border: 2px solid #22c55e; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                                <span style="color: #aaa;">Distance:</span>
+                                <span style="color: #fff; font-weight: 600;">${ride.distance_km} km</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                                <span style="color: #aaa;">Duration:</span>
+                                <span style="color: #fff; font-weight: 600;">${ride.duration_minutes} min</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding-top: 12px; border-top: 1px solid rgba(34, 197, 94, 0.3);">
+                                <span style="color: #aaa; font-size: 18px;">Total Fare:</span>
+                                <span style="color: #22c55e; font-weight: 700; font-size: 24px;">₹${ride.fare}</span>
+                            </div>
+                        </div>
+
+                        <div style="text-align: center;">
+                            <h3 style="color: #ffc107; margin-bottom: 16px;">Scan to Pay</h3>
+                            ${paymentQRHtml}
+                        </div>
+
+                        <button onclick="this.parentElement.parentElement.remove()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #ffc107, #ff9800); border: none; border-radius: 8px; color: #000; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px;">
+                            ✅ Payment Done
+                        </button>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+
+            } catch (error) {
+                alert('Ride completed! Fare: ₹' + ride.fare + '\n\nError loading payment QR: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

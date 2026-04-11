@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-page">
+    <div class="auth-card animate-fade">
+        <div class="auth-header">
+            <h2>Verify Identity</h2>
+            <p>We've dispatched a code to <br><span style="color: var(--text-main); font-weight: 700;">{{ email }}</span></p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <i data-lucide="shield-check" style="width: 18px;"></i>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('verify_otp') }}" onsubmit="return submitOTP()">
+            <input type="hidden" name="otp" id="final-otp-input">
+            
+            <div style="display: flex; gap: 10px; justify-content: center; margin: 40px 0;">
+                <input type="text" maxlength="1" class="form-input otp-box" oninput="moveNext(this, event)" autofocus>
+                <input type="text" maxlength="1" class="form-input otp-box" oninput="moveNext(this, event)">
+                <input type="text" maxlength="1" class="form-input otp-box" oninput="moveNext(this, event)">
+                <input type="text" maxlength="1" class="form-input otp-box" oninput="moveNext(this, event)">
+                <input type="text" maxlength="1" class="form-input otp-box" oninput="moveNext(this, event)">
+                <input type="text" maxlength="1" class="form-input otp-box" oninput="moveNext(this, event)">
+            </div>
+
+            <style>
+                .otp-box {
+                    width: 50px;
+                    height: 60px;
+                    text-align: center;
+                    font-size: 24px;
+                    font-weight: 800;
+                    color: var(--primary);
+                    padding: 0 !important;
+                }
+            </style>
+
+            <div style="text-align: center; background: rgba(255,179,0,0.05); padding: 15px; border-radius: 12px; margin-bottom: 30px; border: 1px dashed var(--primary);">
+                <p style="font-size: 13px; color: var(--primary);">
+                    <i data-lucide="terminal" style="width: 14px; vertical-align: middle;"></i> Dev Mode: Use <strong>123456</strong> if mail is delayed.
+                </p>
+            </div>
+
+            <button type="submit" class="btn-primary">
+                Verify Account <i data-lucide="shield" style="width: 18px;"></i>
+            </button>
+        </form>
+
+        <div style="margin-top: 25px; text-align: center;">
+            <a href="{{ url_for('login') }}" style="color: var(--text-dim); text-decoration: none; font-size: 14px;">Wrong email? Back to Sign In</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    function moveNext(input, event) {
+        if (input.value.length >= 1) {
+            const next = input.nextElementSibling;
+            if (next) next.focus();
+        }
+    }
+
+    function submitOTP() {
+        let code = "";
+        document.querySelectorAll('.otp-box').forEach(i => code += i.value);
+        if (code.length < 6) { alert("Complete the 6-digit code"); return false; }
+        document.getElementById('final-otp-input').value = code;
+        return true;
+    }
+</script>
+{% endblock %}

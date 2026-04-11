@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Enrollment - RakshaRide Official Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="flex items-center justify-center">
+    <div class="bg-animated"></div>
+    
+    <div class="enrollment-card card glass animate-fade-up" style="max-width: 600px; width: 100%;">
+        <div class="header text-center mb-4">
+            <div class="logo-container mb-2" style="display: flex; align-items: center; justify-content: center; gap: 15px;">
+                <div class="logo" style="font-size: 40px;">🚗</div>
+                <div class="brand text-left">
+                    <div class="brand-name" style="font-size: 32px; font-weight: 800; color: var(--primary);">RakshaRide</div>
+                    <div class="brand-subtitle" style="font-size: 12px; letter-spacing: 2px; color: var(--accent);">OFFICIAL PORTAL</div>
+                </div>
+            </div>
+            <h1 class="title" style="font-size: 28px; margin-bottom: 5px;">Citizen Enrollment</h1>
+            <p class="subtitle" style="color: var(--text-muted);">Step 1: ID Discovery & Authentication</p>
+        </div>
+
+        <div id="alert" class="alert hidden"></div>
+        <div id="loading" class="text-center hidden mb-3">
+            <div class="spinner" style="margin: 0 auto;"></div>
+            <p class="mt-2" style="color: var(--text-muted);">Processing Secure Request...</p>
+        </div>
+
+        <form id="enrollmentForm">
+            <div class="form-group">
+                <label class="form-label">Government Registered Email</label>
+                <div class="input-group">
+                    <input type="email" id="email" class="form-input" placeholder="citizen@official.gov.in" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                📧 Authenticate & Send OTP
+            </button>
+        </form>
+
+        <div class="footer-text mt-3 text-center">
+            Already registered? <a href="/login/driver" class="btn btn-secondary" style="background: none; border: none; padding: 0; color: var(--primary); font-weight: 800;">Portal Login</a>
+        </div>
+    </div>
+
+    <!-- OTP Modal -->
+    <div id="otpModal" class="flex items-center justify-center hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 2000;">
+        <div class="card glass" style="max-width: 450px; width: 90%; text-align: center;">
+            <h2 class="form-label" style="font-size: 24px; color: var(--primary); margin-bottom: 10px;">Verification Code</h2>
+            <p style="color: var(--text-muted); margin-bottom: 25px;">Enter the 6-digit cryptographic token sent to your inbox.</p>
+            
+            <div class="otp-inputs flex justify-center gap-2 mb-4">
+                <input type="text" maxlength="1" class="form-input" style="width: 50px; text-align: center; font-size: 20px; font-weight: 800;" data-index="0">
+                <input type="text" maxlength="1" class="form-input" style="width: 50px; text-align: center; font-size: 20px; font-weight: 800;" data-index="1">
+                <input type="text" maxlength="1" class="form-input" style="width: 50px; text-align: center; font-size: 20px; font-weight: 800;" data-index="2">
+                <input type="text" maxlength="1" class="form-input" style="width: 50px; text-align: center; font-size: 20px; font-weight: 800;" data-index="3">
+                <input type="text" maxlength="1" class="form-input" style="width: 50px; text-align: center; font-size: 20px; font-weight: 800;" data-index="4">
+                <input type="text" maxlength="1" class="form-input" style="width: 50px; text-align: center; font-size: 20px; font-weight: 800;" data-index="5">
+            </div>
+
+            <button onclick="verifyOTP()" class="btn btn-primary" style="width: 100%;">
+                🛡️ Verify Identity
+            </button>
+            <button onclick="document.getElementById('otpModal').classList.add('hidden')" class="btn btn-secondary mt-2" style="width: 100%; border: none;">
+                Cancel
+            </button>
+        </div>
+    </div>
+
+    <!-- Registration Form Modal -->
+    <div id="registrationModal" class="flex items-center justify-center hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 2100; padding: 20px;">
+        <div class="card glass animate-fade-up" style="max-width: 650px; width: 100%; overflow-y: auto; max-height: 90vh;">
+            <h2 class="form-label text-center" style="font-size: 24px; color: var(--primary); margin-bottom: 5px;">Profile Integration</h2>
+            <p class="text-center" style="color: var(--text-muted); margin-bottom: 30px;">Complete your official driver record registry.</p>
+            
+            <form id="registrationForm">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;" class="mb-3">
+                    <div class="form-group mb-0">
+                        <label class="form-label">Full Name 👤</label>
+                        <input type="text" id="name" class="form-input" placeholder="As per Identity Card" required>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="form-label">Age 🎂</label>
+                        <input type="number" id="age" class="form-input" placeholder="Min 18" min="18" max="70" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;" class="mb-3">
+                    <div class="form-group mb-0">
+                        <label class="form-label">Mobile Number 📱</label>
+                        <input type="tel" id="mobile" class="form-input" placeholder="+91 XXXXX XXXXX" required>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="form-label">Vehicle Type 🚕</label>
+                        <select id="vehicleType" class="form-select" required>
+                            <option value="">Select Category</option>
+                            <option value="Auto">Auto Rickshaw</option>
+                            <option value="Car">Sedan / Hatchback</option>
+                            <option value="Bike">Two-Wheeler</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;" class="mb-3">
+                    <div class="form-group mb-0">
+                        <label class="form-label">Vehicle Reg. No. 🔢</label>
+                        <input type="text" id="vehicleNumber" class="form-input" placeholder="DL 01 AB 1234" required>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="form-label">RC Serial Code 📂</label>
+                        <input type="text" id="rcNumber" class="form-input" placeholder="RC-123456789" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Portal Access Password 🔑</label>
+                    <input type="password" id="password" class="form-input" placeholder="Create high-security password" required minlength="6">
+                </div>
+
+                <button type="submit" class="btn btn-accent" style="width: 100%; font-weight: 800;">
+                    ✅ Finalize National Enrollment
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="/static/js/theme.js"></script>
+    <script>
+        let userEmail = '';
+
+        function showAlert(msg, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = msg;
+            alert.className = `alert alert-${type} animate__animated animate__shakeX`;
+            alert.classList.remove('hidden');
+            setTimeout(() => alert.classList.add('hidden'), 5000);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('hidden', !show);
+            document.getElementById('enrollmentForm').classList.toggle('hidden', show);
+        }
+
+        // Enrollment flow
+        document.getElementById('enrollmentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            userEmail = document.getElementById('email').value;
+            showLoading(true);
+            try {
+                const res = await fetch('/api/send_otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: userEmail })
+                });
+                const data = await res.json();
+                showLoading(false);
+                if (data.success) {
+                    document.getElementById('otpModal').classList.remove('hidden');
+                } else {
+                    showAlert(data.message || 'Verification system offline', 'error');
+                }
+            } catch (err) {
+                showLoading(false);
+                showAlert('Network connectivity issue', 'error');
+            }
+        });
+
+        // OTP inputs auto-focus
+        const otpInputs = document.querySelectorAll('#otpModal .form-input');
+        otpInputs.forEach((input, index) => {
+            input.addEventListener('input', (e) => {
+                if (e.target.value && index < otpInputs.length - 1) otpInputs[index + 1].focus();
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && !e.target.value && index > 0) otpInputs[index - 1].focus();
+            });
+        });
+
+        async function verifyOTP() {
+            const otp = Array.from(otpInputs).map(i => i.value).join('');
+            if (otp.length !== 6) return showAlert('Token incomplete', 'error');
+            
+            try {
+                const res = await fetch('/api/verify_otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: userEmail, otp })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('otpModal').classList.add('hidden');
+                    document.getElementById('registrationModal').classList.remove('hidden');
+                } else {
+                    showAlert('Invalid Token', 'error');
+                }
+            } catch (err) { showAlert('Verification Error', 'error'); }
+        }
+
+        document.getElementById('registrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = {
+                name: document.getElementById('name').value,
+                age: parseInt(document.getElementById('age').value),
+                mobile: document.getElementById('mobile').value,
+                email: userEmail,
+                vehicle_number: document.getElementById('vehicleNumber').value,
+                vehicle_type: document.getElementById('vehicleType').value,
+                rc_number: document.getElementById('rcNumber').value,
+                password: document.getElementById('password').value
+            };
+
+            try {
+                const res = await fetch('/api/register_driver', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showAlert('✅ Identity Recorded Successfully!', 'success');
+                    setTimeout(() => window.location.href = '/login/driver', 2000);
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            } catch (err) { showAlert('Critical System Failure', 'error'); }
+        });
+    </script>
+</body>
+</html>

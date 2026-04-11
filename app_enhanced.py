@@ -1,0 +1,4307 @@
+"""
+RakshaRide Enhanced - Complete Ride Sharing Platform
+Includes: QR Code System, Ride Management, Payment Integration, History Tracking
+"""
+
+from flask import Flask, render_template, request, jsonify, session
+from flask_cors import CORS
+import sqlite3
+import uuid
+import hashlib
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timedelta
+import re
+import json
+import qrcode
+import io
+import base64
+import threading
+import math
+import os
+from PIL import Image
+from auth_utils import generate_token, get_current_user, require_auth
+
+# Optional imports with fallbacks
+try:
+    from security_enhancements import (
+        encrypt_document, decrypt_document,
+        sign_qr_payload, verify_qr_payload,
+        generate_unique_id, mask_aadhaar
+    )
+except ImportError:
+    def encrypt_document(data): return data
+    def decrypt_document(data): return data
+    def sign_qr_payload(driver_id, name, vehicle, mobile):
+        return json.dumps({"driver_id": driver_id, "name": name, "vehicle": vehicle, "mobile": mobile})
+    def verify_qr_payload(payload): return json.loads(payload) if payload else None
+    def generate_unique_id(prefix='DRV'):
+        import secrets as s
+        return f"{prefix}-{s.token_hex(4).upper()}"
+    def mask_aadhaar(num): return "XXXX-XXXX-" + str(num)[-4:] if num else ""
+
+try:
+    from ai_verification import (
+        extract_document_text, compute_face_similarity,
+        generate_liveness_challenge, verify_liveness_token,
+        run_verification_pipeline
+    )
+except ImportError:
+    def extract_document_text(data): return {}
+    def compute_face_similarity(a, b): return 0.0
+    def generate_liveness_challenge(): return {"challenge": "blink"}
+    def verify_liveness_token(token): return True
+    def run_verification_pipeline(data): return {"status": "pending"}
+
+try:
+    from flask_mail import Mail, Message
+    mail_available = True
+except ImportError:
+    mail_available = False
+
+try:
+    from werkzeug.utils import secure_filename
+except ImportError:
+    def secure_filename(f): return f
+
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'raksha-ride-enhanced-secret-key-2024')
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+CORS(app, supports_credentials=True, origins="*")
+
+# Gmail Configuration — reads from env vars in production
+GMAIL_EMAIL = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
+GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD', 'evsz tunv eoqi lawu')
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+
+app.config['MAIL_SERVER'] = SMTP_SERVER
+app.config['MAIL_PORT'] = SMTP_PORT
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = GMAIL_EMAIL
+# Cleanup the app password for Flask-Mail
+app.config['MAIL_PASSWORD'] = GMAIL_APP_PASSWORD.replace(' ', '').replace('-', '')
+app.config['MAIL_DEFAULT_SENDER'] = GMAIL_EMAIL # Simplified for Flask-Mail
+
+mail = Mail(app)
+
+def send_email_async(to_email, subject, body):
+    try:
+        msg = Message(subject=subject, recipients=[to_email])
+        msg.html = body
+        mail.send(msg)
+        print(f"âœ… Email sent to {to_email}")
+    except Exception as e:
+        print(f"âŒ Email sending failed: {e}")
+
+
+# â”€â”€ UPLOAD CONFIGURATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+UPLOAD_BASE = "static/uploads"
+PROFILE_DIR = os.path.join(UPLOAD_BASE, "profile")
+DOC_DIR = os.path.join(UPLOAD_BASE, "documents")
+QR_DIR = os.path.join(UPLOAD_BASE, "qr")
+
+for d in [PROFILE_DIR, DOC_DIR, QR_DIR]:
+    os.makedirs(d, exist_ok=True)
+
+def save_uploaded_file(file, target_dir, prefix=""):
+    """Helper to save file with unique name and return relative path"""
+    if not file or file.filename == '':
+        return None
+    
+    filename = secure_filename(file.filename)
+    unique_name = f"{prefix}_{uuid.uuid4().hex}_{filename}"
+    file_path = os.path.join(target_dir, unique_name)
+    file.save(file_path)
+    
+    # Return path relative to static/
+    return file_path.replace("\\", "/").replace("static/", "")
+
+
+# â”€â”€ CORE UTILITY FUNCTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+def calculate_fare(duration_mins, distance_km):
+    """Business logic for fare calculation"""
+    base_fare = 25.0
+    per_km = 12.0
+    per_min = 1.0
+    total = base_fare + (distance_km * per_km) + (duration_mins * per_min)
+    return round(total, 2)
+
+def generate_payment_qr_code(ride_id, amount, driver_name, upi_id):
+    """Generates a UPI payment URL for scanning"""
+    # Standard UPI Deep Link format: upi://pay?pa=address&pn=name&am=amount&cu=INR
+    pa = upi_id or "raksharide.merchant@upi"
+    upi_url = f"upi://pay?pa={pa}&pn={driver_name}&am={amount}&cu=INR&tn=Ride_{ride_id}"
+    
+    qr = qrcode.QRCode(box_size=10, border=4)
+    qr.add_data(upi_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    return f"data:image/png;base64,{base64.b64encode(buffered.getvalue()).decode()}"
+
+def _send_credentials_email(email, name, user_id, password):
+    """Sends officially generated credentials to the verified driver"""
+    subject = "RakshaRide - Your Verified Driver Credentials"
+    body = f"""
+    <h2>Verification Complete!</h2>
+    <p>Dear {name},</p>
+    <p>We are pleased to inform you that your RakshaRide driver profile has been verified and activated.</p>
+    <div style="padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
+        <p><strong>Official Driver ID:</strong> {user_id}</p>
+        <p><strong>Temporary Password:</strong> {password}</p>
+    </div>
+    <p><strong>Note:</strong> You will be required to change this password upon your first login.</p>
+    <p>Safe journeys!</p>
+    <a href="/login/driver" style="display:inline-block; padding:10px 20px; background:#003366; color:white; text-decoration:none; border-radius:5px;">Login to Portal</a>
+    """
+    send_email_async(email, subject, body)
+
+def _send_owner_creds_notification(email, owner_name, renter_name, renter_id):
+    """Notifies owner that their renter is now verified and active"""
+    subject = "RakshaRide - Renter Verification Complete"
+    body = f"""
+    <h2>Partner Verification Finalized</h2>
+    <p>Dear {owner_name},</p>
+    <p>The renter associated with your vehicle, <strong>{renter_name}</strong>, has completed their document verification.</p>
+    <p>They have been issued Driver ID: <strong>{renter_id}</strong> and can now start accept rides using your vehicle within the RakshaRide trust network.</p>
+    """
+    send_email_async(email, subject, body)
+
+def sign_qr_payload(id, name, vehicle, mobile):
+    """Signs driver payload using HMAC to prevent QR tampering"""
+    secret_key = "raksha_secret_dev"  # Should be in app.config
+    payload = f"{id}|{name}|{vehicle}|{mobile}"
+    signature = hmac.new(secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return {
+        "id": id,
+        "name": name,
+        "vehicle": vehicle,
+        "mobile": mobile,
+        "signature": signature
+    }
+
+# -- DATABASE HELPER ----------------------------------------------------------
+DB_PATH = 'database_enhanced.db'
+
+def get_db_conn():
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL;')
+    conn.execute('PRAGMA busy_timeout=30000;')
+    conn.execute('PRAGMA synchronous=NORMAL;')
+    return conn
+# Database initialization
+def init_db():
+    conn = get_db_conn()
+    c = conn.cursor()
+    
+    # Passengers table
+    c.execute('''CREATE TABLE IF NOT EXISTS passengers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        profile_image TEXT,
+        total_rides INTEGER DEFAULT 0,
+        total_spent REAL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Drivers table
+    c.execute('''CREATE TABLE IF NOT EXISTS drivers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        age INTEGER NOT NULL,
+        mobile TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL UNIQUE,
+        vehicle_number TEXT NOT NULL,
+        vehicle_type TEXT DEFAULT 'Car',
+        rc_number TEXT NOT NULL,
+        password TEXT NOT NULL,
+        address TEXT,
+        qr_code TEXT,
+        unique_id TEXT UNIQUE,
+        profile_image TEXT,
+        upi_id TEXT,
+        latitude REAL,
+        longitude REAL,
+        is_available BOOLEAN DEFAULT 1,
+        rating REAL DEFAULT 5.0,
+        total_rides INTEGER DEFAULT 0,
+        total_earned REAL DEFAULT 0,
+        role TEXT DEFAULT 'OWNER',
+        owner_id INTEGER,
+        verification_status TEXT DEFAULT 'pending',
+        license_number TEXT,
+        payment_qr_image TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # OTP verification table
+    c.execute('''CREATE TABLE IF NOT EXISTS otp_verification (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        otp TEXT NOT NULL,
+        expiry_time TIMESTAMP NOT NULL,
+        attempts INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Rides table
+    c.execute('''CREATE TABLE IF NOT EXISTS rides (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        passenger_id INTEGER NOT NULL,
+        driver_id INTEGER NOT NULL,
+        passenger_name TEXT NOT NULL,
+        passenger_phone TEXT NOT NULL,
+        driver_name TEXT NOT NULL,
+        driver_mobile TEXT NOT NULL,
+        driver_vehicle TEXT NOT NULL,
+        pickup_location TEXT DEFAULT 'Not specified',
+        dropoff_location TEXT DEFAULT 'Not specified',
+        start_lat REAL,
+        start_lng REAL,
+        end_lat REAL,
+        end_lng REAL,
+        route_coordinates TEXT,
+        start_time TIMESTAMP,
+        end_time TIMESTAMP,
+        duration_minutes INTEGER,
+        distance_km REAL DEFAULT 0,
+        fare REAL,
+        status TEXT DEFAULT 'pending',
+        payment_status TEXT DEFAULT 'pending',
+        payment_method TEXT DEFAULT 'qr_code',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (passenger_id) REFERENCES passengers(id),
+        FOREIGN KEY (driver_id) REFERENCES drivers(id)
+    )''')
+    
+    # Payments table
+    c.execute('''CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ride_id INTEGER NOT NULL,
+        passenger_id INTEGER NOT NULL,
+        driver_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        payment_method TEXT DEFAULT 'qr_code',
+        payment_qr TEXT,
+        upi_id TEXT,
+        status TEXT DEFAULT 'pending',
+        transaction_id TEXT,
+        paid_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (ride_id) REFERENCES rides(id),
+        FOREIGN KEY (passenger_id) REFERENCES passengers(id),
+        FOREIGN KEY (driver_id) REFERENCES drivers(id)
+    )''')
+    
+    # â”€â”€ Runtime migrations (safe to run every startup) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    migrations = [
+        ('drivers', 'payment_qr_image',    'TEXT'),
+        ('drivers', 'unique_id',            'TEXT'),
+        ('drivers', 'verification_status',  'TEXT DEFAULT "pending"'),
+        ('drivers', 'aadhaar_number',       'TEXT'),
+        ('drivers', 'aadhaar_doc',          'TEXT'),
+        ('drivers', 'rc_doc',               'TEXT'),
+        ('drivers', 'admin_notes',          'TEXT'),
+        ('drivers', 'role',                 'TEXT DEFAULT "OWNER"'),
+        ('drivers', 'owner_id',             'INTEGER'),
+        ('drivers', 'ai_face_score',        'REAL'),
+        ('drivers', 'ai_ocr_data',          'TEXT'),
+        ('drivers', 'live_selfie',          'TEXT'),
+        ('drivers', 'license_number',       'TEXT'),
+        ('passengers', 'unique_id',         'TEXT'),
+        ('passengers', 'aadhaar_number',    'TEXT'),
+        ('passengers', 'aadhaar_doc',       'TEXT'),
+        ('passengers', 'emergency_mobile',  'TEXT'),
+        ('passengers', 'emergency_email',   'TEXT'),
+        ('passengers', 'emergency_name',    'TEXT'),
+        ('rides', 'share_token',            'TEXT'),
+        ('rides', 'share_token_active',     'INTEGER DEFAULT 0'),
+        ('drivers', 'first_login',          'INTEGER DEFAULT 0'),
+    ]
+    for table, col, coltype in migrations:
+        try:
+            c.execute(f'ALTER TABLE {table} ADD COLUMN {col} {coltype}')
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
+
+    # â”€â”€ Documents table (Owner-Renter document vault) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    c.execute('''CREATE TABLE IF NOT EXISTS driver_documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        driver_id INTEGER NOT NULL,
+        uploaded_by INTEGER NOT NULL,
+        doc_type TEXT NOT NULL,
+        file_data TEXT,
+        ocr_extracted TEXT,
+        ai_status TEXT DEFAULT 'PENDING',
+        ai_score REAL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (driver_id) REFERENCES drivers(id),
+        FOREIGN KEY (uploaded_by) REFERENCES drivers(id)
+    )''')
+
+    # â”€â”€ Owner-Renter link requests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    c.execute('''CREATE TABLE IF NOT EXISTS renter_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        renter_id INTEGER NOT NULL,
+        owner_email TEXT NOT NULL,
+        owner_id INTEGER,
+        approval_token TEXT UNIQUE,
+        status TEXT DEFAULT 'PENDING',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (renter_id) REFERENCES drivers(id)
+    )''')
+
+    # â”€â”€ Ratings & Reviews table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    c.execute('''CREATE TABLE IF NOT EXISTS ratings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        driver_id INTEGER NOT NULL,
+        passenger_id INTEGER NOT NULL,
+        ride_id INTEGER,
+        rating INTEGER CHECK(rating BETWEEN 1 AND 5),
+        comment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (driver_id) REFERENCES drivers(id),
+        FOREIGN KEY (passenger_id) REFERENCES passengers(id),
+        FOREIGN KEY (ride_id) REFERENCES rides(id)
+    )''')
+
+    # â”€â”€ Admins table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    c.execute('''CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    # â”€â”€ Seed default admin if none exists â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    c.execute('SELECT COUNT(*) FROM admins')
+    if c.fetchone()[0] == 0:
+        import hashlib as _hl
+        default_pw = _hl.sha256(b'admin@RakshaRide2024').hexdigest()
+        c.execute("INSERT INTO admins (username, password) VALUES (?, ?)",
+                  ('admin', default_pw))
+        print("[OK] Default admin created -> username: admin | password: admin@RakshaRide2024")
+
+    conn.commit()
+    conn.close()
+    print("[OK] Enhanced database initialized successfully!")
+
+# Initialize database on startup
+init_db()
+
+# Helper functions
+def hash_password(password):
+    """Hash password using SHA256"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def generate_otp():
+    """Generate 6-digit OTP"""
+    return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
+
+def generate_driver_qr_code(driver_id, driver_name, vehicle_number, mobile):
+    """Generate official QR code for driver profile verification"""
+    try:
+        # User requested public URL format
+        profile_url = f"http://raksharide.com/driver/{driver_id}"
+        
+        # We still sign it for security if the scanner needs it
+        qr_data = sign_qr_payload(driver_id, driver_name, vehicle_number, mobile)
+        qr_data['url'] = profile_url
+        qr_json = json.dumps(qr_data)
+
+        # Generate QR code image
+        qr = qrcode.QRCode(version=1, box_size=10, border=4)
+        qr.add_data(qr_json)
+        qr.make(fit=True)
+
+        img = qr.make_image(fill_color="#1a1a2e", back_color="white")
+        
+        # Save to file system
+        filename = f"qr_driver_{driver_id}_{secrets.token_hex(4)}.png"
+        file_path = os.path.join(QR_DIR, filename)
+        img.save(file_path)
+        
+        # Return base64 for immediate UI feedback and relative path for DB
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        
+        rel_path = f"uploads/qr/{filename}"
+        return f"data:image/png;base64,{img_str}", rel_path
+
+    except Exception as e:
+        print(f"QR Gen Error: {e}")
+        return None, None
+
+def generate_payment_qr_code(ride_id, amount, driver_name, upi_id=None):
+    """Generate payment QR code"""
+    try:
+        # Create payment data
+        if upi_id:
+            # UPI payment string format
+            payment_data = f"upi://pay?pa={upi_id}&pn={driver_name}&am={amount}&cu=INR&tn=RakshaRide Payment for Ride {ride_id}"
+        else:
+            # Generic payment data
+            payment_data = {
+                'type': 'payment',
+                'ride_id': ride_id,
+                'amount': amount,
+                'driver': driver_name,
+                'timestamp': datetime.now().isoformat()
+            }
+            payment_data = json.dumps(payment_data)
+        
+        # Generate QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(payment_data)
+        qr.make(fit=True)
+        
+        # Create image
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Convert to base64
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        
+        return f"data:image/png;base64,{img_str}"
+        
+    except Exception as e:
+        print(f"Error generating payment QR: {str(e)}")
+        return None
+
+def calculate_fare(duration_minutes, distance_km=0):
+    """Calculate ride fare"""
+    fare = BASE_FARE + (distance_km * PER_KM_RATE) + (duration_minutes * PER_MINUTE_RATE)
+    return round(fare, 2)
+
+def send_email_otp(to_email, otp):
+    """Send OTP via Flask-Mail (Matches Point 4 & 5 of request)"""
+    try:
+        print(f"\n--- [DEBUG] OUTGOING EMAIL ---")
+        print(f"To: {to_email}")
+        print(f"OTP Code: {otp}")
+        print(f"Using SMTP: {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']}")
+        
+        subject = "RakshaRide - Your Security OTP"
+        body = f"""Hello!
+
+Your RakshaRide verification code is:
+
+    {otp}
+
+This code is valid for 5 minutes.
+âš ï¸ For your safety, do not share this code.
+
+Best regards,
+RakshaRide Safety Team
+"""
+        
+        msg = Message(subject=subject,
+                      recipients=[to_email],
+                      body=body)
+        
+        # Point 6: Check if mail.send() is executed
+        print("Executing mail.send()...")
+        mail.send(msg)
+        
+        print(f"âœ… SUCCESS: OTP sent to {to_email}")
+        print("-------------------------------\n")
+        return True, "OTP delivered successfully"
+        
+    except Exception as e:
+        error_msg = f"Flask-Mail Error: {str(e)}"
+        print(f"âŒ FAILURE: {error_msg}")
+        print("-------------------------------\n")
+        return False, error_msg
+
+
+    thread.start()
+
+def _deliver_email(msg):
+    """Internal helper to deliver SMTP message with robust error handling"""
+    try:
+        # Clean the app password (remove spaces and dashes)
+        clean_pw = GMAIL_APP_PASSWORD.replace(' ', '').replace('-', '')
+        
+        # Connect to Gmail SMTP server
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
+        server.set_debuglevel(1) # Diagnostics enabled
+        server.starttls()
+        
+        # Login with credentials
+        server.login(GMAIL_EMAIL, clean_pw)
+        
+        # Send email
+        server.send_message(msg)
+        server.quit()
+        
+        print(f"âœ… Email delivered successfully to {msg['To']}")
+        return True
+    except Exception as e:
+        print(f"âŒ SMTP Critical Failure: {str(e)}")
+        # Log to a file if needed
+        return False
+
+def send_owner_approval_email(owner_email, renter_name, vehicle_details, token):
+    """Send approval request to the vehicle owner using Flask-Mail"""
+    approval_url = f"http://localhost:5000/owner/approve/{token}"
+    
+    subject = "RakshaRide - Vehicle Owner Approval Required"
+    body = f"""
+    <h2>Action Required: Driver Authorization Request</h2>
+    <p>Dear Vehicle Owner,</p>
+    <p>A driver, <b>{renter_name}</b>, has requested authorization to operate your vehicle (<b>{vehicle_details}</b>) on the RakshaRide platform.</p>
+    
+    <p>As per our safety protocols, please review and approve this request by clicking the link below:</p>
+    
+    <div style="margin: 20px 0;">
+        <a href="{approval_url}" style="background-color: #003366; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px;">Review & Approve Request</a>
+    </div>
+    
+    <p>If you did not authorize this, please ignore this email or report it to our security team.</p>
+    
+    <p>Best regards,<br>RakshaRide Governance Team</p>
+    """
+    
+    try:
+        msg = Message(subject=subject, recipients=[owner_email])
+        msg.html = body
+        mail.send(msg)
+        print(f"âœ… Owner approval email sent to {owner_email}")
+        return True
+    except Exception as e:
+        print(f"âŒ Critical Email System Failure: {str(e)}")
+        return False
+
+def is_valid_email(email):
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+# Routes
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/scanner')
+def scanner_view():
+    return render_template('scanner.html')
+
+@app.route('/verify_driver/<unique_id>')
+def verify_driver_details(unique_id):
+    """View to show driver details after scanning QR"""
+    try:
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT name, vehicle_number, vehicle_type, rating, total_rides, is_available, verification_status FROM drivers WHERE unique_id = ?", (unique_id,))
+        driver = c.fetchone()
+        conn.close()
+        
+        if not driver:
+            return "Driver not found", 404
+            
+        # Ensure passenger is logged in
+        if 'user_id' not in session or session.get('user_type') != 'passenger':
+            return render_template('passenger_otp_login.html', unique_id=unique_id, driver=driver)
+            
+        return render_template('verify_driver.html', driver=driver)
+    except Exception as e:
+        return str(e), 500
+
+@app.route('/api/passenger_scan_otp_request', methods=['POST'])
+def passenger_scan_otp_request():
+    """Send OTP to passenger email after scanning driver ID"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        
+        if not email:
+            return jsonify({"success": False, "message": "Email is required"}), 400
+            
+        # Generate and save OTP
+        otp_code = f"{secrets.randbelow(899999) + 100000}"
+        expiry = datetime.now() + timedelta(minutes=10)
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+        c.execute("INSERT INTO otp_verification (email, otp, expiry_time) VALUES (?, ?, ?)",
+                  (email, otp_code, expiry))
+        conn.commit()
+        conn.close()
+        
+        # Send Email
+        send_email_async(
+            email,
+            "RakshaRide - Passenger Verification Code",
+            f"<h3>Identity Verification</h3><p>Your secure OTP for starting your RakshaRide journey is: <b>{otp_code}</b>. It expires in 10 minutes.</p>"
+        )
+        
+        return jsonify({"success": True, "message": "OTP sent successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/passenger_scan_otp_verify', methods=['POST'])
+def passenger_scan_otp_verify():
+    """Verify passenger OTP and log in"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        otp = data.get('otp', '').strip()
+        
+        if not email or not otp:
+            return jsonify({"success": False, "message": "Email and OTP required"}), 400
+            
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("SELECT otp, expiry_time FROM otp_verification WHERE email = ?", (email,))
+        res = c.fetchone()
+        
+        if not res or res[0] != otp:
+             conn.close()
+             return jsonify({"success": False, "message": "Invalid or expired OTP"}), 400
+             
+        # Check if passenger exists, if not create a temporary entry
+        c.execute("SELECT id, name FROM passengers WHERE email = ?", (email,))
+        p = c.fetchone()
+        
+        if not p:
+            # Create a simple profile if not exists
+            name = email.split('@')[0].capitalize()
+            unique_id = generate_unique_id('PSR')
+            c.execute("INSERT INTO passengers (name, email, phone, password, unique_id) VALUES (?, ?, ?, ?, ?)",
+                      (name, email, 'Not set', 'TEMP_OTP', unique_id))
+            conn.commit()
+            p_id = c.lastrowid
+        else:
+            p_id, name = p
+            
+        session['user_id'] = p_id
+        session['user_name'] = name
+        session['user_type'] = 'passenger'
+        session.permanent = True
+        
+        token = generate_token(p_id, 'passenger', name)
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "Verified successfully!",
+            "name": name,
+            "token": token,
+            "user_id": p_id,
+            "user_type": "passenger"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/dashboard/passenger')
+def passenger_dashboard():
+    if 'user_id' not in session or session.get('user_type') != 'passenger':
+        return render_template('login_govt.html', type='passenger')
+    return render_template('dashboard_passenger_new.html')
+
+@app.route('/dashboard/driver')
+def driver_dashboard():
+    if 'user_id' not in session or session.get('user_type') != 'driver':
+        return render_template('login_govt.html', type='driver')
+    return render_template('dashboard_driver_new.html')
+
+@app.route('/login/passenger')
+def login_passenger_page():
+    return render_template('login_govt.html', type='passenger')
+
+@app.route('/login/driver')
+def login_driver_page():
+    return render_template('login_govt.html', type='driver')
+
+@app.route('/register/passenger')
+def register_passenger_page():
+    return render_template('register_govt.html', type='passenger')
+
+@app.route('/register_driver_new')
+def register_driver_new():
+    return render_template('driver_register_new.html')
+
+# Continue in next part...
+
+# ============================================================================
+# Authentication APIs (Same as before, enhanced)
+# ============================================================================
+
+@app.route('/api/send_otp', methods=['POST'])
+def send_otp():
+    """Send OTP to email - Production Mode (Email Only)"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        
+        if not email or not is_valid_email(email):
+            return jsonify({"success": False, "message": "Invalid email address"}), 400
+        
+        otp = generate_otp()
+        expiry_time = datetime.now() + timedelta(minutes=5)
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        # Check if already registered
+        c.execute("SELECT id FROM passengers WHERE email = ?", (email,))
+        if c.fetchone():
+            conn.close()
+            return jsonify({"success": False, "message": "Email is already registered as a passenger. Please login."}), 400
+            
+        c.execute("SELECT id FROM drivers WHERE email = ?", (email,))
+        if c.fetchone():
+            conn.close()
+            return jsonify({"success": False, "message": "Email is already registered as a driver. Please login."}), 400
+            
+        c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+        c.execute("""INSERT INTO otp_verification (email, otp, expiry_time, attempts) 
+                     VALUES (?, ?, ?, 0)""", (email, otp, expiry_time))
+        conn.commit()
+        conn.close()
+        
+        # Send email
+        email_success, email_message = send_email_otp(email, otp)
+        
+        if email_success:
+            print(f'[OK] OTP sent to: {email}')
+            return jsonify({
+                'success': True,
+                'message': f'Verification code sent to {email}. Check your inbox.',
+                'email_sent': True
+            })
+        else:
+            print(f'[FALLBACK] Email failed. OTP for {email}: {otp}')
+            return jsonify({
+                'success': True,
+                'message': 'Email delivery issue. Check server console for OTP.',
+                'email_sent': False,
+                'dev_otp': otp
+            })
+        
+    except Exception as e:
+        print(f"âŒ Error in send_otp: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/verify_otp', methods=['POST'])
+def verify_otp():
+    """Verify OTP"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        otp = data.get('otp', '').strip()
+        
+        if not email or not otp:
+            return jsonify({"success": False, "message": "Email and OTP required"}), 400
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        c.execute("""SELECT otp, expiry_time, attempts 
+                     FROM otp_verification WHERE email = ?""", (email,))
+        result = c.fetchone()
+        
+        if not result:
+            conn.close()
+            return jsonify({"success": False, "message": "OTP not found"}), 404
+        
+        stored_otp, expiry_time_str, attempts = result
+        
+        try:
+            expiry_time = datetime.fromisoformat(expiry_time_str.replace(' ', 'T'))
+        except:
+            expiry_time = datetime.strptime(expiry_time_str, '%Y-%m-%d %H:%M:%S.%f')
+        
+        if datetime.now() > expiry_time:
+            c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+            conn.commit()
+            conn.close()
+            return jsonify({"success": False, "message": "OTP expired"}), 400
+        
+        if attempts >= 3:
+            c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+            conn.commit()
+            conn.close()
+            return jsonify({"success": False, "message": "Too many attempts"}), 400
+        
+        if otp != stored_otp:
+            c.execute("UPDATE otp_verification SET attempts = attempts + 1 WHERE email = ?", (email,))
+            conn.commit()
+            remaining = 3 - (attempts + 1)
+            conn.close()
+            return jsonify({"success": False, "message": f"Invalid OTP. {remaining} attempts remaining"}), 400
+        
+        c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "OTP verified successfully"})
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/register_passenger', methods=['POST'])
+def register_passenger():
+    """Register new passenger with unique ID"""
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        phone = (data.get('phone') or data.get('mobile') or '').strip()
+        email = data.get('email', '').strip()
+        password = data.get('password', '').strip()
+        aadhaar_number = data.get('aadhaar_number', '').strip()
+        aadhaar_doc = data.get('aadhaar_doc', '')
+
+        if not all([name, phone, email, password]):
+            return jsonify({"success": False, "message": "All fields required (name, mobile, email, password)"}), 400
+
+        if not is_valid_email(email):
+            return jsonify({"success": False, "message": "Invalid email"}), 400
+
+        if len(password) < 6:
+            return jsonify({"success": False, "message": "Password must be 6+ characters"}), 400
+
+        hashed_password = hash_password(password)
+        unique_id = generate_unique_id('PSR')
+        enc_aadhaar = encrypt_document(aadhaar_doc) if aadhaar_doc else None
+
+        conn = get_db_conn()
+        c = conn.cursor()
+        try:
+            c.execute("SELECT id FROM passengers WHERE email = ?", (email,))
+            if c.fetchone():
+                conn.close()
+                return jsonify({"success": False, "message": "Email is already registered"}), 400
+
+            c.execute("SELECT id FROM passengers WHERE phone = ?", (phone,))
+            if c.fetchone():
+                conn.close()
+                return jsonify({"success": False, "message": "Mobile number is already registered"}), 400
+
+            c.execute("""INSERT INTO passengers
+                         (name, phone, email, password, unique_id, aadhaar_number, aadhaar_doc)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                      (name, phone, email, hashed_password, unique_id, aadhaar_number, enc_aadhaar))
+            conn.commit()
+            passenger_id = c.lastrowid
+            conn.close()
+
+            return jsonify({
+                "success": True,
+                "message": "Account created successfully!",
+                "user_id": passenger_id,
+                "unique_id": unique_id
+            })
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({"success": False, "message": "Identity collision. Please verify your details."}), 400
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/register_driver', methods=['POST'])
+def register_driver():
+    """Register new driver with unique ID and document storage"""
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        age = data.get('age')
+        mobile = data.get('mobile', '').strip()
+        email = data.get('email', '').strip()
+        vehicle_number = data.get('vehicle_number', '').strip()
+        vehicle_type = data.get('vehicle_type', 'Car').strip()
+        rc_number = data.get('rc_number', '').strip()
+        password = data.get('password', '').strip()
+        aadhaar_number = data.get('aadhaar_number', '').strip()
+        aadhaar_doc = data.get('aadhaar_doc', '')   # base64 data URI
+        rc_doc = data.get('rc_doc', '')             # base64 data URI
+
+        if not all([name, age, mobile, email, vehicle_number, rc_number, password]):
+            return jsonify({"success": False, "message": "All fields required"}), 400
+
+        if not is_valid_email(email):
+            return jsonify({"success": False, "message": "Invalid email"}), 400
+
+        if len(password) < 6:
+            return jsonify({"success": False, "message": "Password must be 6+ characters"}), 400
+
+        try:
+            age = int(age)
+            if age < 18 or age > 70:
+                return jsonify({"success": False, "message": "Age must be 18-70"}), 400
+        except ValueError:
+            return jsonify({"success": False, "message": "Invalid age"}), 400
+
+        hashed_password = hash_password(password)
+        unique_id = generate_unique_id('DRV')
+
+        # Encrypt documents before storage
+        enc_aadhaar = encrypt_document(aadhaar_doc) if aadhaar_doc else None
+        enc_rc = encrypt_document(rc_doc) if rc_doc else None
+
+        # Placeholder QR (driver_id unknown yet)
+        qr_image, qr_data = generate_driver_qr_code(0, name, vehicle_number, mobile)
+
+        conn = get_db_conn()
+        c = conn.cursor()
+        try:
+            for col, val, msg in [
+                ('email',          email,          'Email is already registered'),
+                ('mobile',         mobile,         'Mobile number is already registered'),
+                ('vehicle_number', vehicle_number, 'Vehicle number already registered'),
+                ('rc_number',      rc_number,      'RC number already registered'),
+            ]:
+                c.execute(f"SELECT id FROM drivers WHERE {col} = ?", (val,))
+                if c.fetchone():
+                    conn.close()
+                    return jsonify({"success": False, "message": msg}), 400
+
+            c.execute("""INSERT INTO drivers
+                         (name, age, mobile, email, vehicle_number, vehicle_type, rc_number,
+                          password, qr_code, unique_id, verification_status,
+                          aadhaar_number, aadhaar_doc, rc_doc)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)""",
+                      (name, age, mobile, email, vehicle_number, vehicle_type, rc_number,
+                       hashed_password, qr_data, unique_id, aadhaar_number, enc_aadhaar, enc_rc))
+            conn.commit()
+            driver_id = c.lastrowid
+
+            # Regenerate QR with real driver_id (HMAC-signed)
+            qr_image, qr_data = generate_driver_qr_code(driver_id, name, vehicle_number, mobile)
+            c.execute("UPDATE drivers SET qr_code = ? WHERE id = ?", (qr_data, driver_id))
+            conn.commit()
+            conn.close()
+
+            return jsonify({
+                "success": True,
+                "message": "Driver enrolled! Account pending admin verification. You will be notified by email.",
+                "user_id": driver_id,
+                "unique_id": unique_id
+            })
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({"success": False, "message": "Enrollment collision. One or more fields already exist."}), 400
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ============================================================================
+# NEW OWNER/RENTER REGISTRATION SYSTEM
+# ============================================================================
+
+@app.route('/register/driver/new')
+def driver_register_new_page():
+    """New multi-step driver registration page"""
+    return render_template('driver_register_new.html')
+
+@app.route('/owner/approve/<token>')
+def owner_approve_view(token):
+    """Secure link for owner to review and approve renter"""
+    return render_template('owner_confirm.html', token=token)
+
+@app.route('/upload_docs')
+def upload_docs_page():
+    """Document upload page - accessed via token for owners"""
+    token = request.args.get('token')
+    driver_id = request.args.get('driver_id') # For self-uploading owners
+    return render_template('driver_upload_docs.html', token=token, driver_id=driver_id)
+
+@app.route('/api/register_driver_v2', methods=['POST'])
+def register_driver_v2():
+    """Unified registration for OWNER and RENT drivers using form-data"""
+    try:
+        # 1. Debug prints as requested
+        print("--- INCOMING FORM DATA ---")
+        print(request.form)
+        print("--- INCOMING FILES ---")
+        print(request.files)
+
+        # 2. Extract and Step 1: Trim all text inputs
+        role = request.form.get('role', 'OWNER').strip().upper()
+        name = request.form.get('name', '').strip()
+        age_raw = request.form.get('age', '').strip()
+        mobile = request.form.get('mobile', '').strip()
+        email = request.form.get('email', '').strip()
+        vehicle_number = request.form.get('vehicle_number', '').strip()
+        vehicle_type = request.form.get('vehicle_type', 'Car').strip()
+        rc_number = request.form.get('rc_number', '').strip()
+        license_number = request.form.get('license_number', '').strip()
+        aadhaar_number = request.form.get('aadhaar_number', '').strip()
+        address = request.form.get('address', '').strip()
+
+        # 3. Individual Field Validation (No more 'if not all')
+        if not name: return jsonify({"success": False, "message": "Full Name is required"}), 400
+        if not age_raw: return jsonify({"success": False, "message": "Age is required"}), 400
+        if not address: return jsonify({"success": False, "message": "Full Address is required"}), 400
+        if not mobile: return jsonify({"success": False, "message": "Mobile Number is required"}), 400
+        if not email: return jsonify({"success": False, "message": "Email Address is required"}), 400
+        if not vehicle_number: return jsonify({"success": False, "message": "Vehicle Number is required"}), 400
+        if not rc_number: return jsonify({"success": False, "message": "RC Number is required"}), 400
+        if not license_number: return jsonify({"success": False, "message": "License Number is required"}), 400
+        if not aadhaar_number: return jsonify({"success": False, "message": "Aadhaar Number is required"}), 400
+
+        # Handle Role-specific owner_email
+        owner_email = ""
+        if role == 'RENT':
+            owner_email = request.form.get('owner_email', '').strip()
+            if not owner_email:
+                return jsonify({"success": False, "message": "Owner Email is required for Renter registration"}), 400
+
+        # File Handling Example (as per request)
+        # Note: In Step 1, files might be optional or handled in Step 2, but I'll add the check as requested.
+        # Registration form might have a single 'aadhar' file input.
+        if request.files and 'aadhar' in request.files:
+            aadhar_file = request.files.get('aadhar')
+            if not aadhar_file or aadhar_file.filename == "":
+                 return jsonify({"success": False, "message": "Aadhaar file is missing or empty"}), 400
+
+        # Validate Age
+        try:
+            age = int(age_raw)
+            if age < 18 or age > 70:
+                return jsonify({"success": False, "message": "Age must be between 18 and 70"}), 400
+        except ValueError:
+            return jsonify({"success": False, "message": "Invalid Age format"}), 400
+
+        if not is_valid_email(email):
+            return jsonify({"success": False, "message": "Invalid Email format"}), 400
+
+        # 4. Check for duplicates (using the requested error message)
+        conn = get_db_conn()
+        c = conn.cursor()
+
+        existing_driver_id = None
+        c.execute("SELECT id FROM drivers WHERE email = ?", (email,))
+        em_res = c.fetchone()
+        
+        c.execute("SELECT id FROM drivers WHERE mobile = ?", (mobile,))
+        mob_res = c.fetchone()
+
+        if em_res or mob_res:
+            if role == 'RENT':
+                # No "email already exists error" for renter. Reuse existing profile!
+                existing_driver_id = em_res[0] if em_res else mob_res[0]
+            else:
+                conn.close()
+                return jsonify({"success": False, "message": "Email or Mobile already registered"}), 400
+
+        # 5. Database Insertion
+        # Status logic
+        verification_status = 'pending'
+        owner_id = None
+        approval_token = uuid.uuid4().hex
+
+        if role == 'RENT':
+            c.execute("SELECT id FROM drivers WHERE email = ? AND role = 'OWNER'", (owner_email,))
+            owner_res = c.fetchone()
+            if owner_res:
+                owner_id = owner_res[0]
+            else:
+                placeholder_pw_owner = hash_password(secrets.token_urlsafe(12))
+                c.execute("""INSERT INTO drivers 
+                             (name, age, mobile, email, vehicle_number, vehicle_type, rc_number, password, unique_id, verification_status, role) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', 'OWNER')""",
+                          ("Pending Owner", 0, secrets.token_hex(6), owner_email, vehicle_number, vehicle_type, "PENDING", placeholder_pw_owner, "PENDING_OWNER"))
+                owner_id = c.lastrowid
+
+        # Credentials are NOT generated here for RENTERS (only after approval)
+        placeholder_pw = hash_password(secrets.token_urlsafe(12))
+        unique_id = "PENDING_" + secrets.token_hex(4).upper()
+
+        if not existing_driver_id:
+            c.execute("""INSERT INTO drivers
+                         (name, age, mobile, email, vehicle_number, vehicle_type, rc_number,
+                          password, unique_id, verification_status, role, owner_id, license_number, aadhaar_number, address)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                      (name, age, mobile, email, vehicle_number, vehicle_type, rc_number,
+                       placeholder_pw, unique_id, verification_status, role, owner_id, license_number, aadhaar_number, address))
+            conn.commit()
+            driver_id = c.lastrowid
+        else:
+            driver_id = existing_driver_id
+
+        if role == 'RENT':
+            c.execute("INSERT INTO renter_requests (renter_id, owner_email, owner_id, approval_token, status) VALUES (?, ?, ?, ?, 'PENDING')",
+                      (driver_id, owner_email, owner_id, approval_token))
+            conn.commit()
+            
+            # TRIGGER EMAIL TO OWNER
+            send_owner_approval_email(owner_email, name, f"{vehicle_type} - {vehicle_number}", approval_token)
+
+        # Finalize QR
+        qr_image, qr_data = generate_driver_qr_code(driver_id, name, vehicle_number, mobile)
+        c.execute("UPDATE drivers SET qr_code = ? WHERE id = ?", (qr_data, driver_id))
+        conn.commit()
+        conn.close()
+
+        # Success Response
+        if role == 'OWNER':
+            msg = "Registration successful! Proceed to upload documents."
+            redirect_url = f"/upload_docs?driver_id={driver_id}"
+        else:
+            msg = f"Registration submitted! An approval link has been sent to the vehicle owner at {owner_email}."
+            redirect_url = "/register/driver/new?status=pending_owner"
+
+        return jsonify({
+            "success": True,
+            "message": msg,
+            "driver_id": driver_id,
+            "unique_id": unique_id,
+            "redirect_url": redirect_url
+        })
+
+    except Exception as e:
+        print(f"Registration Final Error: {str(e)}")
+        return jsonify({"success": False, "message": f"Server Error: {str(e)}"}), 500
+
+@app.route('/api/owner_confirm_load', methods=['GET'])
+def owner_confirm_load():
+    """Load rent driver details for owner confirmation"""
+    try:
+        token = request.args.get('token', '')
+        
+        if not token:
+            return jsonify({"success": False, "message": "Invalid token"}), 400
+
+        conn = get_db_conn()
+        c = conn.cursor()
+
+        c.execute("SELECT renter_id, owner_id, status FROM renter_requests WHERE approval_token = ?", (token,))
+        result = c.fetchone()
+
+        if not result or result[2] != 'PENDING':
+            conn.close()
+            return jsonify({"success": False, "message": "Invalid or already processed token"}), 400
+
+        renter_id, owner_id, req_status = result
+
+        c.execute("""SELECT name, email, mobile, age, vehicle_number, vehicle_type, 
+                     license_number, created_at FROM drivers WHERE id = ?""", (renter_id,))
+        driver_result = c.fetchone()
+        conn.close()
+
+        if not driver_result:
+            return jsonify({"success": False, "message": "Driver not found"}), 400
+
+        return jsonify({
+            "success": True,
+            "driver": {
+                "name": driver_result[0],
+                "email": driver_result[1],
+                "mobile": driver_result[2],
+                "age": driver_result[3],
+                "vehicle_number": driver_result[4],
+                "vehicle_type": driver_result[5],
+                "license_number": driver_result[6],
+                "created_at": driver_result[7]
+            }
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/owner_confirm_action', methods=['POST'])
+def owner_confirm_action():
+    """Owner approves or rejects rent driver request"""
+    try:
+        data = request.get_json()
+        token = data.get('token', '')
+        action = data.get('action', '')
+
+        if not token or action not in ['APPROVE', 'REJECT']:
+            return jsonify({"success": False, "message": "Invalid request"}), 400
+
+        conn = get_db_conn()
+        c = conn.cursor()
+
+        c.execute("SELECT renter_id, owner_id, owner_email, status FROM renter_requests WHERE approval_token = ?", (token,))
+        result = c.fetchone()
+
+        if not result or result[3] != 'PENDING':
+            conn.close()
+            return jsonify({"success": False, "message": "Invalid or already processed token"}), 400
+
+        renter_id, owner_id, owner_email, status = result
+
+        if action == 'APPROVE':
+            c.execute("UPDATE renter_requests SET status = 'APPROVED' WHERE approval_token = ?", (token,))
+            c.execute("UPDATE drivers SET verification_status = 'approved_by_owner' WHERE id = ?", (renter_id,))
+            conn.commit()
+
+            c.execute("SELECT name, email FROM drivers WHERE id = ?", (renter_id,))
+            renter_name, renter_email = c.fetchone()
+            conn.close()
+
+            send_email_async(
+                renter_email,
+                "RakshaRide - Owner Approved Your Request",
+                f"""<h2>Great News!</h2>
+                <p>Dear {renter_name},</p>
+                <p>The vehicle owner has approved your registration request.</p>
+                <p>The owner will now upload the required documents.</p>"""
+            )
+
+            return jsonify({
+                "success": True,
+                "message": "Request approved! Please upload vehicle documents for verification.",
+                "redirect_url": f"/upload_docs?token={token}"
+            })
+
+        else:
+            c.execute("UPDATE renter_requests SET status = 'REJECTED' WHERE approval_token = ?", (token,))
+            c.execute("DELETE FROM drivers WHERE id = ?", (renter_id,))
+            conn.commit()
+            conn.close()
+
+            return jsonify({
+                "success": True,
+                "message": "Request rejected."
+            })
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/upload_driver_docs', methods=['POST'])
+def upload_driver_docs():
+    """Upload documents and trigger final verification / credential generation"""
+    try:
+        # Check if multipart form
+        if 'token' in request.form:
+            token = request.form.get('token')
+            driver_id = request.form.get('driver_id')
+        else:
+            data = request.get_json() if request.is_json else {}
+            token = data.get('token')
+            driver_id = data.get('driver_id')
+
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+
+        # Resolve driver_id from token
+        if token:
+            c.execute("SELECT renter_id, owner_id FROM renter_requests WHERE approval_token = ?", (token,))
+            req = c.fetchone()
+            if not req:
+                conn.close()
+                return jsonify({"success": False, "message": "Invalid approval session"}), 400
+            driver_id = req['renter_id']
+            uploader_id = req['owner_id'] or 'OWNER_DIRECT'
+        else:
+            uploader_id = driver_id
+
+        # Profile Image Upload
+        if 'profile_image' in request.files:
+            profile_path = save_uploaded_file(request.files['profile_image'], PROFILE_DIR, f"p_{driver_id}")
+            if profile_path:
+                c.execute("UPDATE drivers SET profile_image = ? WHERE id = ?", (profile_path, driver_id))
+
+        # Document Uploads (Files)
+        doc_types = ['aadhar', 'license', 'rc']
+        for dtype in doc_types:
+            file_key = f"{dtype}_doc"
+            if file_key in request.files:
+                doc_path = save_uploaded_file(request.files[file_key], DOC_DIR, f"d_{driver_id}_{dtype}")
+                if doc_path:
+                    # Logic to clear old docs of same type if needed
+                    c.execute("DELETE FROM driver_documents WHERE driver_id = ? AND doc_type = ?", (driver_id, dtype))
+                    c.execute("""INSERT INTO driver_documents (driver_id, uploaded_by, doc_type, file_data) 
+                                 VALUES (?, ?, ?, ?)""", (driver_id, uploader_id, dtype, doc_path))
+
+        # Support JSON Base64 (Legacy Compatibility)
+        if request.is_json:
+            data = request.get_json()
+            documents = data.get('documents', {})
+            for doc_type, base64_data in documents.items():
+                encrypted_data = encrypt_document(base64_data)
+                c.execute("""INSERT INTO driver_documents (driver_id, uploaded_by, doc_type, file_data) 
+                             VALUES (?, ?, ?, ?)""", (driver_id, uploader_id, doc_type, encrypted_data))
+
+        # Status & Credentials
+        c.execute("SELECT * FROM drivers WHERE id = ?", (driver_id,))
+        driver = c.fetchone()
+        
+        c.execute("UPDATE drivers SET verification_status = 'verified' WHERE id = ?", (driver_id,))
+        if token and driver['owner_id']:
+            c.execute("UPDATE drivers SET verification_status = 'verified' WHERE id = ?", (driver['owner_id'],))
+
+        raw_password = secrets.token_urlsafe(10)
+        hashed_pw = hash_password(raw_password)
+        new_unique_id = f"DRV{driver['id']:04d}"
+
+        # Generate Official QR Code (Pointing to public profile)
+        qr_base64, qr_path = generate_driver_qr_code(driver_id, driver['name'], driver['vehicle_number'], driver['mobile'])
+
+        c.execute("""UPDATE drivers 
+                     SET unique_id = ?, 
+                         password = ?,
+                         qr_code = ?,
+                         first_login = 1 
+                     WHERE id = ?""", 
+                  (new_unique_id, hashed_pw, qr_path, driver_id))
+
+        conn.commit()
+        
+        # Notify Renter
+        _send_credentials_email(driver['email'], driver['name'], new_unique_id, raw_password)
+        
+        # Notify Owner if exists
+        if token and driver['owner_id']:
+            c.execute("SELECT email, name FROM drivers WHERE id = ?", (driver['owner_id'],))
+            owner_info = c.fetchone()
+            if owner_info:
+                _send_owner_creds_notification(owner_info[0], owner_info[1], driver['name'], new_unique_id)
+
+        conn.close()
+        return jsonify({
+            "success": True, 
+            "message": "Docs verified and credentials generated",
+            "unique_id": new_unique_id,
+            "temp_password": raw_password
+        })
+    except Exception as e:
+        print(f"Docs Upload Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/driver/<int:driver_id>')
+def driver_public_profile(driver_id):
+    """Public driver profile accessible via QR scan"""
+    try:
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM drivers WHERE id = ?", (driver_id,))
+        driver = c.fetchone()
+        conn.close()
+        
+        if not driver: return "Driver not found", 404
+            
+        return render_template('driver_profile_public.html', driver=driver)
+    except Exception as e:
+        return str(e), 500
+
+@app.route('/api/get_driver_docs', methods=['GET'])
+def get_driver_docs():
+    """Fetch documents for dashboard display"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        
+        driver_id = session['user_id']
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        c.execute("SELECT doc_type, ai_status, file_data FROM driver_documents WHERE driver_id = ?", (driver_id,))
+        docs = []
+        for r in c.fetchall():
+            doc_type, status, data = r
+            # If data is a path, we serve it via static
+            if data and (data.startswith('static/') or data.startswith('uploads/')):
+                # Convert to absolute or standard relative for frontend
+                web_path = f"/{data}" if not data.startswith('/') else data
+                docs.append({"type": doc_type, "status": status, "path": web_path})
+            else:
+                # Legacy Base64
+                docs.append({"type": doc_type, "status": status, "data": data})
+                
+        conn.close()
+        return jsonify({"success": True, "documents": docs})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/login_passenger', methods=['POST'])
+def login_passenger():
+    """Passenger login Step 1: Password Check -> Send OTP"""
+    try:
+        data = request.get_json()
+        credential = data.get('credential', '').strip()
+        password = data.get('password', '').strip()
+        
+        if not credential or not password:
+            return jsonify({"success": False, "message": "Credentials required"}), 400
+        
+        hashed_password = hash_password(password)
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        c.execute("""SELECT id, name, email, phone FROM passengers 
+                     WHERE (email = ? OR phone = ?) AND password = ?""", 
+                   (credential, credential, hashed_password))
+        result = c.fetchone()
+        
+        if result:
+            user_id, name, email, phone = result
+            
+            # Generate and Send OTP
+            otp = generate_otp()
+            expiry_time = datetime.now() + timedelta(minutes=5)
+            
+            c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+            c.execute("""INSERT INTO otp_verification (email, otp, expiry_time, attempts) 
+                         VALUES (?, ?, ?, 0)""", (email, otp, expiry_time))
+            conn.commit()
+            conn.close()
+            
+            # Send email
+            email_success, email_message = send_email_otp(email, otp)
+            
+            if email_success:
+                print(f"âœ… SECURITY LOG: Login OTP sent to ACTUAL email: {email}")
+                return jsonify({
+                    "success": True,
+                    "requires_otp": True,
+                    "email": email,
+                    "message": f"Security verification code sent to {email}. Please check your inbox.",
+                    "email_sent": True
+                })
+            else:
+                print(f"âŒ LOGIN OTP FAILURE for {email}: {email_message}")
+                return jsonify({
+                    "success": False,
+                    "message": "Verification code delivery failed. Please check your network or email address.",
+                    "email_sent": False
+                }), 500
+        else:
+            conn.close()
+            return jsonify({"success": False, "message": "Invalid email/phone or password"}), 401
+            
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/verify_login_otp_passenger', methods=['POST'])
+def verify_login_otp_passenger():
+    """Passenger login Step 2: Verify OTP -> Grant Session"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        otp = data.get('otp', '').strip()
+        
+        if not email or not otp:
+            return jsonify({"success": False, "message": "Email and OTP required"}), 400
+        
+        # Call common verification
+        # But here we also need to set the session for the actual user
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        c.execute("SELECT otp, expiry_time FROM otp_verification WHERE email = ?", (email,))
+        result = c.fetchone()
+        
+        if not result or result[0] != otp:
+            conn.close()
+            return jsonify({"success": False, "message": "Invalid or expired OTP"}), 400
+            
+        # Clear OTP
+        c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+        
+        # Get User Info
+        c.execute("SELECT id, name, email, phone, total_rides, total_spent FROM passengers WHERE email = ?", (email,))
+        user_info = c.fetchone()
+        conn.commit()
+        conn.close()
+        
+        if user_info:
+            session['user_id'] = user_info[0]
+            session['user_name'] = user_info[1]
+            session['user_type'] = 'passenger'
+            session.permanent = True
+            token = generate_token(user_info[0], 'passenger', user_info[1])
+            return jsonify({
+                "success": True, 
+                "message": "Login successful!",
+                "token": token,
+                "user": {
+                    "id": user_info[0],
+                    "name": user_info[1],
+                    "email": user_info[2],
+                    "phone": user_info[3],
+                    "type": "passenger",
+                    "total_rides": user_info[4],
+                    "total_spent": user_info[5]
+                }
+            })
+        
+        return jsonify({"success": False, "message": "User not found after OTP"}), 404
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/login_driver', methods=['POST'])
+def login_driver():
+    """Driver login with User ID (DRVxxxx) or Email, handles first-time password change"""
+    try:
+        data = request.get_json()
+        credential = data.get('credential', '').strip()
+        password = data.get('password', '').strip()
+        
+        if not credential or not password:
+            return jsonify({"success": False, "message": "Credentials required"}), 400
+            
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        # Accept email OR unique_id (DRVxxxx)
+        c.execute("SELECT * FROM drivers WHERE unique_id = ? OR email = ?", (credential, credential))
+        driver = c.fetchone()
+        
+        if not driver:
+            conn.close()
+            return jsonify({"success": False, "message": "Invalid User ID or password"}), 401
+            
+        if driver['password'] != hash_password(password):
+            conn.close()
+            return jsonify({"success": False, "message": "Invalid User ID or password"}), 401
+            
+        if driver['verification_status'] not in ['approved', 'verified']:
+            conn.close()
+            return jsonify({"success": False, "message": "Account under review. Credentials available after approval/verification."}), 403
+            
+        # Check if first login
+        requires_password_change = bool(driver['first_login'])
+        
+        # Set session
+        session['user_id'] = driver['id']
+        session['user_type'] = 'driver'
+        session['name'] = driver['name']
+        session['unique_id'] = driver['unique_id']
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True, 
+            "message": "Login successful",
+            "redirect_url": "/change_password" if requires_password_change else "/dashboard/driver"
+        })
+        
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/change_password')
+def change_password_page():
+    if 'user_id' not in session:
+        return render_template('login_govt.html')
+    return render_template('change_password.html')
+
+@app.route('/api/update_password', methods=['POST'])
+def update_password():
+    """First-time password change for approved drivers"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+            
+        data = request.get_json()
+        new_password = data.get('new_password', '').strip()
+        confirm_password = data.get('confirm_password', '').strip()
+        
+        if len(new_password) < 6:
+            return jsonify({"success": False, "message": "New password must be 6+ characters"}), 400
+            
+        if new_password != confirm_password:
+            return jsonify({"success": False, "message": "Passwords do not match"}), 400
+            
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("UPDATE drivers SET password = ?, first_login = 0 WHERE id = ?",
+                  (hash_password(new_password), session['user_id']))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Password updated successfully!", "redirect": "/dashboard/driver"})
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_driver_overview')
+def get_driver_overview():
+    """Returns summarized stats for the driver intelligence dashboard"""
+    try:
+        if 'user_id' not in session or session['user_type'] != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+            
+        driver_id = session['user_id']
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        # Total rides and earnings
+        c.execute("SELECT COUNT(*) as count, SUM(fare) as earnings, SUM(distance_km) as distance FROM rides WHERE driver_id = ? AND status = 'completed'", (driver_id,))
+        stats = c.fetchone()
+        
+        # Unique passengers
+        c.execute("SELECT COUNT(DISTINCT passenger_id) as passengers FROM rides WHERE driver_id = ?", (driver_id,))
+        passengers = c.fetchone()
+        
+        # Mock earnings history for chart (last 7 days)
+        # In a real app, this would be grouped by date from the DB
+        earnings_history = [
+            {"date": (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d'), "amount": 0}
+            for i in range(6, -1, -1)
+        ]
+        
+        c.execute("""
+            SELECT strftime('%Y-%m-%d', start_time) as date, SUM(fare) as daily_total 
+            FROM rides 
+            WHERE driver_id = ? AND status = 'completed' AND start_time >= date('now', '-7 days')
+            GROUP BY date
+        """, (driver_id,))
+        
+        db_history = {row['date']: row['daily_total'] for row in c.fetchall()}
+        for day in earnings_history:
+            if day['date'] in db_history:
+                day['amount'] = db_history[day['date']]
+                
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "total_rides": stats['count'] or 0,
+            "total_earned": stats['earnings'] or 0,
+            "total_distance": stats['distance'] or 0,
+            "total_passengers": passengers['passengers'] or 0,
+            "earnings_history": earnings_history
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_driver_ratings')
+def get_driver_ratings():
+    """Fetched ratings and reviews for the Trust Score section"""
+    try:
+        if 'user_id' not in session or session['user_type'] != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+            
+        driver_id = session['user_id']
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        c.execute("SELECT * FROM ratings WHERE driver_id = ? ORDER BY created_at DESC", (driver_id,))
+        reviews = [dict(row) for row in c.fetchall()]
+        
+        c.execute("SELECT AVG(rating) as avg FROM ratings WHERE driver_id = ?", (driver_id,))
+        avg = c.fetchone()['avg'] or 5.0
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "average": avg,
+            "reviews": reviews
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/submit_rating', methods=['POST'])
+def submit_rating():
+    """Allows passengers to rate drivers after a ride"""
+    try:
+        if 'user_id' not in session or session['user_type'] != 'passenger':
+            return jsonify({"success": False, "message": "Only passengers can submit ratings"}), 401
+            
+        data = request.get_json()
+        driver_id = data.get('driver_id')
+        rating = data.get('rating')
+        comment = data.get('comment', '')
+        ride_id = data.get('ride_id')
+        
+        if not driver_id or not rating:
+            return jsonify({"success": False, "message": "Missing rating details"}), 400
+            
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("INSERT INTO ratings (driver_id, passenger_id, ride_id, rating, comment) VALUES (?, ?, ?, ?, ?)",
+                  (driver_id, session['user_id'], ride_id, rating, comment))
+        
+        # Update driver average rating Cache
+        c.execute("UPDATE drivers SET rating = (SELECT AVG(rating) FROM ratings WHERE driver_id = ?) WHERE id = ?",
+                  (driver_id, driver_id))
+                  
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Feedback submitted! Thank you."})
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_driver_profile_for_passenger')
+def get_driver_profile_for_passenger():
+    """Public driver profile view for scanner activation"""
+    try:
+        unique_id = request.args.get('unique_id')
+        if not unique_id:
+            return jsonify({"success": False, "message": "Invalid QR Payload"}), 400
+            
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        c.execute("SELECT id, name, vehicle_type, vehicle_number, rating, verification_status, profile_image FROM drivers WHERE unique_id = ?", (unique_id,))
+        driver = c.fetchone()
+        
+        if not driver:
+            conn.close()
+            return jsonify({"success": False, "message": "Driver not found"}), 404
+            
+        if driver['verification_status'] != 'verified':
+            conn.close()
+            return jsonify({"success": False, "message": "Driver not verified by RakshaRide"}), 403
+            
+        res = dict(driver)
+        conn.close()
+        
+        return jsonify({"success": True, "profile": res})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/verify_login_otp_driver', methods=['POST'])
+def verify_login_otp_driver():
+    """Driver login Step 2: Verify OTP -> Grant Session"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        otp = data.get('otp', '').strip()
+        
+        if not email or not otp:
+            return jsonify({"success": False, "message": "Email and OTP required"}), 400
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        c.execute("SELECT otp, expiry_time FROM otp_verification WHERE email = ?", (email,))
+        result = c.fetchone()
+        
+        if not result or result[0] != otp:
+            conn.close()
+            return jsonify({"success": False, "message": "Invalid or expired OTP"}), 400
+            
+        # Clear OTP
+        c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+        
+        # Get User Info
+        c.execute("""SELECT id, name, email, mobile, vehicle_number, vehicle_type, rating, total_rides, total_earned 
+                     FROM drivers WHERE email = ?""", (email,))
+        user_info = c.fetchone()
+        conn.commit()
+        conn.close()
+        
+        if user_info:
+            session['user_id'] = user_info[0]
+            session['user_name'] = user_info[1]
+            session['user_type'] = 'driver'
+            session.permanent = True
+            token = generate_token(user_info[0], 'driver', user_info[1])
+            return jsonify({
+                "success": True, 
+                "message": "Login successful!",
+                "token": token,
+                "user": {
+                    "id": user_info[0],
+                    "name": user_info[1],
+                    "email": user_info[2],
+                    "mobile": user_info[3],
+                    "vehicle_number": user_info[4],
+                    "vehicle_type": user_info[5],
+                    "type": "driver",
+                    "rating": user_info[6],
+                    "total_rides": user_info[7],
+                    "total_earned": user_info[8]
+                }
+            })
+        
+        return jsonify({"success": False, "message": "Driver not found after OTP"}), 404
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# Continue with ride management APIs in next part...
+
+# ============================================================================
+# QR Code & Driver APIs
+# ============================================================================
+
+@app.route('/api/get_driver_qr', methods=['GET'])
+def get_driver_qr():
+    """Get driver's QR code"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        
+        driver_id = session['user_id']
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("SELECT name, vehicle_number, mobile, qr_code FROM drivers WHERE id = ?", (driver_id,))
+        result = c.fetchone()
+        conn.close()
+        
+        if not result:
+            return jsonify({"success": False, "message": "Driver not found"}), 404
+        
+        name, vehicle_number, mobile, qr_data = result
+        
+        # Generate QR image
+        qr_image, _ = generate_driver_qr_code(driver_id, name, vehicle_number, mobile)
+        
+        return jsonify({
+            "success": True,
+            "qr_image": qr_image,
+            "qr_data": qr_data,
+            "driver": {
+                "id": driver_id,
+                "name": name,
+                "vehicle": vehicle_number,
+                "mobile": mobile
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/scan_driver_qr', methods=['POST'])
+def scan_driver_qr():
+    """Scan driver QR â€” verify HMAC signature and expiry"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'passenger':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+        data = request.get_json()
+        qr_data_str = data.get('qr_data', '')
+        if not qr_data_str:
+            return jsonify({"success": False, "message": "QR data required"}), 400
+
+        # Verify HMAC + expiry
+        is_valid, err_msg, qr_data = verify_qr_payload(qr_data_str)
+        if not is_valid:
+            return jsonify({"success": False, "message": err_msg}), 400
+
+        if qr_data.get('type') != 'driver':
+            return jsonify({"success": False, "message": "Not a driver QR code"}), 400
+
+        driver_id = qr_data.get('driver_id')
+
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""SELECT id, name, mobile, vehicle_number, vehicle_type, rating,
+                            total_rides, is_available, verification_status
+                     FROM drivers WHERE id = ?""", (driver_id,))
+        result = c.fetchone()
+        conn.close()
+
+        if not result:
+            return jsonify({"success": False, "message": "Driver not found"}), 404
+
+        did, name, mobile, vehicle_number, vehicle_type, rating, total_rides, is_available, vstatus = result
+
+        if vstatus not in ['approved', 'verified']:
+            return jsonify({"success": False, "message": "Driver not yet verified by admin"}), 403
+
+        if not is_available:
+            return jsonify({"success": False, "message": "Driver is currently not available"}), 400
+
+        return jsonify({
+            "success": True,
+            "message": "âœ… Driver identity verified (HMAC OK)",
+            "driver": {
+                "id": did, "name": name, "mobile": mobile,
+                "vehicle_number": vehicle_number, "vehicle_type": vehicle_type,
+                "rating": rating, "total_rides": total_rides,
+                "is_available": bool(is_available)
+            }
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_nearby_drivers', methods=['GET'])
+def get_nearby_drivers():
+    """Get list of available drivers (nearby)"""
+    try:
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""SELECT id, name, vehicle_type, vehicle_number, rating, total_rides, latitude, longitude
+                     FROM drivers WHERE is_available = 1""")
+        results = c.fetchall()
+        conn.close()
+        
+        drivers = []
+        for r in results:
+            drivers.append({
+                "id": r[0],
+                "name": r[1],
+                "vehicle_type": r[2],
+                "vehicle_number": r[3],
+                "rating": r[4],
+                "total_rides": r[5],
+                "latitude": r[6],
+                "longitude": r[7]
+            })
+        
+        return jsonify({"success": True, "drivers": drivers})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/update_driver_location', methods=['POST'])
+def update_driver_location():
+    """Update driver's current location"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        
+        data = request.get_json()
+        driver_id = session['user_id']
+        lat = data.get('latitude')
+        lng = data.get('longitude')
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("UPDATE drivers SET latitude = ?, longitude = ? WHERE id = ?", (lat, lng, driver_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Location updated"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/update_upi_id', methods=['POST'])
+def update_upi_id():
+    """Update driver's UPI ID for payments"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        
+        data = request.get_json()
+        driver_id = session['user_id']
+        upi_id = data.get('upi_id')
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("UPDATE drivers SET upi_id = ? WHERE id = ?", (upi_id, driver_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "UPI ID updated successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/start_ride', methods=['POST'])
+def start_ride():
+    """Start a new ride — supports both session and JWT auth"""
+    try:
+        current_user = get_current_user()
+        if not current_user or current_user.get('user_type') != 'passenger':
+            return jsonify({"success": False, "message": "Passenger authentication required"}), 401
+
+        data = request.get_json()
+        driver_id = data.get('driver_id')
+        pickup_location = data.get('pickup_location', 'Current Location')
+        dropoff_location = data.get('dropoff_location', 'Destination')
+        start_lat = data.get('latitude') or data.get('lat')
+        start_lng = data.get('longitude') or data.get('lng')
+
+        if not driver_id:
+            return jsonify({"success": False, "message": "Driver ID required"}), 400
+
+        passenger_id = current_user['user_id']
+
+        conn = get_db_conn()
+        c = conn.cursor()
+
+        c.execute("SELECT name, phone FROM passengers WHERE id = ?", (passenger_id,))
+        passenger_result = c.fetchone()
+        if not passenger_result:
+            conn.close()
+            return jsonify({"success": False, "message": "Passenger not found"}), 404
+
+        c.execute("SELECT name, mobile, vehicle_number, vehicle_type, is_available, unique_id FROM drivers WHERE id = ?", (driver_id,))
+        driver_result = c.fetchone()
+        if not driver_result:
+            conn.close()
+            return jsonify({"success": False, "message": "Driver not found"}), 404
+
+        passenger_name, passenger_phone = passenger_result
+        driver_name, driver_mobile, driver_vehicle, vehicle_type, is_available, driver_uid = driver_result
+
+        if not is_available:
+            conn.close()
+            return jsonify({"success": False, "message": "Driver is currently busy. Please try another driver."}), 400
+
+        # Check if passenger already has active ride
+        c.execute("SELECT id FROM rides WHERE passenger_id = ? AND status = 'active'", (passenger_id,))
+        existing = c.fetchone()
+        if existing:
+            conn.close()
+            return jsonify({
+                "success": True,
+                "message": "Resuming existing ride",
+                "ride": {"id": existing[0], "status": "active",
+                         "driver_name": driver_name, "driver_vehicle": driver_vehicle}
+            })
+
+        start_time = datetime.now()
+        c.execute("""INSERT INTO rides
+                     (passenger_id, driver_id, passenger_name, passenger_phone,
+                      driver_name, driver_mobile, driver_vehicle,
+                      pickup_location, dropoff_location,
+                      start_lat, start_lng, start_time, status)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'active')""",
+                  (passenger_id, driver_id, passenger_name, passenger_phone,
+                   driver_name, driver_mobile, driver_vehicle,
+                   pickup_location, dropoff_location,
+                   start_lat, start_lng, start_time))
+        ride_id = c.lastrowid
+        c.execute("UPDATE drivers SET is_available = 0 WHERE id = ?", (driver_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "message": "Ride started successfully!",
+            "ride_id": ride_id,
+            "ride": {
+                "id": ride_id,
+                "passenger_name": passenger_name,
+                "driver_name": driver_name,
+                "driver_mobile": driver_mobile,
+                "driver_vehicle": driver_vehicle,
+                "vehicle_type": vehicle_type,
+                "pickup_location": pickup_location,
+                "start_time": start_time.isoformat(),
+                "status": "active"
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/toggle_availability', methods=['POST'])
+def toggle_availability():
+    """Toggle driver's availability status"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        
+        driver_id = session['user_id']
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("UPDATE drivers SET is_available = 1 - is_available WHERE id = ?", (driver_id,))
+        c.execute("SELECT is_available FROM drivers WHERE id = ?", (driver_id,))
+        is_available = c.fetchone()[0]
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "is_available": bool(is_available)})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/complete_ride', methods=['POST'])
+def complete_ride():
+    """Complete a ride — supports JWT + session auth"""
+    try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({"success": False, "message": "Not authenticated"}), 401
+        data = request.get_json()
+        ride_id = data.get('ride_id')
+        distance_km = data.get('distance_km', 5.0)  # Default 5km if not provided
+        
+        if not ride_id:
+            return jsonify({"success": False, "message": "Ride ID required"}), 400
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        # Get ride details
+        c.execute("""SELECT passenger_id, driver_id, start_time, status 
+                     FROM rides WHERE id = ?""", (ride_id,))
+        result = c.fetchone()
+        
+        if not result:
+            conn.close()
+            return jsonify({"success": False, "message": "Ride not found"}), 404
+        
+        passenger_id, driver_id, start_time_str, status = result
+        
+        if status != 'active':
+            conn.close()
+            return jsonify({"success": False, "message": "Ride is not active"}), 400
+        
+        # Calculate duration and fare
+        start_time = datetime.fromisoformat(start_time_str.replace(' ', 'T'))
+        end_time = datetime.now()
+        duration = end_time - start_time
+        duration_minutes = int(duration.total_seconds() / 60)
+        
+        fare = calculate_fare(duration_minutes, distance_km)
+        
+        route_coordinates = data.get('route_coordinates', '[]')
+        
+        # Update ride
+        end_lat = data.get('latitude')
+        end_lng = data.get('longitude')
+        
+        c.execute("""UPDATE rides SET end_time = ?, duration_minutes = ?, distance_km = ?, 
+                     fare = ?, route_coordinates = ?, end_lat = ?, end_lng = ?, status = 'completed' WHERE id = ?""",
+                   (end_time, duration_minutes, distance_km, fare, route_coordinates, end_lat, end_lng, ride_id))
+        
+        # Update driver availability and stats
+        c.execute("""UPDATE drivers SET is_available = 1, total_rides = total_rides + 1, 
+                     total_earned = total_earned + ? WHERE id = ?""", (fare, driver_id))
+        
+        # Update passenger stats
+        c.execute("""UPDATE passengers SET total_rides = total_rides + 1, 
+                     total_spent = total_spent + ? WHERE id = ?""", (fare, passenger_id))
+        
+        # Create payment record
+        c.execute("""INSERT INTO payments (ride_id, passenger_id, driver_id, amount, status) 
+                     VALUES (?, ?, ?, ?, 'pending')""", (ride_id, passenger_id, driver_id, fare))
+        payment_id = c.lastrowid
+        
+        # Get driver name and UPI ID for payment QR
+        c.execute("SELECT name, upi_id FROM drivers WHERE id = ?", (driver_id,))
+        drv_result = c.fetchone()
+        driver_name = drv_result[0]
+        upi_id = drv_result[1]
+        
+        # Generate payment QR
+        payment_qr = generate_payment_qr_code(ride_id, fare, driver_name, upi_id)
+        c.execute("UPDATE payments SET payment_qr = ? WHERE id = ?", (payment_qr, payment_id))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"\n{'='*60}")
+        print(f"âœ… RIDE COMPLETED")
+        print(f"Ride ID: {ride_id}")
+        print(f"Duration: {duration_minutes} minutes")
+        print(f"Distance: {distance_km} km")
+        print(f"Fare: â‚¹{fare}")
+        print(f"{'='*60}\n")
+        
+        return jsonify({
+            "success": True,
+            "message": "Ride completed successfully!",
+            "ride": {
+                "id": ride_id,
+                "duration_minutes": duration_minutes,
+                "distance_km": distance_km,
+                "fare": fare,
+                "payment_qr": payment_qr,
+                "payment_id": payment_id
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# Continue with history and payment APIs in next part...
+
+# ============================================================================
+# History & Profile APIs
+# ============================================================================
+
+@app.route('/api/get_passenger_history', methods=['GET'])
+def get_passenger_history():
+    """Get passenger ride history"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'passenger':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        
+        passenger_id = session['user_id']
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        c.execute("""SELECT r.id, r.driver_name, r.driver_mobile, r.driver_vehicle, 
+                     r.pickup_location, r.dropoff_location, r.start_time, r.end_time, 
+                     r.duration_minutes, r.distance_km, r.fare, r.status, r.payment_status,
+                     p.status as payment_status_detail, p.paid_at
+                     FROM rides r
+                     LEFT JOIN payments p ON r.id = p.ride_id
+                     WHERE r.passenger_id = ?
+                     ORDER BY r.created_at DESC""", (passenger_id,))
+        
+        rides = []
+        for row in c.fetchall():
+            rides.append({
+                "id": row[0],
+                "driver_name": row[1],
+                "driver_mobile": row[2],
+                "driver_vehicle": row[3],
+                "pickup_location": row[4],
+                "dropoff_location": row[5],
+                "start_time": row[6],
+                "end_time": row[7],
+                "duration_minutes": row[8],
+                "distance_km": row[9],
+                "fare": row[10],
+                "status": row[11],
+                "payment_status": row[12],
+                "paid_at": row[14]
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "rides": rides,
+            "total_rides": len(rides)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_driver_history', methods=['GET'])
+def get_driver_history():
+    """Get driver ride history"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        
+        driver_id = session['user_id']
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        c.execute("""SELECT r.id, r.passenger_name, r.passenger_phone, 
+                     r.pickup_location, r.dropoff_location, r.start_time, r.end_time, 
+                     r.duration_minutes, r.distance_km, r.fare, r.status, r.payment_status,
+                     p.status as payment_status_detail, p.paid_at
+                     FROM rides r
+                     LEFT JOIN payments p ON r.id = p.ride_id
+                     WHERE r.driver_id = ?
+                     ORDER BY r.created_at DESC""", (driver_id,))
+        
+        rides = []
+        for row in c.fetchall():
+            rides.append({
+                "id": row[0],
+                "passenger_name": row[1],
+                "passenger_phone": row[2],
+                "pickup_location": row[3],
+                "dropoff_location": row[4],
+                "start_time": row[5],
+                "end_time": row[6],
+                "duration_minutes": row[7],
+                "distance_km": row[8],
+                "fare": row[9],
+                "status": row[10],
+                "payment_status": row[11],
+                "paid_at": row[13]
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "rides": rides,
+            "total_rides": len(rides)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_active_ride', methods=['GET'])
+def get_active_ride():
+    """Get user's active ride — supports JWT + session auth"""
+    try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({"success": False, "message": "Not authenticated"}), 401
+
+        user_id = current_user['user_id']
+        user_type = current_user.get('user_type', '')
+
+        conn = get_db_conn()
+        c = conn.cursor()
+
+        if user_type == 'passenger':
+            c.execute("""SELECT r.id, r.driver_name, r.driver_mobile, r.driver_vehicle,
+                         r.pickup_location, r.start_time, d.latitude, d.longitude, r.driver_id
+                         FROM rides r
+                         LEFT JOIN drivers d ON r.driver_id = d.id
+                         WHERE r.passenger_id = ? AND r.status = 'active'
+                         ORDER BY r.start_time DESC LIMIT 1""", (user_id,))
+        else:
+            c.execute("""SELECT r.id, r.passenger_name, r.passenger_phone, r.driver_vehicle,
+                         r.pickup_location, r.start_time, d.latitude, d.longitude, r.passenger_id
+                         FROM rides r
+                         LEFT JOIN drivers d ON r.driver_id = d.id
+                         WHERE r.driver_id = ? AND r.status = 'active'
+                         ORDER BY r.start_time DESC LIMIT 1""", (user_id,))
+
+        result = c.fetchone()
+        conn.close()
+
+        if not result:
+            return jsonify({"success": True, "ride": None, "active_ride": None})
+
+        ride = {
+            "id": result[0],
+            "driver_name": result[1] if user_type == 'passenger' else None,
+            "passenger_name": result[1] if user_type == 'driver' else None,
+            "other_party_name": result[1],
+            "other_party_contact": result[2],
+            "driver_vehicle": result[3],
+            "pickup_location": result[4],
+            "start_time": result[5],
+            "driver_lat": result[6],
+            "driver_lng": result[7],
+            "status": "active"
+        }
+        return jsonify({"success": True, "ride": ride, "active_ride": ride})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/process_payment', methods=['POST'])
+def process_payment():
+    """Process payment for a ride"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'passenger':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        
+        data = request.get_json()
+        payment_id = data.get('payment_id')
+        transaction_id = data.get('transaction_id', f"TXN{secrets.token_hex(8).upper()}")
+        
+        if not payment_id:
+            return jsonify({"success": False, "message": "Payment ID required"}), 400
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        # Update payment status
+        paid_at = datetime.now()
+        c.execute("""UPDATE payments SET status = 'completed', transaction_id = ?, paid_at = ? 
+                     WHERE id = ?""", (transaction_id, paid_at, payment_id))
+        
+        # Update ride payment status
+        c.execute("UPDATE rides SET payment_status = 'completed' WHERE id = (SELECT ride_id FROM payments WHERE id = ?)", 
+                  (payment_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "Payment processed successfully!",
+            "transaction_id": transaction_id,
+            "paid_at": paid_at.isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_profile', methods=['GET'])
+def get_profile():
+    """Get user profile"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        
+        user_id = session['user_id']
+        user_type = session['user_type']
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        if user_type == 'passenger':
+            c.execute("""SELECT name, phone, email, total_rides, total_spent, created_at 
+                         FROM passengers WHERE id = ?""", (user_id,))
+            result = c.fetchone()
+            
+            if result:
+                profile = {
+                    "type": "passenger",
+                    "name": result[0],
+                    "phone": result[1],
+                    "email": result[2],
+                    "total_rides": result[3],
+                    "total_spent": result[4],
+                    "member_since": result[5]
+                }
+        else:
+            c.execute("""SELECT name, mobile, email, vehicle_number, vehicle_type, rc_number, 
+                         rating, total_rides, total_earned, is_available, created_at,
+                         role, owner_id, verification_status, license_number, address, unique_id,
+                         profile_image, qr_code
+                         FROM drivers WHERE id = ?""", (user_id,))
+            result = c.fetchone()
+            
+            if result:
+                profile = {
+                    "type": "driver",
+                    "name": result[0],
+                    "mobile": result[1],
+                    "email": result[2],
+                    "vehicle_number": result[3],
+                    "vehicle_type": result[4],
+                    "rc_number": result[5],
+                    "rating": result[6],
+                    "total_rides": result[7],
+                    "total_earned": result[8],
+                    "is_available": bool(result[9]),
+                    "member_since": result[10],
+                    "role": result[11],
+                    "owner_id": result[12],
+                    "verification_status": result[13],
+                    "license_number": result[14],
+                    "address": result[15],
+                    "unique_id": result[16],
+                    "profile_image": result[17],
+                    "qr_code": result[18]
+                }
+                
+                # If no QR path in DB, generate one (fallback)
+                if not profile["qr_code"]:
+                    _, qr_path = generate_driver_qr_code(user_id, result[0], result[3], result[1])
+                    if qr_path:
+                        c.execute("UPDATE drivers SET qr_code = ? WHERE id = ?", (qr_path, user_id))
+                        conn.commit()
+                        profile["qr_code"] = qr_path
+
+                return jsonify({
+                    "success": True, 
+                    "profile": profile
+                })
+        
+        conn.close()
+        
+        if not result:
+            return jsonify({"success": False, "message": "Profile not found"}), 404
+        
+        return jsonify({
+            "success": True,
+            "profile": profile
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_driver_payment_qr', methods=['GET'])
+def get_driver_payment_qr():
+    """Get any driver's payment QR image by driver_id (public, for passenger payment)"""
+    try:
+        driver_id = request.args.get('driver_id')
+        if not driver_id:
+            return jsonify({"success": False, "message": "driver_id required"}), 400
+
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute('SELECT payment_qr_image, upi_id, name FROM drivers WHERE id = ?', (driver_id,))
+        result = c.fetchone()
+        conn.close()
+
+        if not result:
+            return jsonify({"success": False, "message": "Driver not found"}), 404
+
+        payment_qr_image, upi_id, name = result
+        return jsonify({
+            "success": True,
+            "payment_qr_image": payment_qr_image,
+            "upi_id": upi_id,
+            "driver_name": name
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/upload_payment_qr', methods=['POST'])
+def upload_payment_qr():
+    """Upload / update driver's custom payment QR image"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+        data = request.get_json()
+        qr_image = data.get('qr_image', '').strip()  # base64 data URI
+
+        if not qr_image:
+            return jsonify({"success": False, "message": "QR image data required"}), 400
+
+        # Basic validation: must be a data URI
+        if not qr_image.startswith('data:image/'):
+            return jsonify({"success": False, "message": "Invalid image format. Must be a valid image."}), 400
+
+        driver_id = session['user_id']
+
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute('UPDATE drivers SET payment_qr_image = ? WHERE id = ?', (qr_image, driver_id))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True, "message": "Payment QR saved successfully!"})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/get_payment_qr', methods=['GET'])
+def get_payment_qr():
+    """Get driver's saved payment QR image"""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+        driver_id = session['user_id']
+
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute('SELECT payment_qr_image, upi_id, name FROM drivers WHERE id = ?', (driver_id,))
+        result = c.fetchone()
+        conn.close()
+
+        if not result:
+            return jsonify({"success": False, "message": "Driver not found"}), 404
+
+        payment_qr_image, upi_id, name = result
+
+        return jsonify({
+            "success": True,
+            "payment_qr_image": payment_qr_image,
+            "upi_id": upi_id,
+            "driver_name": name
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    """Logout user"""
+    session.clear()
+    return jsonify({"success": True, "message": "Logged out successfully"})
+
+
+# ============================================================================
+# Admin Routes
+# ============================================================================
+
+@app.route('/admin')
+def admin_login_page():
+    if session.get('is_admin'):
+        return admin_dashboard_page()
+    return render_template('admin_login.html')
+
+@app.route('/admin/dashboard')
+def admin_dashboard_page():
+    if not session.get('is_admin'):
+        return render_template('admin_login.html')
+    return render_template('admin_dashboard.html')
+
+@app.route('/api/admin/login', methods=['POST'])
+def admin_login():
+    """Admin login"""
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        hashed = hash_password(password)
+
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute('SELECT id, username FROM admins WHERE username = ? AND password = ?',
+                  (username, hashed))
+        result = c.fetchone()
+        conn.close()
+
+        if not result:
+            return jsonify({"success": False, "message": "Invalid admin credentials"}), 401
+
+        session['is_admin'] = True
+        session['admin_id'] = result[0]
+        session['admin_name'] = result[1]
+        return jsonify({"success": True, "message": "Admin login successful"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/admin/logout', methods=['POST'])
+def admin_logout():
+    session.pop('is_admin', None)
+    session.pop('admin_id', None)
+    session.pop('admin_name', None)
+    return jsonify({"success": True})
+
+@app.route('/api/admin/pending_drivers', methods=['GET'])
+def admin_pending_drivers():
+    """List drivers pending verification"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""SELECT id, name, age, mobile, email, vehicle_number, vehicle_type,
+                            rc_number, unique_id, aadhaar_number, verification_status,
+                            admin_notes, created_at
+                     FROM drivers
+                     ORDER BY CASE verification_status
+                         WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+                         created_at DESC""")
+        rows = c.fetchall()
+        conn.close()
+        drivers = []
+        for r in rows:
+            drivers.append({
+                "id": r[0], "name": r[1], "age": r[2], "mobile": r[3],
+                "email": r[4], "vehicle_number": r[5], "vehicle_type": r[6],
+                "rc_number": r[7], "unique_id": r[8],
+                "aadhaar_masked": mask_aadhaar(r[9] or ''),
+                "verification_status": r[10], "admin_notes": r[11],
+                "registered_at": r[12]
+            })
+        return jsonify({"success": True, "drivers": drivers})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/admin/view_doc', methods=['GET'])
+def admin_view_doc():
+    """Decrypt and return a driver document for admin review"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        driver_id = request.args.get('driver_id')
+        doc_type = request.args.get('doc_type', 'aadhaar')  # 'aadhaar' or 'rc'
+        conn = get_db_conn()
+        c = conn.cursor()
+        col = 'aadhaar_doc' if doc_type == 'aadhaar' else 'rc_doc'
+        c.execute(f'SELECT {col}, name FROM drivers WHERE id = ?', (driver_id,))
+        row = c.fetchone()
+        conn.close()
+        if not row or not row[0]:
+            return jsonify({"success": False, "message": "Document not found"}), 404
+        decrypted = decrypt_document(row[0])
+        return jsonify({"success": True, "doc": decrypted, "driver_name": row[1], "doc_type": doc_type})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/admin/approve_driver', methods=['POST'])
+def admin_approve_driver():
+    """Approve a driver â€” also regenerates their QR"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        data = request.get_json()
+        driver_id = data.get('driver_id')
+        notes = data.get('notes', '')
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("UPDATE drivers SET verification_status = 'approved', admin_notes = ? WHERE id = ?",
+                  (notes, driver_id))
+        # Regenerate fresh HMAC QR on approval
+        c.execute('SELECT name, vehicle_number, mobile FROM drivers WHERE id = ?', (driver_id,))
+        row = c.fetchone()
+        if row:
+            _, qr_data = generate_driver_qr_code(driver_id, row[0], row[1], row[2])
+            c.execute('UPDATE drivers SET qr_code = ? WHERE id = ?', (qr_data, driver_id))
+        conn.commit()
+        # Notify driver by email
+        c.execute('SELECT email, name FROM drivers WHERE id = ?', (driver_id,))
+        drv = c.fetchone()
+        conn.close()
+        if drv:
+            send_email_otp.__wrapped__ if hasattr(send_email_otp, '__wrapped__') else None
+            try:
+                _send_approval_email(drv[0], drv[1], approved=True, notes=notes)
+            except Exception:
+                pass
+        return jsonify({"success": True, "message": "Driver approved and QR regenerated!"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/admin/final_verification', methods=['POST'])
+def admin_final_verification():
+    """Final step: Generate secure credentials and notify OWNER & RENTER"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    try:
+        data = request.get_json()
+        driver_id = data.get('driver_id')
+        
+        if not driver_id:
+            return jsonify({"success": False, "message": "Driver ID required"}), 400
+
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        c.execute("SELECT * FROM drivers WHERE id = ?", (driver_id,))
+        driver = c.fetchone()
+        
+        if not driver:
+            conn.close()
+            return jsonify({"success": False, "message": "Driver not found"}), 404
+        
+        # 1. Generate Credentials (DRVxxxx + Random Password)
+        new_unique_id = f"DRV{driver['id']:04d}"
+        raw_password = secrets.token_urlsafe(10)
+        hashed_pw = hash_password(raw_password)
+        
+        # 2. Update Driver status and credentials
+        c.execute("""
+            UPDATE drivers 
+            SET verification_status = 'approved',
+                unique_id = ?,
+                password = ?,
+                first_login = 1
+            WHERE id = ?
+        """, (new_unique_id, hashed_pw, driver_id))
+        
+        # 3. Notify driver
+        _send_credentials_email(driver['email'], driver['name'], new_unique_id, raw_password)
+        
+        # 4. If renter, notify owner as well
+        if driver['role'] == 'RENT' and driver['owner_id']:
+            c.execute("SELECT email, name FROM drivers WHERE id = ?", (driver['owner_id'],))
+            owner = c.fetchone()
+            if owner:
+                _send_owner_creds_notification(owner['email'], owner['name'], driver['name'], new_unique_id)
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": f"Account approved. Credentials sent to {driver['email']}."})
+        
+    except Exception as e:
+        print(f"Admin Final Verification Error: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+def _send_credentials_email(email, name, unique_id, password):
+    """Notify driver of their official login credentials via Flask-Mail"""
+    subject = "RakshaRide Account Approved - Official Credentials"
+    body = f"""Dear {name},
+    
+Your RakshaRide driver account has been successfully verified!
+
+Please use the following official credentials to log in:
+
+User ID: {unique_id}
+Temporary Password: {password}
+
+Portal: http://localhost:5000/login/driver
+
+âš ï¸ IMPORTANT: For your security, you will be required to change this password during your first login.
+
+Safe Riding!
+RakshaRide Team
+"""
+    try:
+        msg = Message(subject=subject, recipients=[email], body=body)
+        mail.send(msg)
+        print(f"âœ… Credentials email sent to {email}")
+        return True
+    except Exception as e:
+        print(f"âŒ Critical Email System Failure: {str(e)}")
+        return False
+
+def _send_owner_creds_notification(owner_email, owner_name, renter_name, unique_id):
+    """Notify owner that their renter's account is verified and active"""
+    subject = f"RakshaRide: Renter ({renter_name}) Account Activated"
+    body = f"""Dear {owner_name},
+    
+This is to inform you that the driver account for your renter, {renter_name}, has been verified and activated on RakshaRide.
+
+Renter ID: {unique_id}
+
+They are now authorized to provide rides using your vehicle.
+
+Thank you,
+RakshaRide Team
+"""
+    try:
+        msg = Message(subject=subject, recipients=[owner_email], body=body)
+        mail.send(msg)
+    except Exception as e:
+        print(f"âŒ Error sending owner creds notification: {str(e)}")
+
+def _deliver_email(msg):
+    """Internal helper to deliver SMTP message"""
+    try:
+        clean_pw = GMAIL_APP_PASSWORD.replace(' ', '').replace('-', '')
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
+        server.starttls()
+        server.login(GMAIL_EMAIL, clean_pw)
+        server.send_message(msg)
+        server.quit()
+    except Exception as e:
+        print(f"Email delivery error: {str(e)}")
+
+@app.route('/api/admin/reject_driver', methods=['POST'])
+def admin_reject_driver():
+    """Reject a driver"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        data = request.get_json()
+        driver_id = data.get('driver_id')
+        notes = data.get('notes', 'Documents could not be verified.')
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("UPDATE drivers SET verification_status = 'rejected', admin_notes = ? WHERE id = ?",
+                  (notes, driver_id))
+        conn.commit()
+        c.execute('SELECT email, name FROM drivers WHERE id = ?', (driver_id,))
+        drv = c.fetchone()
+        conn.close()
+        if drv:
+            try:
+                _send_approval_email(drv[0], drv[1], approved=False, notes=notes)
+            except Exception:
+                pass
+        return jsonify({"success": True, "message": "Driver rejected."})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+def _send_approval_email(to_email: str, name: str, approved: bool, notes: str = ''):
+    """Send driver approval/rejection email"""
+    status = 'APPROVED âœ…' if approved else 'REJECTED âŒ'
+    action = ('You can now log in to the RakshaRide driver app.'
+              if approved else
+              f'Reason: {notes}\n\nPlease re-register with correct documents or contact support.')
+    body = f"""Dear {name},
+
+Your RakshaRide driver account verification status: {status}
+
+{action}
+
+Thank you,
+RakshaRide Admin Team
+"""
+    msg = MIMEMultipart()
+    msg['From'] = f'RakshaRide Admin <{GMAIL_EMAIL}>'
+    msg['To'] = to_email
+    msg['Subject'] = f'RakshaRide Account Verification â€” {status}'
+    msg.attach(MIMEText(body, 'plain'))
+    clean_pw = GMAIL_APP_PASSWORD.replace(' ', '').replace('-', '')
+    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
+    server.starttls()
+    server.login(GMAIL_EMAIL, clean_pw)
+    server.send_message(msg)
+    server.quit()
+
+# ============================================================================
+# AI Verification & Owner-Renter APIs
+# ============================================================================
+
+@app.route('/api/ai/ocr_extract', methods=['POST'])
+def ai_ocr_extract():
+    """Run OCR on an uploaded document and return extracted fields."""
+    try:
+        data = request.get_json()
+        image_uri = data.get('image', '')
+        result = extract_document_text(image_uri)
+        return jsonify({"success": True, "ocr": result})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/ai/face_match', methods=['POST'])
+def ai_face_match():
+    """Compare ID photo vs live selfie and return similarity score."""
+    try:
+        data = request.get_json()
+        id_photo = data.get('id_photo', '')
+        selfie   = data.get('selfie', '')
+        result = compute_face_similarity(id_photo, selfie)
+        return jsonify({"success": True, "face_match": result})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/ai/liveness_challenge', methods=['POST'])
+def ai_liveness_challenge():
+    """Issue a liveness challenge for anti-spoofing."""
+    try:
+        session_id = session.get('user_id', secrets.token_hex(8))
+        challenge = generate_liveness_challenge(str(session_id))
+        return jsonify({"success": True, "challenge": challenge})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/ai/liveness_verify', methods=['POST'])
+def ai_liveness_verify():
+    """Verify returned liveness token after user completes gesture."""
+    try:
+        data = request.get_json()
+        token     = data.get('token', '')
+        completed = data.get('completed_challenge', '')
+        ok, msg = verify_liveness_token(token, completed)
+        return jsonify({"success": ok, "message": msg})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/ai/full_pipeline', methods=['POST'])
+def ai_full_pipeline():
+    """
+    Complete AI verification pipeline:
+      - OCR from Aadhaar/RC image
+      - Face match (ID photo vs selfie)
+      - Decision: VERIFIED / FLAGGED / REJECTED
+      Stores result on the driver record.
+    """
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+        data     = request.get_json()
+        id_photo = data.get('id_photo', '')   # Aadhaar image
+        selfie   = data.get('selfie', '')     # Live selfie
+        doc_type = data.get('doc_type', 'AADHAAR').upper()
+
+        # Run in sequence (parallel via threading if needed)
+        ocr_result  = extract_document_text(id_photo)
+        face_result = compute_face_similarity(id_photo, selfie)
+        pipeline    = run_verification_pipeline(ocr_result, face_result)
+
+        driver_id = session['user_id']
+
+        # Save score & selfie to driver record
+        enc_selfie = encrypt_document(selfie) if selfie else None
+        ocr_json   = json.dumps(ocr_result)
+
+        new_status = pipeline['status'].lower()  # verified / flagged / rejected
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""
+            UPDATE drivers
+            SET ai_face_score = ?, ai_ocr_data = ?, live_selfie = ?,
+                verification_status = ?
+            WHERE id = ?""",
+            (pipeline['score'], ocr_json, enc_selfie, new_status, driver_id))
+
+        # Store in driver_documents vault
+        enc_doc = encrypt_document(id_photo) if id_photo else None
+        c.execute("""
+            INSERT INTO driver_documents
+              (driver_id, uploaded_by, doc_type, file_data, ocr_extracted,
+               ai_status, ai_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (driver_id, driver_id, doc_type, enc_doc,
+             ocr_result.get('raw_text', ''),
+             pipeline['status'], pipeline['score']))
+
+        conn.commit()
+
+        # If auto-verified, send welcome email in background
+        if pipeline['status'] == 'VERIFIED':
+            c.execute('SELECT email, name, unique_id FROM drivers WHERE id = ?', (driver_id,))
+            drv = c.fetchone()
+            conn.close()
+            if drv:
+                threading.Thread(
+                    target=_send_welcome_email,
+                    args=(drv[0], drv[1], drv[2]),
+                    daemon=True
+                ).start()
+        else:
+            conn.close()
+
+        return jsonify({
+            "success": True,
+            "pipeline": pipeline
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+def _send_welcome_email(to_email: str, name: str, unique_id: str):
+    """Send auto-verified welcome email to driver."""
+    try:
+        body = f"""Welcome to RakshaRide, {name}!
+
+Your AI verification is complete. You are APPROVED to drive.
+
+Your Driver ID: {unique_id}
+
+You can now log in using your email or Driver ID.
+
+Ride Safe,
+RakshaRide Team
+"""
+        msg = MIMEMultipart()
+        msg['From'] = f'RakshaRide <{GMAIL_EMAIL}>'
+        msg['To'] = to_email
+        msg['Subject'] = f'Welcome to RakshaRide! Your ID: {unique_id}'
+        msg.attach(MIMEText(body, 'plain'))
+        clean_pw = GMAIL_APP_PASSWORD.replace(' ', '').replace('-', '')
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
+        server.starttls()
+        server.login(GMAIL_EMAIL, clean_pw)
+        server.send_message(msg)
+        server.quit()
+    except Exception as e:
+        print(f"[WARN] Welcome email failed: {e}")
+
+
+# â”€â”€ Owner-Renter Flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+@app.route('/api/driver/send_renter_request', methods=['POST'])
+def send_renter_request():
+    """
+    Renter submits their owner's email.
+    Creates a pending link request; owner gets a notification.
+    """
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+        data        = request.get_json()
+        owner_email = data.get('owner_email', '').strip()
+        renter_id   = session['user_id']
+
+        if not owner_email:
+            return jsonify({"success": False, "message": "Owner email required"}), 400
+
+        conn = get_db_conn()
+        c = conn.cursor()
+
+        # Find owner
+        c.execute("SELECT id, name FROM drivers WHERE email = ? AND role = 'OWNER'", (owner_email,))
+        owner = c.fetchone()
+
+        c.execute("""
+            INSERT INTO renter_requests (renter_id, owner_email, owner_id, status)
+            VALUES (?, ?, ?, 'PENDING')""",
+            (renter_id, owner_email, owner[0] if owner else None))
+        conn.commit()
+
+        # Get renter name
+        c.execute('SELECT name FROM drivers WHERE id = ?', (renter_id,))
+        renter_name = c.fetchone()[0]
+        conn.close()
+
+        # Notify owner
+        if owner:
+            threading.Thread(
+                target=_send_renter_notification,
+                args=(owner_email, owner[1], renter_name),
+                daemon=True
+            ).start()
+            return jsonify({"success": True, "message": "Request sent to owner! Awaiting approval."})
+        else:
+            return jsonify({"success": True,
+                            "message": "Request logged. Owner not yet registered."})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/driver/approve_renter', methods=['POST'])
+def approve_renter():
+    """Owner approves a renter linking request."""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+        data       = request.get_json()
+        request_id = data.get('request_id')
+        owner_id   = session['user_id']
+
+        conn = get_db_conn()
+        c = conn.cursor()
+
+        # Verify this request belongs to the owner
+        c.execute("SELECT renter_id FROM renter_requests WHERE id = ? AND owner_id = ?",
+                  (request_id, owner_id))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "message": "Request not found"}), 404
+
+        renter_id = row[0]
+        c.execute("UPDATE renter_requests SET status = 'APPROVED' WHERE id = ?", (request_id,))
+        c.execute("UPDATE drivers SET owner_id = ?, role = 'RENTER' WHERE id = ?",
+                  (owner_id, renter_id))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": "Renter linked to your account!"})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/driver/renter_requests', methods=['GET'])
+def get_renter_requests():
+    """Owner fetches pending renter link requests."""
+    if 'user_id' not in session or session.get('user_type') != 'driver':
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        owner_id = session['user_id']
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT rr.id, d.name, d.email, d.mobile, rr.status, rr.created_at
+            FROM renter_requests rr
+            JOIN drivers d ON d.id = rr.renter_id
+            WHERE rr.owner_id = ?
+            ORDER BY rr.created_at DESC""", (owner_id,))
+        rows = c.fetchall()
+        conn.close()
+        return jsonify({"success": True, "requests": [
+            {"id": r[0], "name": r[1], "email": r[2], "mobile": r[3],
+             "status": r[4], "at": r[5]} for r in rows
+        ]})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+def _send_renter_notification(owner_email, owner_name, renter_name):
+    try:
+        body = f"""Dear {owner_name},
+
+A new driver ({renter_name}) has requested to link to your vehicle on RakshaRide.
+
+Log in to your dashboard to approve or deny this request.
+
+RakshaRide Team
+"""
+        msg = MIMEMultipart()
+        msg['From'] = f'RakshaRide <{GMAIL_EMAIL}>'
+        msg['To'] = owner_email
+        msg['Subject'] = f'RakshaRide: Renter Link Request from {renter_name}'
+        msg.attach(MIMEText(body, 'plain'))
+        clean_pw = GMAIL_APP_PASSWORD.replace(' ', '').replace('-', '')
+        s = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
+        s.starttls(); s.login(GMAIL_EMAIL, clean_pw)
+        s.send_message(msg); s.quit()
+    except Exception as e:
+        print(f"[WARN] Renter notification failed: {e}")
+
+
+# â”€â”€ Live Share Token (Emergency Tracking) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+@app.route('/api/ride/generate_share_token', methods=['POST'])
+def generate_share_token():
+    """Passenger generates a public share link for their active ride."""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'passenger':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+        data    = request.get_json()
+        ride_id = data.get('ride_id')
+        if not ride_id:
+            return jsonify({"success": False, "message": "ride_id required"}), 400
+
+        token = secrets.token_urlsafe(20)
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""
+            UPDATE rides SET share_token = ?, share_token_active = 1
+            WHERE id = ? AND passenger_id = ?""",
+            (token, ride_id, session['user_id']))
+        conn.commit()
+        conn.close()
+
+        share_url = f"http://localhost:5000/track/{token}"
+        return jsonify({"success": True, "share_token": token, "share_url": share_url,
+                        "message": "Share this link with anyone to let them track your ride live."})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/track/<token>')
+def public_ride_tracker(token):
+    """Public page â€” no login required â€” shows live ride status."""
+    return render_template('ride_tracker.html', share_token=token)
+
+
+@app.route('/api/ride/track/<token>', methods=['GET'])
+def api_ride_track(token):
+    """API for public tracker page to poll ride data."""
+    try:
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT r.id, r.driver_name, r.driver_vehicle, r.driver_mobile,
+                   r.pickup_location, r.dropoff_location,
+                   r.start_lat, r.start_lng, r.end_lat, r.end_lng,
+                   r.status, r.start_time, r.share_token_active,
+                   d.latitude, d.longitude, d.verification_status
+            FROM rides r
+            JOIN drivers d ON d.id = r.driver_id
+            WHERE r.share_token = ? AND r.share_token_active = 1""", (token,))
+        row = c.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({"success": False, "message": "Invalid or expired share link"}), 404
+
+        return jsonify({"success": True, "ride": {
+            "id": row[0], "driver_name": row[1], "driver_vehicle": row[2],
+            "driver_mobile": row[3], "pickup_location": row[4],
+            "dropoff_location": row[5],
+            "start_lat": row[6], "start_lng": row[7],
+            "end_lat": row[8], "end_lng": row[9],
+            "status": row[10], "start_time": row[11],
+            "driver_live_lat": row[13], "driver_live_lng": row[14],
+            "driver_verified": row[15] == 'verified'
+        }})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/ride/stop_sharing', methods=['POST'])
+def stop_sharing():
+    """Deactivate share token."""
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'passenger':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        data = request.get_json()
+        ride_id = data.get('ride_id')
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("UPDATE rides SET share_token_active = 0 WHERE id = ? AND passenger_id = ?",
+                  (ride_id, session['user_id']))
+        conn.commit(); conn.close()
+        return jsonify({"success": True, "message": "Live sharing stopped."})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# â”€â”€ Document Vault (Owner-Renter restriction) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+@app.route('/api/driver/upload_document', methods=['POST'])
+def upload_driver_document():
+    """
+    Upload Aadhaar/RC/License to encrypted vault.
+    RENTER cannot upload RC â€” only OWNER can.
+    """
+    try:
+        if 'user_id' not in session or session.get('user_type') != 'driver':
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+        data     = request.get_json()
+        doc_type = data.get('doc_type', '').upper()
+        image    = data.get('image', '')
+        uploader_id = session['user_id']
+
+        if not doc_type or not image:
+            return jsonify({"success": False, "message": "doc_type and image required"}), 400
+
+        # Renter restriction: cannot upload RC or Insurance
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute('SELECT role FROM drivers WHERE id = ?', (uploader_id,))
+        row = c.fetchone()
+        if row and row[0] == 'RENTER' and doc_type in ('RC', 'INSURANCE'):
+            conn.close()
+            return jsonify({"success": False,
+                            "message": "Renters cannot upload vehicle RC/Insurance. Contact your vehicle Owner."}), 403
+
+        enc_image  = encrypt_document(image)
+        ocr_result = extract_document_text(image)
+        ocr_text   = ocr_result.get('raw_text', '')
+        doc_number = ocr_result.get('doc_number', '')
+
+        # Detect duplicate doc number
+        if doc_number:
+            c.execute("SELECT id FROM driver_documents WHERE ocr_extracted LIKE ?",
+                      (f'%{doc_number}%',))
+            if c.fetchone():
+                conn.close()
+                return jsonify({"success": False,
+                                "message": f"Document number {doc_number} already registered."}), 409
+
+        c.execute("""
+            INSERT INTO driver_documents
+              (driver_id, uploaded_by, doc_type, file_data, ocr_extracted, ai_status)
+            VALUES (?, ?, ?, ?, ?, 'PENDING')""",
+            (uploader_id, uploader_id, doc_type, enc_image, ocr_text))
+        doc_id = c.lastrowid
+        conn.commit(); conn.close()
+
+        return jsonify({
+            "success": True,
+            "message": f"{doc_type} uploaded and queued for AI verification.",
+            "doc_id": doc_id,
+            "ocr": {"doc_number": doc_number, "name": ocr_result.get('name'),
+                    "dob": ocr_result.get('dob')}
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/driver/my_documents', methods=['GET'])
+def get_my_documents():
+    """List uploaded documents for current driver (no file data, metadata only)."""
+    if 'user_id' not in session or session.get('user_type') != 'driver':
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        driver_id = session['user_id']
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT id, doc_type, ai_status, ai_score, created_at
+            FROM driver_documents WHERE driver_id = ?
+            ORDER BY created_at DESC""", (driver_id,))
+        rows = c.fetchall()
+        conn.close()
+        return jsonify({"success": True, "documents": [
+            {"id": r[0], "doc_type": r[1], "ai_status": r[2],
+             "ai_score": r[3], "uploaded_at": r[4]} for r in rows
+        ]})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# ============================================================================
+# GPS Tracking Frontend Route
+# ============================================================================
+
+@app.route('/ride/<int:ride_id>/track')
+def track_ride(ride_id):
+    if session.get('user_type') != 'passenger':
+        return redirect(url_for('index'))
+    
+    conn = get_db_conn()
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    ride = c.execute('''
+        SELECT r.*, d.name as driver_name, d.vehicle_number as vehicle_details 
+        FROM rides r 
+        JOIN drivers d ON r.driver_id = d.id 
+        WHERE r.id = ? AND r.passenger_id = ?
+    ''', (ride_id, session['user_id'])).fetchone()
+    conn.close()
+    
+    if not ride:
+        return "Ride not found or unauthorized", 404
+        
+    return render_template('track_ride.html', ride=ride)
+
+@app.route('/register/driver')
+def register_driver_modern():
+    return render_template('register_driver.html')
+
+@app.route('/api/send_otp', methods=['POST'])
+def api_send_otp_modern():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        otp = f"{secrets.randbelow(899999) + 100000}"
+        expiry = datetime.now() + timedelta(minutes=10)
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+        c.execute("INSERT INTO otp_verification (email, otp, expiry_time) VALUES (?, ?, ?)", (email, otp, expiry))
+        conn.commit()
+        conn.close()
+        send_email_async(email, "RakshaRide Security Code", f"OTP: {otp}")
+        return jsonify({"success": True})
+    except Exception as e: return jsonify({"success": False, "message": str(e)})
+
+@app.route('/api/register_driver_full', methods=['POST'])
+def register_driver_full_modern():
+    try:
+        name = request.form.get('name')
+        email = request.form.get('email')
+        mobile = request.form.get('mobile')
+        password = request.form.get('password')
+        upi_id = request.form.get('upi_id')
+        role = request.form.get('role', 'OWNER')
+        
+        conn = get_db_conn()
+        c = conn.cursor()
+        
+        p_path = save_uploaded_file(request.files.get('profile_pic'), PROFILE_DIR, "p")
+        pay_path = save_uploaded_file(request.files.get('payment_qr'), QR_DIR, "pay")
+        
+        h_pw = hash_password(password)
+        u_id = f"DRV-{secrets.token_hex(3).upper()}"
+        
+        c.execute("INSERT INTO drivers (name, email, mobile, password, role, profile_image, payment_qr_image, upi_id, unique_id, verification_status, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', 1)",
+                  (name, email, mobile, h_pw, role, p_path, pay_path, upi_id, u_id))
+        
+        d_id = c.lastrowid
+        qr_b64, qr_file = generate_driver_qr_code(d_id, name, "VERIFIED", mobile)
+        c.execute("UPDATE drivers SET qr_code = ? WHERE id = ?", (qr_file, d_id))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": "Registered!", "qr_base64": qr_b64, "unique_id": u_id})
+    except Exception as e: return jsonify({"success": False, "message": str(e)})
+
+# ============================================================================
+# NEW DASHBOARD APIs
+# ============================================================================
+
+@app.route('/api/driver_profile')
+def api_driver_profile():
+    if 'user_id' not in session or session.get('user_type') != 'driver':
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("""SELECT id, name, age, mobile, email, vehicle_number, vehicle_type,
+                     rc_number, license_number, aadhaar_number, role, owner_id,
+                     unique_id, verification_status, rating, total_rides, total_earned,
+                     is_available, qr_code, payment_qr_image, upi_id
+                     FROM drivers WHERE id = ?""", (session['user_id'],))
+        row = c.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({"success": False, "message": "Driver not found"}), 404
+        cols = ['id','name','age','mobile','email','vehicle_number','vehicle_type',
+                'rc_number','license_number','aadhaar_number','role','owner_id',
+                'unique_id','verification_status','rating','total_rides','total_earned',
+                'is_available','qr_code','payment_qr_image','upi_id']
+        driver = dict(zip(cols, row))
+        # Generate QR image if qr_code data exists
+        if driver.get('qr_code'):
+            try:
+                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=4)
+                qr.add_data(driver['qr_code'])
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="#1565C0", back_color="white")
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                driver['qr_image'] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+            except:
+                driver['qr_image'] = None
+        return jsonify({"success": True, "driver": driver})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/passenger_profile')
+def api_passenger_profile():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False, "message": "Not authenticated — please login", "code": "AUTH_REQUIRED"}), 401
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("""SELECT id, name, phone, email, total_rides, total_spent,
+                     emergency_name, emergency_mobile, emergency_email
+                     FROM passengers WHERE id = ?""",
+                  (current_user['user_id'],))
+        row = c.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({"success": False, "message": "Passenger not found"}), 404
+        cols = ['id','name','phone','email','total_rides','total_spent',
+                'emergency_name','emergency_mobile','emergency_email']
+        passenger = dict(zip(cols, row))
+        return jsonify({"success": True, "passenger": passenger})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/toggle_availability', methods=['POST'])
+def api_toggle_availability():
+    if 'user_id' not in session or session.get('user_type') != 'driver':
+        return jsonify({"success": False}), 401
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("SELECT is_available FROM drivers WHERE id = ?", (session['user_id'],))
+        row = c.fetchone()
+        new_status = 0 if row and row[0] else 1
+        c.execute("UPDATE drivers SET is_available = ? WHERE id = ?", (new_status, session['user_id']))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "is_available": bool(new_status)})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/update_driver_profile', methods=['POST'])
+def api_update_driver_profile():
+    if 'user_id' not in session or session.get('user_type') != 'driver':
+        return jsonify({"success": False}), 401
+    try:
+        data = request.get_json()
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("UPDATE drivers SET name=?, age=?, mobile=? WHERE id=?",
+                  (data.get('name'), data.get('age'), data.get('mobile'), session['user_id']))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/update_passenger_profile', methods=['POST'])
+def api_update_passenger_profile():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False, "message": "Not authenticated — please login", "code": "AUTH_REQUIRED"}), 401
+    try:
+        data = request.get_json()
+        name  = (data.get('name') or '').strip()
+        phone = (data.get('phone') or '').strip()
+        if not name:
+            return jsonify({"success": False, "message": "Name is required"}), 400
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("UPDATE passengers SET name=?, phone=? WHERE id=?",
+                  (name, phone, current_user['user_id']))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": "Profile updated successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/driver_ride_history')
+def api_driver_ride_history():
+    if 'user_id' not in session or session.get('user_type') != 'driver':
+        return jsonify({"success": False}), 401
+    try:
+        limit = request.args.get('limit', 100, type=int)
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("""SELECT id, passenger_name, status, fare, distance_km,
+                     duration_minutes, payment_status, created_at
+                     FROM rides WHERE driver_id = ? ORDER BY created_at DESC LIMIT ?""",
+                  (session['user_id'], limit))
+        rows = c.fetchall()
+        conn.close()
+        cols = ['id','passenger_name','status','fare','distance_km','duration_minutes','payment_status','created_at']
+        return jsonify({"success": True, "rides": [dict(zip(cols, r)) for r in rows]})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/passenger_ride_history')
+def api_passenger_ride_history():
+    if 'user_id' not in session or session.get('user_type') != 'passenger':
+        return jsonify({"success": False}), 401
+    try:
+        limit = request.args.get('limit', 100, type=int)
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("""SELECT id, driver_name, status, fare, distance_km,
+                     duration_minutes, payment_status, created_at
+                     FROM rides WHERE passenger_id = ? ORDER BY created_at DESC LIMIT ?""",
+                  (session['user_id'], limit))
+        rows = c.fetchall()
+        conn.close()
+        cols = ['id','driver_name','status','fare','distance_km','duration_minutes','payment_status','created_at']
+        return jsonify({"success": True, "rides": [dict(zip(cols, r)) for r in rows]})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+def _resolve_document_preview(file_data):
+    """Resolve document file_data to a displayable data URI.
+    Handles: data URI, file path, encrypted base64, raw base64."""
+    if not file_data or not isinstance(file_data, str):
+        return None
+    # Format 1: Already a data URI
+    if file_data.startswith('data:'):
+        return file_data
+    # Format 2: File path
+    if '/' in file_data or '\\' in file_data:
+        try:
+            clean = file_data.replace('\\', '/').replace('\\\\', '/')
+            if os.path.exists(clean):
+                with open(clean, 'rb') as f:
+                    data = f.read()
+                ext = clean.rsplit('.', 1)[-1].lower()
+                mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png',
+                        'pdf':'application/pdf','gif':'image/gif'}.get(ext,'image/jpeg')
+                return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+        except Exception as e:
+            print(f"[DOC] File read error: {e}")
+        return None
+    # Format 3: Encrypted base64
+    try:
+        decrypted = decrypt_document(file_data)
+        if decrypted:
+            if isinstance(decrypted, bytes):
+                decrypted = decrypted.decode('utf-8', errors='ignore')
+            if decrypted.startswith('data:'):
+                return decrypted
+            if len(decrypted) > 100:
+                return 'data:image/jpeg;base64,' + decrypted
+    except Exception:
+        pass
+    # Format 4: Raw base64
+    if len(file_data) > 100:
+        try:
+            import base64 as _b64
+            _b64.b64decode(file_data[:100])
+            return 'data:image/jpeg;base64,' + file_data
+        except Exception:
+            pass
+    return None
+
+
+@app.route('/api/get_driver_documents')
+def api_get_driver_documents():
+    current_user = get_current_user()
+    if not current_user or current_user.get('user_type') != 'driver':
+        return jsonify({"success": False, "message": "Driver authentication required"}), 401
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        uid = current_user['user_id']
+        c.execute("SELECT role, owner_id, verification_status FROM drivers WHERE id = ?", (uid,))
+        row = c.fetchone()
+        is_rent = row and row[0] == 'RENT'
+        driver_id = uid
+        if is_rent and row[1]:
+            driver_id = row[1]  # Rent driver sees owner's documents
+        # If rent driver has no owner_id, show their own documents
+        verification_status = row[2] if row else 'pending'
+
+        c.execute("""SELECT doc_type, file_data, ai_status, created_at
+                     FROM driver_documents WHERE driver_id = ?
+                     ORDER BY created_at DESC""", (driver_id,))
+        rows = c.fetchall()
+        conn.close()
+
+        docs = {}
+        for doc_type, file_data, ai_status, created_at in rows:
+            if doc_type in docs:
+                continue  # Keep latest only
+            preview = _resolve_document_preview(file_data)
+            docs[doc_type] = {
+                "uploaded": True,
+                "preview": preview,
+                "has_preview": preview is not None,
+                "ai_status": ai_status or 'PENDING',
+                "verified": ai_status == 'VERIFIED',
+                "uploaded_at": created_at
+            }
+
+        return jsonify({
+            "success": True,
+            "documents": docs,
+            "is_rent": is_rent,
+            "can_upload": not is_rent,
+            "driver_verified": verification_status == 'verified'
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_document/<doc_type>')
+def api_get_single_document(doc_type):
+    """Serve a single document — ONLY for the owning driver (not passengers)"""
+    current_user = get_current_user()
+    if not current_user or current_user.get('user_type') != 'driver':
+        return jsonify({"success": False, "message": "Driver authentication required"}), 401
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        uid = current_user['user_id']
+        c.execute("SELECT role, owner_id FROM drivers WHERE id = ?", (uid,))
+        row = c.fetchone()
+        driver_id = uid
+        if row and row[0] == 'RENT' and row[1]:
+            driver_id = row[1]  # Rent driver reads owner's docs
+
+        c.execute("SELECT file_data, ai_status FROM driver_documents WHERE driver_id = ? AND doc_type = ?",
+                  (driver_id, doc_type))
+        row = c.fetchone()
+        conn.close()
+
+        if not row or not row[0]:
+            return jsonify({"success": False, "message": "Document not found"}), 404
+
+        file_data = row[0]
+        ai_status = row[1] or 'PENDING'
+
+        preview = _resolve_document_preview(file_data)
+        if not preview:
+            return jsonify({"success": False, "message": "Could not decode document. File may be missing or corrupted."}), 500
+
+        return jsonify({
+            "success": True,
+            "data": preview,
+            "doc_type": doc_type,
+            "ai_status": ai_status
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_payment_qr')
+def api_get_payment_qr():
+    current_user = get_current_user()
+    if not current_user or current_user.get('user_type') != 'driver':
+        return jsonify({"success": False}), 401
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("SELECT payment_qr_image, upi_id FROM drivers WHERE id = ?", (current_user['user_id'],))
+        row = c.fetchone()
+        conn.close()
+        if row and row[0]:
+            return jsonify({"success": True, "qr_image": row[0], "upi_id": row[1]})
+        return jsonify({"success": False, "message": "No payment QR"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/update_location', methods=['POST'])
+def api_update_location():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False}), 401
+    try:
+        data = request.get_json()
+        lat, lng = data.get('lat'), data.get('lng')
+        loc_type = data.get('type', 'driver')
+        uid = current_user['user_id']
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        if loc_type == 'driver':
+            c.execute("UPDATE drivers SET latitude=?, longitude=? WHERE id=?", (lat, lng, uid))
+        else:
+            ride_id = data.get('ride_id')
+            if ride_id:
+                c.execute("UPDATE rides SET end_lat=?, end_lng=? WHERE id=? AND passenger_id=?",
+                          (lat, lng, ride_id, uid))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/get_driver_location')
+def api_get_driver_location():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False}), 401
+    try:
+        ride_id = request.args.get('ride_id')
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("SELECT driver_id FROM rides WHERE id = ?", (ride_id,))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False})
+        c.execute("SELECT latitude, longitude FROM drivers WHERE id = ?", (row[0],))
+        loc = c.fetchone()
+        conn.close()
+        if loc and loc[0]:
+            return jsonify({"success": True, "lat": loc[0], "lng": loc[1]})
+        return jsonify({"success": False})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/lookup_driver')
+def api_lookup_driver():
+    driver_id = request.args.get('id', '').strip()
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("""SELECT id, name, vehicle_number, vehicle_type, rating, total_rides,
+                     unique_id, verification_status, is_available
+                     FROM drivers WHERE unique_id = ? OR id = ?""", (driver_id, driver_id))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "message": "Driver not found"})
+        cols = ['id','name','vehicle_number','vehicle_type','rating','total_rides',
+                'unique_id','verification_status','is_available']
+        driver = dict(zip(cols, row))
+        if not driver['is_available']:
+            conn.close()
+            return jsonify({"success": False, "message": "Driver is currently busy"})
+        # Fetch selfie as profile photo
+        c.execute("SELECT file_data FROM driver_documents WHERE driver_id = ? AND doc_type = 'selfie'",
+                  (driver['id'],))
+        selfie_row = c.fetchone()
+        if selfie_row and selfie_row[0]:
+            try:
+                driver['profile_photo'] = decrypt_document(selfie_row[0])
+            except Exception:
+                driver['profile_photo'] = selfie_row[0]
+        else:
+            driver['profile_photo'] = None
+        conn.close()
+        return jsonify({"success": True, "driver": driver})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/nearby_drivers')
+def api_nearby_drivers():
+    try:
+        lat = request.args.get('lat', type=float)
+        lng = request.args.get('lng', type=float)
+        radius = request.args.get('radius', 10, type=float)
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("""SELECT id, name, vehicle_number, vehicle_type, rating, total_rides,
+                     unique_id, latitude, longitude, is_available
+                     FROM drivers WHERE is_available = 1 AND verification_status = 'verified'""")
+        rows = c.fetchall()
+        conn.close()
+        cols = ['id','name','vehicle_number','vehicle_type','rating','total_rides',
+                'unique_id','latitude','longitude','is_available']
+        drivers = []
+        for row in rows:
+            d = dict(zip(cols, row))
+            if lat and lng and d['latitude'] and d['longitude']:
+                import math
+                R = 6371
+                dLat = math.radians(d['latitude'] - lat)
+                dLon = math.radians(d['longitude'] - lng)
+                a = math.sin(dLat/2)**2 + math.cos(math.radians(lat)) * math.cos(math.radians(d['latitude'])) * math.sin(dLon/2)**2
+                dist = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+                if dist <= radius:
+                    d['distance_km'] = round(dist, 2)
+                    drivers.append(d)
+            else:
+                drivers.append(d)
+        drivers.sort(key=lambda x: x.get('distance_km', 999))
+        return jsonify({"success": True, "drivers": drivers[:20]})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/logout', methods=['POST'])
+def api_logout():
+    session.clear()
+    return jsonify({"success": True})
+
+@app.route('/api/session_check')
+def api_session_check():
+    """Verify session/token state — used by dashboards on load"""
+    user = get_current_user()
+    if user:
+        return jsonify({
+            "logged_in": True,
+            "user_id": user.get('user_id'),
+            "user_type": user.get('user_type'),
+            "name": user.get('name')
+        })
+    return jsonify({
+        "logged_in": False,
+        "user_id": None,
+        "user_type": None,
+        "name": None
+    })
+
+@app.route('/api/debug_docs')
+def api_debug_docs():
+    """Debug: check what documents exist for current driver"""
+    current_user = get_current_user()
+    if not current_user or current_user.get('user_type') != 'driver':
+        return jsonify({"error": "Driver auth required"}), 401
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        uid = current_user['user_id']
+        c.execute("SELECT role, owner_id FROM drivers WHERE id=?", (uid,))
+        row = c.fetchone()
+        driver_id = uid
+        if row and row[0] == 'RENT' and row[1]:
+            driver_id = row[1]
+        c.execute("""SELECT doc_type, length(file_data), ai_status, substr(file_data,1,40)
+                     FROM driver_documents WHERE driver_id=?""", (driver_id,))
+        docs = [{"doc_type": r[0], "data_length": r[1], "ai_status": r[2], "data_prefix": r[3]}
+                for r in c.fetchall()]
+        conn.close()
+        return jsonify({
+            "driver_id": driver_id,
+            "role": row[0] if row else "OWNER",
+            "documents": docs,
+            "count": len(docs)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ============================================================================
+# LIVE DATABASE VIEWER
+# ============================================================================
+
+@app.route('/dbview')
+def db_viewer_page():
+    """Live database viewer — admin only"""
+    return render_template('db_viewer.html')
+
+@app.route('/api/db/tables')
+def api_db_tables():
+    """Get all table names and row counts"""
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        tables = []
+        for (name,) in c.fetchall():
+            if name == 'sqlite_sequence':
+                continue
+            c.execute(f"SELECT COUNT(*) FROM [{name}]")
+            count = c.fetchone()[0]
+            tables.append({"name": name, "rows": count})
+        conn.close()
+        return jsonify({"success": True, "tables": tables})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/db/table/<table_name>')
+def api_db_table_data(table_name):
+    """Get table data with pagination"""
+    # Whitelist tables for security
+    allowed = ['passengers','drivers','rides','payments','driver_documents',
+               'renter_requests','ratings','otp_verification','admins','sos_alerts']
+    if table_name not in allowed:
+        return jsonify({"success": False, "message": "Table not allowed"}), 403
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        offset = (page - 1) * per_page
+        conn = sqlite3.connect('database_enhanced.db')
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        # Get columns
+        c.execute(f"PRAGMA table_info([{table_name}])")
+        columns = [row['name'] for row in c.fetchall()]
+        # Get total count
+        c.execute(f"SELECT COUNT(*) FROM [{table_name}]")
+        total = c.fetchone()[0]
+        # Get rows — mask sensitive fields
+        sensitive = {'password', 'file_data', 'aadhaar_doc', 'rc_doc', 'live_selfie',
+                     'payment_qr_image', 'qr_code', 'otp'}
+        c.execute(f"SELECT * FROM [{table_name}] ORDER BY rowid DESC LIMIT ? OFFSET ?",
+                  (per_page, offset))
+        rows = []
+        for row in c.fetchall():
+            row_dict = {}
+            for col in columns:
+                val = row[col]
+                if col in sensitive and val:
+                    if isinstance(val, str) and len(val) > 50:
+                        row_dict[col] = f"[{len(val)} chars — hidden]"
+                    else:
+                        row_dict[col] = "***"
+                else:
+                    row_dict[col] = val
+            rows.append(row_dict)
+        conn.close()
+        return jsonify({
+            "success": True,
+            "table": table_name,
+            "columns": columns,
+            "rows": rows,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": (total + per_page - 1) // per_page
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/db/stats')
+def api_db_stats():
+    """Get live database statistics"""
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        stats = {}
+        tables = ['passengers','drivers','rides','payments','driver_documents',
+                  'renter_requests','ratings','sos_alerts']
+        for t in tables:
+            try:
+                c.execute(f"SELECT COUNT(*) FROM [{t}]")
+                stats[t] = c.fetchone()[0]
+            except Exception:
+                stats[t] = 0
+        # Extra stats
+        c.execute("SELECT COUNT(*) FROM rides WHERE status='active'")
+        stats['active_rides'] = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM drivers WHERE is_available=1")
+        stats['available_drivers'] = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM drivers WHERE verification_status='verified'")
+        stats['verified_drivers'] = c.fetchone()[0]
+        c.execute("SELECT COALESCE(SUM(fare),0) FROM rides WHERE status='completed'")
+        stats['total_revenue'] = round(c.fetchone()[0], 2)
+        conn.close()
+        return jsonify({"success": True, "stats": stats, "timestamp": datetime.now().isoformat()})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ============================================================================
+# SOS EMERGENCY ALERT SYSTEM
+# ============================================================================
+
+@app.route('/api/update_emergency_contact', methods=['POST'])
+def api_update_emergency_contact():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False, "message": "Not authenticated — please login", "code": "AUTH_REQUIRED"}), 401
+    try:
+        data = request.get_json()
+        emergency_name   = (data.get('emergency_name') or '').strip()
+        emergency_mobile = (data.get('emergency_mobile') or '').strip()
+        emergency_email  = (data.get('emergency_email') or '').strip()
+        if not emergency_mobile and not emergency_email:
+            return jsonify({"success": False, "message": "Provide at least one emergency contact (mobile or email)"}), 400
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("""UPDATE passengers SET emergency_name=?, emergency_mobile=?, emergency_email=?
+                     WHERE id=?""",
+                  (emergency_name, emergency_mobile, emergency_email, current_user['user_id']))
+        rows_updated = c.rowcount
+        conn.commit()
+        conn.close()
+        if rows_updated == 0:
+            return jsonify({"success": False, "message": "Passenger record not found"}), 404
+        return jsonify({"success": True, "message": f"Emergency contact saved! {emergency_name or emergency_email} will be alerted in SOS."})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/sos_alert', methods=['POST'])
+def api_sos_alert():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False, "message": "Not authenticated — please login", "code": "AUTH_REQUIRED"}), 401
+    try:
+        data = request.get_json()
+        lat  = data.get('lat')
+        lng  = data.get('lng')
+        ride_id = data.get('ride_id')
+        uid = current_user['user_id']
+
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("""SELECT name, phone, email, emergency_name, emergency_mobile, emergency_email
+                     FROM passengers WHERE id=?""", (uid,))
+        pax = c.fetchone()
+        if not pax:
+            conn.close()
+            return jsonify({"success": False, "message": "Passenger not found"}), 404
+
+        pax_name, pax_phone, pax_email, em_name, em_mobile, em_email = pax
+
+        if not em_email and not em_mobile:
+            conn.close()
+            return jsonify({
+                "success": False,
+                "message": "No emergency contact set. Go to Profile → Emergency Contact and add one first."
+            }), 400
+
+        driver_name, vehicle_number = "Unknown", "Unknown"
+        if ride_id:
+            c.execute("SELECT driver_name, driver_vehicle FROM rides WHERE id=? AND passenger_id=?",
+                      (ride_id, uid))
+            ride_row = c.fetchone()
+            if ride_row:
+                driver_name, vehicle_number = ride_row
+        conn.close()
+
+        maps_link = f"https://maps.google.com/?q={lat},{lng}" if lat and lng else "Location unavailable"
+        alert_time = datetime.now().strftime("%d %b %Y, %I:%M %p")
+
+        subject = f"🚨 SOS EMERGENCY ALERT — {pax_name} needs help!"
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#C62828;color:white;padding:24px;border-radius:12px 12px 0 0;text-align:center">
+            <h1 style="margin:0;font-size:28px">🚨 EMERGENCY SOS ALERT</h1>
+            <p style="margin:8px 0 0;opacity:0.9">Immediate attention required</p>
+          </div>
+          <div style="background:#fff;border:2px solid #C62828;padding:24px;border-radius:0 0 12px 12px">
+            <table style="width:100%;border-collapse:collapse">
+              <tr><td style="padding:10px;background:#FFF8E1;font-weight:bold">👤 Passenger</td>
+                  <td style="padding:10px">{pax_name} ({pax_phone})</td></tr>
+              <tr><td style="padding:10px;font-weight:bold">🚗 Driver</td>
+                  <td style="padding:10px">{driver_name}</td></tr>
+              <tr><td style="padding:10px;background:#FFF8E1;font-weight:bold">🚘 Vehicle</td>
+                  <td style="padding:10px">{vehicle_number}</td></tr>
+              <tr><td style="padding:10px;font-weight:bold">🕐 Time</td>
+                  <td style="padding:10px">{alert_time}</td></tr>
+            </table>
+            <div style="margin-top:20px;text-align:center">
+              <a href="{maps_link}" style="display:inline-block;background:#C62828;color:white;
+                 padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">
+                📍 View Live Location on Google Maps
+              </a>
+            </div>
+            <p style="margin-top:20px;color:#666;font-size:13px;text-align:center">
+              Automated emergency alert from RakshaRide Safety System.
+            </p>
+          </div>
+        </div>"""
+
+        sent_to = []
+        if em_email:
+            send_email_async(em_email, subject, html_body)
+            sent_to.append(em_email)
+
+        send_email_async(pax_email, f"[SOS Sent] Your emergency alert was dispatched", f"""
+        <div style="font-family:Arial,sans-serif;padding:20px">
+          <h2 style="color:#C62828">🚨 Your SOS Alert Was Sent</h2>
+          <p>Your emergency alert has been dispatched to: <strong>{em_name or em_email}</strong></p>
+          <p><strong>Location:</strong> <a href="{maps_link}">{maps_link}</a></p>
+          <p><strong>Time:</strong> {alert_time}</p>
+        </div>""")
+
+        try:
+            conn2 = sqlite3.connect('database_enhanced.db')
+            c2 = conn2.cursor()
+            c2.execute("""CREATE TABLE IF NOT EXISTS sos_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                passenger_id INTEGER, ride_id INTEGER,
+                lat REAL, lng REAL, alert_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sent_to TEXT, driver_name TEXT, vehicle_number TEXT
+            )""")
+            c2.execute("INSERT INTO sos_alerts (passenger_id,ride_id,lat,lng,sent_to,driver_name,vehicle_number) VALUES (?,?,?,?,?,?,?)",
+                       (uid, ride_id, lat, lng, ','.join(sent_to), driver_name, vehicle_number))
+            conn2.commit()
+            conn2.close()
+        except Exception:
+            pass
+
+        return jsonify({
+            "success": True,
+            "message": f"SOS alert sent to {em_name or em_email}!",
+            "sent_to": sent_to,
+            "maps_link": maps_link
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+    try:
+        data = request.get_json()
+        lat  = data.get('lat')
+        lng  = data.get('lng')
+        ride_id = data.get('ride_id')
+
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+
+        # Get passenger info + emergency contacts
+        c.execute("""SELECT name, phone, email, emergency_name, emergency_mobile, emergency_email
+                     FROM passengers WHERE id=?""", (session['user_id'],))
+        pax = c.fetchone()
+        if not pax:
+            conn.close()
+            return jsonify({"success": False, "message": "Passenger not found"}), 404
+
+        pax_name, pax_phone, pax_email, em_name, em_mobile, em_email = pax
+
+        # Get active ride / driver info
+        driver_name, vehicle_number = "Unknown", "Unknown"
+        if ride_id:
+            c.execute("""SELECT driver_name, driver_vehicle FROM rides WHERE id=? AND passenger_id=?""",
+                      (ride_id, session['user_id']))
+            ride_row = c.fetchone()
+            if ride_row:
+                driver_name, vehicle_number = ride_row
+        conn.close()
+
+        # Build location link
+        maps_link = f"https://maps.google.com/?q={lat},{lng}" if lat and lng else "Location unavailable"
+        alert_time = datetime.now().strftime("%d %b %Y, %I:%M %p")
+
+        subject = f"🚨 SOS EMERGENCY ALERT — {pax_name} needs help!"
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#C62828;color:white;padding:24px;border-radius:12px 12px 0 0;text-align:center">
+            <h1 style="margin:0;font-size:28px">🚨 EMERGENCY SOS ALERT</h1>
+            <p style="margin:8px 0 0;opacity:0.9">Immediate attention required</p>
+          </div>
+          <div style="background:#fff;border:2px solid #C62828;padding:24px;border-radius:0 0 12px 12px">
+            <table style="width:100%;border-collapse:collapse">
+              <tr><td style="padding:10px;background:#FFF8E1;font-weight:bold;border-radius:6px">👤 Passenger</td>
+                  <td style="padding:10px">{pax_name} ({pax_phone})</td></tr>
+              <tr><td style="padding:10px;font-weight:bold">🚗 Driver</td>
+                  <td style="padding:10px">{driver_name}</td></tr>
+              <tr><td style="padding:10px;background:#FFF8E1;font-weight:bold;border-radius:6px">🚘 Vehicle</td>
+                  <td style="padding:10px">{vehicle_number}</td></tr>
+              <tr><td style="padding:10px;font-weight:bold">🕐 Time</td>
+                  <td style="padding:10px">{alert_time}</td></tr>
+            </table>
+            <div style="margin-top:20px;text-align:center">
+              <a href="{maps_link}" style="display:inline-block;background:#C62828;color:white;
+                 padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">
+                📍 View Live Location on Google Maps
+              </a>
+            </div>
+            <p style="margin-top:20px;color:#666;font-size:13px;text-align:center">
+              This is an automated emergency alert from RakshaRide Safety System.<br>
+              Please contact the passenger immediately or call emergency services.
+            </p>
+          </div>
+        </div>"""
+
+        sent_to = []
+        errors  = []
+
+        # Send to emergency email
+        if em_email:
+            ok, msg = send_email_otp.__wrapped__(em_email, "SOS") if hasattr(send_email_otp, '__wrapped__') else (False, "")
+            # Use send_email_async directly
+            send_email_async(em_email, subject, html_body)
+            sent_to.append(f"email:{em_email}")
+
+        # Also send to passenger's own email as confirmation
+        send_email_async(pax_email, f"[SOS Sent] Your emergency alert was dispatched", f"""
+        <div style="font-family:Arial,sans-serif;padding:20px">
+          <h2 style="color:#C62828">🚨 Your SOS Alert Was Sent</h2>
+          <p>Your emergency alert has been dispatched to your emergency contact.</p>
+          <p><strong>Location shared:</strong> <a href="{maps_link}">{maps_link}</a></p>
+          <p><strong>Time:</strong> {alert_time}</p>
+          <p style="color:#666;font-size:13px">Stay safe. Help is on the way.</p>
+        </div>""")
+
+        # Log SOS in database (create sos_alerts table if needed)
+        try:
+            conn2 = sqlite3.connect('database_enhanced.db')
+            c2 = conn2.cursor()
+            c2.execute("""CREATE TABLE IF NOT EXISTS sos_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                passenger_id INTEGER, ride_id INTEGER,
+                lat REAL, lng REAL, alert_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sent_to TEXT, driver_name TEXT, vehicle_number TEXT
+            )""")
+            c2.execute("""INSERT INTO sos_alerts (passenger_id, ride_id, lat, lng, sent_to, driver_name, vehicle_number)
+                          VALUES (?,?,?,?,?,?,?)""",
+                       (session['user_id'], ride_id, lat, lng, ','.join(sent_to), driver_name, vehicle_number))
+            conn2.commit()
+            conn2.close()
+        except Exception:
+            pass
+
+        return jsonify({
+            "success": True,
+            "message": f"SOS alert sent to {em_name or 'emergency contact'} ({em_email or em_mobile})",
+            "sent_to": sent_to,
+            "maps_link": maps_link
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ============================================================================
+# Run Application
+# ============================================================================
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    print(f"\n  RakshaRide — running on http://0.0.0.0:{port}")
+    init_db()
+    app.run(debug=debug, host='0.0.0.0', port=port)
+
+
+

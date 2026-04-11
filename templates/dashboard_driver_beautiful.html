@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Intelligence Dashboard | RakshaRide</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Simple Map (Leaflet) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        :root {
+            --sidebar-width: 280px;
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .side-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 20px;
+            border-radius: 12px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-bottom: 8px;
+            border: none;
+            background: transparent;
+            width: 100%;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .side-link:hover {
+            background: rgba(255, 193, 7, 0.05);
+            color: var(--primary);
+        }
+
+        .side-link.active {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: #000;
+            box-shadow: 0 4px 15px rgba(255, 193, 7, 0.2);
+        }
+
+        /* Main Content Area */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            padding: 40px;
+            max-width: calc(100vw - var(--sidebar-width));
+        }
+
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .welcome-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(255, 193, 7, 0.1);
+            color: var(--primary);
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Sections */
+        .dashboard-section {
+            display: none;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .dashboard-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 24px;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover { border-color: var(--primary); transform: translateY(-5px); }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 800;
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-primary);
+            margin: 8px 0;
+        }
+
+        /* Cards */
+        .content-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+
+        /* Document Badge */
+        .doc-status {
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        /* QR Code Modal Style */
+        .qr-magnify {
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            max-width: 300px;
+            margin: 0 auto;
+        }
+
+        /* Map Utility */
+        #map {
+            height: 450px;
+            border-radius: 20px;
+            border: 2px solid var(--border);
+            z-index: 1;
+        }
+
+        /* Review List */
+        .review-item {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .review-item:last-child { border-bottom: none; }
+
+        @media (max-width: 992px) {
+            .sidebar { width: 80px; padding: 20px 10px; }
+            .side-link span { display: none; }
+            .main-content { margin-left: 80px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animated"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="logo-container mb-4" style="display: flex; align-items: center; gap: 10px;">
+            <img src="/static/img/logo.png" alt="RakshaRide" style="height: 32px; border-radius: 6px;">
+            <span style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.2rem; color: var(--primary);">RakshaRide</span>
+        </div>
+
+        <button class="side-link active" onclick="showSection('profile', this)">
+            <i data-lucide="user"></i> <span>Profile Identity</span>
+        </button>
+        <button class="side-link" onclick="showSection('documents', this)">
+            <i data-lucide="file-text"></i> <span>Doc Vault</span>
+        </button>
+        <button class="side-link" onclick="showSection('overview', this)">
+            <i data-lucide="layout-dashboard"></i> <span>Intelligence</span>
+        </button>
+        <button class="side-link" onclick="showSection('transactions', this)">
+            <i data-lucide="receipt"></i> <span>Ride Logs</span>
+        </button>
+        <button class="side-link" onclick="showSection('ratings', this)">
+            <i data-lucide="star"></i> <span>Trust Score</span>
+        </button>
+        <button class="side-link" onclick="showSection('tracking', this)">
+            <i data-lucide="map-pin"></i> <span>Live Track</span>
+        </button>
+
+        <div style="margin-top: auto;">
+            <button class="side-link" onclick="logout()" style="color: #ef4444;">
+                <i data-lucide="log-out"></i> <span>Secure Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="header-bar">
+            <div>
+                <div class="welcome-badge">Official Driver Portal</div>
+                <h1 id="page-title" style="margin-top: 10px;">Executive Dashboard</h1>
+            </div>
+            <div id="driver-summary" style="text-align: right;">
+                <div style="font-weight: 800; font-size: 1.2rem;" id="header-name">---</div>
+                <div style="color: var(--text-secondary); font-size: 0.9rem;" id="header-id">DRV-0000</div>
+            </div>
+        </header>
+
+        <!-- PROFILE SECTION -->
+        <section id="profile-section" class="dashboard-section active">
+            <div class="stats-grid">
+                <div class="content-card" style="grid-column: span 2;">
+                    <div class="flex-between mb-4">
+                        <h3>Personal Credentials</h3>
+                        <div class="badge badge-success">SATELLITE VERIFIED IDENTITY</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 280px 1fr; gap: 40px;">
+                        <div id="identity-visuals" style="text-align: center; border-right: 1px solid var(--border); padding-right: 40px;">
+                            <div class="profile-image-wrapper mb-4">
+                                <img id="driver-profile-photo" src="/static/img/default_avatar.png" alt="Driver" 
+                                     style="width: 200px; height: 200px; border-radius: 50%; object-fit: cover; border: 4px solid var(--primary); box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                            </div>
+                            <div class="qr-magnify" style="background: #fff; padding: 15px; border-radius: 15px; border: 1px solid #ddd;">
+                                <img id="driver-qr" src="" alt="Driver QR" style="width: 100%; min-height: 180px;">
+                                <div style="font-weight: 800; font-size: 0.7rem; margin-top: 8px; color: #333;">SCAN PUBLIC PROFILE</div>
+                            </div>
+                        </div>
+                        <div class="profile-info-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-content: start;">
+                            <div>
+                                <label class="info-label">Full Legal Name</label>
+                                <div class="info-value" id="profile-name" style="font-size: 1.2rem; font-weight: 700;">---</div>
+                            </div>
+                            <div>
+                                <label class="info-label">Official UID</label>
+                                <div class="info-value" id="header-id-main" style="color: var(--primary); font-weight: 800;">DRV-0000</div>
+                            </div>
+                            <div>
+                                <label class="info-label">Contact Email</label>
+                                <div class="info-value" id="profile-email">---</div>
+                            </div>
+                            <div>
+                                <label class="info-label">Carrier Mobile</label>
+                                <div class="info-value" id="profile-phone">---</div>
+                            </div>
+                            <div>
+                                <label class="info-label">Membership Type</label>
+                                <div class="info-value"><span class="badge" id="profile-role">---</span></div>
+                            </div>
+                            <div>
+                                <label class="info-label">Driver Status</label>
+                                <div class="info-value" id="profile-status-badge">---</div>
+                            </div>
+                            <div style="grid-column: span 2;">
+                                <label class="info-label">Residential Record Address</label>
+                                <div class="info-value" id="profile-address" style="white-space: pre-wrap; background: var(--bg-primary); padding: 15px; border-radius: 12px; border: 1px solid var(--border);">---</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="content-card">
+                    <h3 class="mb-3">Vehicle Details</h3>
+                    <div class="form-group mb-2">
+                        <label class="info-label">Unique RC NO</label>
+                        <div class="info-value" id="profile-rc">---</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="info-label">Vehicle Type</label>
+                        <div class="info-value" id="profile-vtype">---</div>
+                    </div>
+                    <div style="margin-top: 30px; padding: 15px; background: rgba(255,193,7,0.1); border-radius: 12px; border: 1px solid var(--primary);">
+                        <div style="font-size: 0.8rem; font-weight: 700; color: var(--primary);">VERIFICATION STATUS</div>
+                        <div style="font-size: 1.2rem; font-weight: 800;" id="profile-status">PENDING</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- DOCUMENTS SECTION -->
+        <section id="documents-section" class="dashboard-section">
+            <div class="content-card">
+                <div class="flex-between mb-4">
+                    <h3>Secure Document Vault</h3>
+                    <div id="upload-restriction-msg" class="text-secondary" style="font-size: 0.8rem;"></div>
+                </div>
+                
+                <div class="doc-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                    <!-- Aadhar -->
+                    <div class="stat-card">
+                        <div class="flex-between mb-2">
+                            <span style="font-weight: 800;">Identity (Aadhaar)</span>
+                            <span class="status-badge" id="status-aadhar">NOT UPLOADED</span>
+                        </div>
+                        <div id="view-aadhar" class="mt-2 hidden">
+                            <button class="btn btn-secondary btn-sm" onclick="viewDoc('aadhar')">View Encrypted File</button>
+                        </div>
+                        <div id="upload-aadhar" class="mt-2 hidden">
+                            <input type="file" id="file-aadhar" hidden onchange="handleNewUpload('aadhar')">
+                            <button class="btn btn-primary btn-sm" onclick="document.getElementById('file-aadhar').click()">Update Aadhaar</button>
+                        </div>
+                    </div>
+                    
+                    <!-- License -->
+                    <div class="stat-card">
+                        <div class="flex-between mb-2">
+                            <span style="font-weight: 800;">Driver's License</span>
+                            <span class="status-badge" id="status-license">NOT UPLOADED</span>
+                        </div>
+                        <div id="view-license" class="mt-2 hidden">
+                            <button class="btn btn-secondary btn-sm" onclick="viewDoc('license')">View Encrypted File</button>
+                        </div>
+                        <div id="upload-license" class="mt-2 hidden">
+                            <input type="file" id="file-license" hidden onchange="handleNewUpload('license')">
+                            <button class="btn btn-primary btn-sm" onclick="document.getElementById('file-license').click()">Update License</button>
+                        </div>
+                    </div>
+
+                    <!-- RC -->
+                    <div class="stat-card">
+                        <div class="flex-between mb-2">
+                            <span style="font-weight: 800;">Vehicle (RC)</span>
+                            <span class="status-badge" id="status-rc">NOT UPLOADED</span>
+                        </div>
+                        <div id="view-rc" class="mt-2 hidden">
+                            <button class="btn btn-secondary btn-sm" onclick="viewDoc('rc')">View Encrypted File</button>
+                        </div>
+                        <div id="upload-rc" class="mt-2 hidden">
+                            <input type="file" id="file-rc" hidden onchange="handleNewUpload('rc')">
+                            <button class="btn btn-primary btn-sm" onclick="document.getElementById('file-rc').click()">Update Registration</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- OVERVIEW SECTION -->
+        <section id="overview-section" class="dashboard-section">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <label class="info-label">Lifetime Passengers</label>
+                    <div class="stat-value" id="stats-passengers">0</div>
+                    <div style="color: #22c55e; font-size: 0.8rem; font-weight: 600;">↑ 12% This month</div>
+                </div>
+                <div class="stat-card">
+                    <label class="info-label">Total Rides</label>
+                    <div class="stat-value" id="stats-rides">0</div>
+                    <div style="color: var(--primary); font-size: 0.8rem; font-weight: 600;">Consistent Growth</div>
+                </div>
+                <div class="stat-card">
+                    <label class="info-label">Distance Covered</label>
+                    <div class="stat-value" id="stats-distance">0.0 KM</div>
+                    <div style="color: var(--accent); font-size: 0.8rem; font-weight: 600;">Verified GPS Data</div>
+                </div>
+                <div class="stat-card">
+                    <label class="info-label">System Performance</label>
+                    <div class="stat-value">Active</div>
+                    <div style="color: #22c55e; font-size: 0.8rem; font-weight: 600;">High Efficiency</div>
+                </div>
+            </div>
+            
+            <div class="content-card">
+                <h3>Earnings Trend</h3>
+                <canvas id="earningsChart" height="100"></canvas>
+            </div>
+        </section>
+
+        <!-- TRANSACTIONS SECTION -->
+        <section id="transactions-section" class="dashboard-section">
+            <div class="content-card">
+                <h3>Ride Transaction History</h3>
+                <div class="table-container mt-3">
+                    <table style="width: 100%;" id="ride-history-table">
+                        <thead>
+                            <tr>
+                                <th>Date/Time</th>
+                                <th>From → To</th>
+                                <th>Passenger</th>
+                                <th>Fare</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-body">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- RATINGS SECTION -->
+        <section id="ratings-section" class="dashboard-section">
+            <div class="stats-grid">
+                <div class="stat-card" style="text-align: center;">
+                    <label class="info-label">Mean Trust Score</label>
+                    <div class="stat-value" style="color: var(--primary); font-size: 4rem;" id="avg-rating">0.0</div>
+                    <div id="stars-container" style="color: var(--primary); font-size: 1.5rem;">☆☆☆☆☆</div>
+                </div>
+                <div class="content-card" style="grid-column: span 2;">
+                    <h3>Public Reviews & Feedback</h3>
+                    <div id="reviews-list" style="max-height: 400px; overflow-y: auto;">
+                        <div class="text-center p-5 text-muted">Awaiting passenger feedback...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TRACKING SECTION -->
+        <section id="tracking-section" class="dashboard-section">
+            <div class="content-card">
+                <div class="flex-between mb-3">
+                    <h3>Live GPS Fleet Tracking</h3>
+                    <div class="badge badge-success">SATELLITE SYNC ACTIVE</div>
+                </div>
+                <div id="map"></div>
+                <div class="mt-3 flex gap-4">
+                    <div class="stat-card flex-1">
+                        <label class="info-label">Current Lat/Lng</label>
+                        <div id="current-coords">Initializing satellite link...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/theme.js"></script>
+    <script>
+        let map, marker;
+        const driverId = JSON.parse(localStorage.getItem('user'))?.id;
+        const driverRole = JSON.parse(localStorage.getItem('user'))?.role;
+
+        async function initDashboard() {
+            if (!driverId) return window.location.href = '/login';
+            
+            // Initial data fetch
+            await fetchProfile();
+            await fetchOverview();
+            
+            // Map init
+            initMap();
+            
+            lucide.createIcons();
+        }
+
+        function showSection(id, el) {
+            document.querySelectorAll('.dashboard-section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.side-link').forEach(l => l.classList.remove('active'));
+            
+            document.getElementById(`${id}-section`).classList.add('active');
+            el.classList.add('active');
+            document.getElementById('page-title').innerText = id.charAt(0).toUpperCase() + id.slice(1) + " Insight";
+
+            // Trigger specific loads
+            if(id === 'transactions') fetchTransactions();
+            if(id === 'ratings') fetchRatings();
+            if(id === 'tracking') setTimeout(() => map.invalidateSize(), 100);
+            if(id === 'documents') fetchDocuments();
+        }
+
+        async function fetchProfile() {
+            try {
+                const res = await fetch('/api/get_profile');
+                const data = await res.json();
+                if(data.success) {
+                    const p = data.profile;
+                    document.getElementById('header-name').innerText = p.name;
+                    document.getElementById('header-id').innerText = p.unique_id || "DRV-NEW";
+                    document.getElementById('header-id-main').innerText = p.unique_id || "DRV-NEW";
+                    document.getElementById('profile-name').innerText = p.name;
+                    document.getElementById('profile-email').innerText = p.email;
+                    document.getElementById('profile-phone').innerText = p.mobile;
+                    document.getElementById('profile-role').innerText = p.role;
+                    document.getElementById('profile-rc').innerText = p.rc_number;
+                    document.getElementById('profile-vtype').innerText = p.vehicle_type;
+                    document.getElementById('profile-status').innerText = p.verification_status.toUpperCase();
+                    document.getElementById('profile-address').innerText = p.address || "Not Provided";
+                    
+                    // Profile Photo
+                    if(p.profile_image) {
+                        document.getElementById('driver-profile-photo').src = "/" + p.profile_image;
+                    }
+                    
+                    // QR Code
+                    if(p.qr_code) {
+                        document.getElementById('driver-qr').src = "/" + p.qr_code;
+                    }
+                    
+                    // Status Badge
+                    const statusBadge = document.getElementById('profile-status-badge');
+                    statusBadge.innerText = p.verification_status.toUpperCase();
+                    statusBadge.className = `info-value status-badge ${p.verification_status === 'verified' ? 'badge-success' : 'badge-warning'}`;
+
+                    // Update role badge color
+                    const roleBadge = document.getElementById('profile-role');
+                    roleBadge.className = `badge ${p.role === 'OWNER' ? 'badge-primary' : 'badge-secondary'}`;
+                }
+            } catch(e) { console.error("Profile sync failure", e); }
+        }
+
+        async function fetchOverview() {
+            try {
+                const res = await fetch('/api/get_driver_overview');
+                const data = await res.json();
+                if(data.success) {
+                    document.getElementById('stats-passengers').innerText = data.total_passengers;
+                    document.getElementById('stats-rides').innerText = data.total_rides;
+                    document.getElementById('stats-distance').innerText = data.total_distance.toFixed(1) + " KM";
+                    
+                    initChart(data.earnings_history);
+                }
+            } catch(e) { console.error("Overview sync failure", e); }
+        }
+
+        async function fetchDocuments() {
+            try {
+                const res = await fetch('/api/get_driver_docs');
+                const data = await res.json();
+                
+                // Restriction message
+                const msg = document.getElementById('upload-restriction-msg');
+                if(driverRole === 'RENTER') {
+                    msg.innerHTML = "⚠️ Renter Mode: View Only Access";
+                    document.getElementById('upload-aadhar').classList.add('hidden');
+                    document.getElementById('upload-license').classList.add('hidden');
+                    document.getElementById('upload-rc').classList.add('hidden');
+                } else {
+                    msg.innerHTML = "✅ Owner Mode: Modification Privileges Active";
+                    document.getElementById('upload-aadhar').classList.remove('hidden');
+                    document.getElementById('upload-license').classList.remove('hidden');
+                    document.getElementById('upload-rc').classList.remove('hidden');
+                }
+
+                const docTypes = ['aadhar', 'license', 'rc'];
+                docTypes.forEach(type => {
+                    const doc = data.documents.find(d => d.type === type);
+                    const statusEl = document.getElementById(`status-${type}`);
+                    const viewBtn = document.getElementById(`view-${type}`);
+                    
+                    if(doc) {
+                        statusEl.innerText = doc.status;
+                        statusEl.className = `status-badge ${doc.status === 'VERIFIED' ? 'badge-success' : 'badge-warning'}`;
+                        viewBtn.classList.remove('hidden');
+                    } else {
+                        statusEl.innerText = "MISSING";
+                        statusEl.className = "status-badge badge-error";
+                        viewBtn.classList.add('hidden');
+                    }
+                });
+            } catch(e) { console.error("Vault sync failure", e); }
+        }
+
+        async function fetchTransactions() {
+            const res = await fetch('/api/get_driver_history');
+            const data = await res.json();
+            const body = document.getElementById('history-body');
+            if(data.success && data.rides.length > 0) {
+                body.innerHTML = data.rides.map(r => `
+                    <tr>
+                        <td style="font-size: 0.8rem;">${new Date(r.start_time).toLocaleString()}</td>
+                        <td style="font-size: 0.8rem;">${r.pickup_location} → ${r.dropoff_location}</td>
+                        <td>${r.passenger_name}</td>
+                        <td style="font-weight: 700;">₹${r.fare}</td>
+                        <td><span class="badge badge-success">${r.status}</span></td>
+                    </tr>
+                `).join('');
+            } else {
+                body.innerHTML = '<tr><td colspan="5" class="text-center p-4">No rides recorded</td></tr>';
+            }
+        }
+
+        async function fetchRatings() {
+            const res = await fetch('/api/get_driver_ratings');
+            const data = await res.json();
+            if(data.success) {
+                document.getElementById('avg-rating').innerText = data.average.toFixed(1);
+                document.getElementById('stars-container').innerText = '★'.repeat(Math.round(data.average)) + '☆'.repeat(5 - Math.round(data.average));
+                
+                const list = document.getElementById('reviews-list');
+                if(data.reviews.length > 0) {
+                    list.innerHTML = data.reviews.map(rev => `
+                        <div class="review-item">
+                            <div class="flex-between">
+                                <span style="font-weight: 700;">Passenger ID: ${rev.passenger_id}</span>
+                                <span style="color: var(--primary);">${'★'.repeat(rev.rating)}</span>
+                            </div>
+                            <p style="margin-top: 10px; color: var(--text-secondary); font-style: italic;">"${rev.comment || 'No comment provided'}"</p>
+                            <small class="text-muted">${new Date(rev.created_at).toLocaleDateString()}</small>
+                        </div>
+                    `).join('');
+                } else {
+                    list.innerHTML = '<div class="text-center p-5">No reviews yet</div>';
+                }
+            }
+        }
+
+        function initMap() {
+            map = L.map('map').setView([20.5937, 78.9629], 5);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(pos => {
+                    const { latitude, longitude } = pos.coords;
+                    document.getElementById('current-coords').innerText = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+                    if(!marker) {
+                        marker = L.marker([latitude, longitude]).addTo(map);
+                        map.setView([latitude, longitude], 15);
+                    } else {
+                        marker.setLatLng([latitude, longitude]);
+                    }
+
+                    // Sync to Backend for Passenger Tracking
+                    fetch('/api/update_driver_location', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ lat: latitude, lng: longitude })
+                    }).catch(err => console.error("Location sync error:", err));
+                });
+            }
+        }
+
+        function initChart(history) {
+            const ctx = document.getElementById('earningsChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: history.map(h => h.date),
+                    datasets: [{
+                        label: 'Revenue (₹)',
+                        data: history.map(h => h.amount),
+                        borderColor: '#FFC107',
+                        tension: 0.4,
+                        fill: true,
+                        backgroundColor: 'rgba(255, 193, 7, 0.1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        async function handleNewUpload(type) {
+            const file = document.getElementById(`file-${type}`).files[0];
+            if(!file) return;
+            // Logic to upload document...
+            alert(`Uploading ${type}... (Actual integration in backend API)`);
+        }
+
+        let currentDocs = [];
+
+        async function fetchDocuments() {
+            try {
+                const res = await fetch('/api/get_driver_docs');
+                const data = await res.json();
+                
+                if(data.success) {
+                    currentDocs = data.documents;
+                    
+                    // Restriction message
+                    const msg = document.getElementById('upload-restriction-msg');
+                    if(driverRole === 'RENTER') {
+                        msg.innerHTML = "⚠️ Renter Mode: View Only Access";
+                        document.querySelectorAll('.upload-widget').forEach(el => el.classList.add('hidden'));
+                    } else {
+                        msg.innerHTML = "✅ Owner Mode: Modification Privileges Active";
+                    }
+
+                    const docTypes = ['aadhar', 'license', 'rc'];
+                    docTypes.forEach(type => {
+                        const doc = data.documents.find(d => d.type === type);
+                        const statusEl = document.getElementById(`status-${type}`);
+                        const viewBtn = document.getElementById(`view-${type}`);
+                        
+                        if(doc) {
+                            statusEl.innerText = doc.status;
+                            statusEl.className = `status-badge ${doc.status === 'VERIFIED' ? 'badge-success' : 'badge-warning'}`;
+                            viewBtn.classList.remove('hidden');
+                        } else {
+                            statusEl.innerText = "MISSING";
+                            statusEl.className = "status-badge badge-error";
+                            viewBtn.classList.add('hidden');
+                        }
+                    });
+                }
+            } catch(e) { console.error("Vault sync failure", e); }
+        }
+
+        function viewDoc(type) {
+            const doc = currentDocs.find(d => d.type === type);
+            if(doc) {
+                document.getElementById('modal-title').innerText = type.toUpperCase() + " Document";
+                // If it has a path, use it. If data (base64/encrypted), use it directly or decrypt it.
+                if(doc.path) {
+                    document.getElementById('modal-img').src = doc.path;
+                } else {
+                    document.getElementById('modal-img').src = doc.data;
+                }
+                document.getElementById('doc-modal').classList.add('active');
+            } else {
+                alert("Document not found.");
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('doc-modal').classList.remove('active');
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = '/api/logout';
+        }
+
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+
+    <!-- Document Viewer Modal -->
+    <div id="doc-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="flex-between mb-4">
+                <h3 id="modal-title">Document View</h3>
+                <button onclick="closeModal()" class="btn btn-ghost">✕ Close</button>
+            </div>
+            <div class="doc-preview-container" style="background: #f0f2f5; border-radius: 12px; padding: 10px; text-align: center;">
+                <img id="modal-img" src="" alt="Document Preview" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.1);">
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+        }
+    </style>
+</body>
+</html>

@@ -73,6 +73,11 @@ CREATE TABLE IF NOT EXISTS rides (
     
     start_time DATETIME,
     end_time DATETIME,
+    
+    -- Real-time Tracking
+    curr_lat DECIMAL(10, 8),
+    curr_lng DECIMAL(11, 8),
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (passenger_id) REFERENCES passengers(id),

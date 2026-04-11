@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RakshaRide | Safe & Smart Mobility</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Animate.css -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <!-- Lottie Player -->
+    <script src="https://unpkg.com/@dotlottie/player-component@latest/dist/dotlottie-player.mjs" type="module"></script>
+    
+    <style>
+        :root {
+            --primary: #003366;
+            --primary-soft: #e0f2fe;
+            --accent: #ff9933;
+            --bg-light: #f8fafc;
+            --white: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+            --card-shadow-hover: 0 25px 40px -10px rgba(0, 33, 102, 0.1);
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-light);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(210, 100%, 96%, 1) 0, transparent 50%), 
+                radial-gradient(at 100% 100%, hsla(30, 100%, 96%, 1) 0, transparent 50%);
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            padding: 40px 24px;
+            text-align: center;
+        }
+
+        /* Header */
+        .header {
+            margin-bottom: 60px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--primary);
+            margin-bottom: 16px;
+        }
+
+        .logo i {
+            font-size: 32px;
+            color: var(--accent);
+        }
+
+        .logo span {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 32px;
+            letter-spacing: -0.5px;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        /* Cards Grid */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+            margin-bottom: 60px;
+            perspective: 1000px;
+        }
+
+        .category-card {
+            background: var(--white);
+            border-radius: 32px;
+            padding: 48px 32px;
+            box-shadow: var(--card-shadow);
+            transition: var(--transition);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            position: relative;
+            z-index: 1;
+        }
+
+        .category-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: var(--card-shadow-hover);
+            border-color: var(--primary-soft);
+        }
+
+        .card-icon {
+            width: 80px;
+            height: 80px;
+            background: var(--primary-soft);
+            color: var(--primary);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 32px;
+            transition: var(--transition);
+        }
+
+        .category-card:hover .card-icon {
+            background: var(--primary);
+            color: var(--white);
+            transform: rotate(-10deg);
+        }
+
+        .category-card h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 28px;
+            margin-bottom: 12px;
+            color: var(--primary);
+        }
+
+        .category-card p {
+            color: var(--text-muted);
+            font-size: 15px;
+            margin-bottom: 32px;
+        }
+
+        /* Button Groups */
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 15px;
+            text-decoration: none;
+            transition: var(--transition);
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: var(--white);
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-light, #004d99);
+            box-shadow: 0 8px 20px rgba(0, 51, 102, 0.2);
+            transform: scale(1.02);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--primary-soft);
+            color: var(--primary);
+        }
+
+        .btn-outline:hover {
+            background: var(--primary-soft);
+            border-color: var(--primary);
+        }
+
+        .btn-accent {
+            background: var(--accent);
+            color: var(--white);
+        }
+
+        .btn-accent:hover {
+            background: #cc7a00;
+            box-shadow: 0 8px 20px rgba(255, 153, 51, 0.2);
+        }
+
+        /* Large Scanner Button */
+        .scanner-btn-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+
+        .btn-scan {
+            background: var(--white);
+            border: 2px solid var(--accent);
+            color: var(--accent);
+            padding: 18px 40px;
+            border-radius: 100px;
+            font-size: 18px;
+            font-weight: 800;
+            box-shadow: var(--card-shadow);
+        }
+
+        .btn-scan:hover {
+            background: var(--accent);
+            color: var(--white);
+            transform: scale(1.05);
+            box-shadow: 0 15px 30px rgba(255, 153, 51, 0.2);
+        }
+
+        /* Transitions */
+        .animate-up {
+            animation: fadeInUp;
+            animation-duration: 0.8s;
+        }
+
+        /* Mobile specific adjustments */
+        @media (max-width: 640px) {
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .category-card {
+                padding: 32px 24px;
+            }
+
+            .header h1 span {
+                font-size: 28px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header animate__animated animate__fadeIn">
+            <a href="/" class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>RakshaRide</span>
+            </a>
+            <p>Smart Identity-Based Mobility Interface</p>
+        </header>
+
+        <!-- Hero Animation Scene (Faces/Animated Security) -->
+        <div class="animate__animated animate__zoomIn" style="margin-top: -30px; margin-bottom: 40px; display: flex; justify-content: center; position: relative;">
+            <dotlottie-player src="https://lottie.host/88af9840-0870-4f57-897d-6060c1d1822c/uW8D6I9zH0.json" background="transparent" speed="1" style="width: 250px; height: 250px;" loop autoplay></dotlottie-player>
+            <div style="position: absolute; bottom: 0; background: rgba(255,153,51,0.1); padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: 700; color: var(--accent);">
+                AI SECURITY HUB ACTIVE
+            </div>
+        </div>
+
+        <!-- Category Grid -->
+        <div class="cards-grid">
+            <!-- Driver Card -->
+            <div class="category-card animate__animated animate__fadeInUp">
+                <div style="position: absolute; top: 10px; right: 10px; opacity: 0.3;">
+                    <dotlottie-player src="https://lottie.host/17e5da8d-3a1e-4f51-874e-5e3e26372179/5nN9gWkHOn.json" background="transparent" speed="1" style="width: 80px; height: 80px;" loop autoplay></dotlottie-player>
+                </div>
+                <div class="card-icon">
+                    <i class="fas fa-car-side"></i>
+                </div>
+                <h2>Driver Portal</h2>
+                <p>Verify your vehicle and identity documents to join our secure mobility network.</p>
+                <div class="btn-group">
+                    <a href="/login/driver" class="btn btn-primary">Driver Login</a>
+                    <a href="/register_driver_new" class="btn btn-outline" id="driver-reg-link">New Partner Registration</a>
+                </div>
+            </div>
+
+            <!-- Passenger Card -->
+            <div class="category-card animate__animated animate__fadeInUp" style="animation-delay: 0.2s;">
+                <div style="position: absolute; top: 10px; right: 10px; opacity: 0.3;">
+                    <dotlottie-player src="https://lottie.host/e2d26f07-7e61-464a-9ef8-e09292850901/7m4vFwUnXJ.json" background="transparent" speed="1" style="width: 80px; height: 80px;" loop autoplay></dotlottie-player>
+                </div>
+                <div class="card-icon">
+                    <i class="fas fa-user-check"></i>
+                </div>
+                <h2>Citizen Portal</h2>
+                <p>Travel with peace of mind. Scan any driver's official QR to track your ride securely.</p>
+                <div class="btn-group">
+                    <a href="/login/passenger" class="btn btn-primary">Citizen Login</a>
+                    <a href="/register/passenger" class="btn btn-outline">Account Sign Up</a>
+                    <a href="/dashboard/passenger" class="btn btn-accent"><i class="fas fa-play"></i> Start Tracked Ride</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scanner Footer Action -->
+        <div class="scanner-btn-container animate__animated animate__fadeInUp" style="animation-delay: 0.4s;">
+            <a href="/scanner" class="btn btn-scan">
+                <i class="fas fa-camera"></i> Scan Driver ID
+            </a>
+        </div>
+
+        <!-- How It Works Section -->
+        <section style="margin-top: 100px;">
+            <div style="margin-bottom: 50px;">
+                <h2 style="font-family: 'Outfit'; font-size: 32px; color: var(--primary);">System Real-World Scenario</h2>
+                <p style="color: var(--text-muted);">How RakshaRide protects every mile of your journey.</p>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 30px;">
+                <div class="category-card animate__animated animate__fadeInUp" style="padding: 30px; animation-delay: 0.5s;">
+                    <div class="card-icon" style="width: 60px; height: 60px; font-size: 24px;"><i class="fas fa-id-card"></i></div>
+                    <h3 style="font-family: 'Outfit'; font-size: 20px; margin-bottom: 10px;">1. Enrollment</h3>
+                    <p style="font-size: 14px;">Drivers enroll with Aadhaar/RC. Owners verify rent-drivers via secure dashboard.</p>
+                </div>
+                <div class="category-card animate__animated animate__fadeInUp" style="padding: 30px; animation-delay: 0.6s;">
+                    <div class="card-icon" style="width: 60px; height: 60px; font-size: 24px;"><i class="fas fa-qrcode"></i></div>
+                    <h3 style="font-family: 'Outfit'; font-size: 20px; margin-bottom: 10px;">2. Verified Scan</h3>
+                    <p style="font-size: 14px;">Passenger scans the vehicle QR to instantly see driver ratings and verification status.</p>
+                </div>
+                <div class="category-card animate__animated animate__fadeInUp" style="padding: 30px; animation-delay: 0.7s;">
+                    <div class="card-icon" style="width: 60px; height: 60px; font-size: 24px;"><i class="fas fa-shield-alt"></i></div>
+                    <h3 style="font-family: 'Outfit'; font-size: 20px; margin-bottom: 10px;">3. Secure Ride</h3>
+                    <p style="font-size: 14px;">GPS tracking and security logs go active. Share your live location with family.</p>
+                </div>
+                <div class="category-card animate__animated animate__fadeInUp" style="padding: 30px; animation-delay: 0.8s;">
+                    <div class="card-icon" style="width: 60px; height: 60px; font-size: 24px;"><i class="fas fa-check-circle"></i></div>
+                    <h3 style="font-family: 'Outfit'; font-size: 20px; margin-bottom: 10px;">4. Settlement</h3>
+                    <p style="font-size: 14px;">Complete the trip with a secure UPI payment and provide an official safety rating.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section style="margin-top: 100px; padding: 80px 0; background: var(--white); border-radius: 60px; margin-bottom: 100px; box-shadow: var(--card-shadow);">
+            <div style="margin-bottom: 50px;">
+                <h2 style="font-family: 'Outfit'; font-size: 36px; color: var(--primary);">Advanced Safety Features</h2>
+                <p style="color: var(--text-muted);">Built with next-gen governance protocols.</p>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px; padding: 0 40px;">
+                <div style="text-align: left; display: flex; gap: 20px;">
+                    <div style="color: var(--accent); font-size: 24px;"><i class="fas fa-bolt"></i></div>
+                    <div>
+                        <h4 style="font-family: 'Outfit'; font-size: 18px; margin-bottom: 5px;">AI Identity Hub</h4>
+                        <p style="font-size: 14px; color: var(--text-muted);">Real-time OCR and Face Match for every driver enrollment.</p>
+                    </div>
+                </div>
+                <div style="text-align: left; display: flex; gap: 20px;">
+                    <div style="color: var(--accent); font-size: 24px;"><i class="fas fa-users-cog"></i></div>
+                    <div>
+                        <h4 style="font-family: 'Outfit'; font-size: 18px; margin-bottom: 5px;">Owner-Renter Mesh</h4>
+                        <p style="font-size: 14px; color: var(--text-muted);">Multi-party verification for shared vehicle operations.</p>
+                    </div>
+                </div>
+                <div style="text-align: left; display: flex; gap: 20px;">
+                    <div style="color: var(--accent); font-size: 24px;"><i class="fas fa-mobile-alt"></i></div>
+                    <div>
+                        <h4 style="font-family: 'Outfit'; font-size: 18px; margin-bottom: 5px;">Instant OTP Login</h4>
+                        <p style="font-size: 14px; color: var(--text-muted);">Passwordless secure entry for citizens via verified emails.</p>
+                    </div>
+                </div>
+                <div style="text-align: left; display: flex; gap: 20px;">
+                    <div style="color: var(--accent); font-size: 24px;"><i class="fas fa-satellite"></i></div>
+                    <div>
+                        <h4 style="font-family: 'Outfit'; font-size: 18px; margin-bottom: 5px;">Cloud GPS Sync</h4>
+                        <p style="font-size: 14px; color: var(--text-muted);">Continuous background sync with official central safety logs.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer style="width: 100%; padding: 80px 0 40px; background: #f1f5f9; border-top: 1px solid #e2e8f0; margin-top: 50px;">
+        <div style="max-width: 1000px; margin: 0 auto; padding: 0 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 40px; text-align: left;">
+            <div>
+                <h4 style="font-family: 'Outfit'; color: var(--primary); font-size: 22px; margin-bottom: 12px;">RakshaRide</h4>
+                <p style="font-size: 14px; color: var(--text-muted);">Securing the future of transit through integrated identity governance and real-time mesh tracking.</p>
+            </div>
+            <div>
+                <h5 style="font-size: 14px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px;">Portals</h5>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 10px;"><a href="/register/driver" style="text-decoration: none; color: var(--text-muted); font-size: 14px;">Driver Enrollment</a></li>
+                    <li style="margin-bottom: 10px;"><a href="/login/passenger" style="text-decoration: none; color: var(--text-muted); font-size: 14px;">Citizen Access</a></li>
+                    <li style="margin-bottom: 10px;"><a href="/admin" style="text-decoration: none; color: var(--text-muted); font-size: 14px;">Govt Control Panel</a></li>
+                </ul>
+            </div>
+            <div>
+                <h5 style="font-size: 14px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px;">Support</h5>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 10px;"><a href="#" style="text-decoration: none; color: var(--text-muted); font-size: 14px;">Safety Guidelines</a></li>
+                    <li style="margin-bottom: 10px;"><a href="#" style="text-decoration: none; color: var(--text-muted); font-size: 14px;">Privacy Hub</a></li>
+                    <li style="margin-bottom: 10px;"><a href="mailto:support@raksharide.gov.in" style="text-decoration: none; color: var(--text-muted); font-size: 14px;">Contact Support</a></li>
+                </ul>
+            </div>
+        </div>
+        <div style="margin-top: 60px; text-align: center; color: #94a3b8; font-size: 13px; border-top: 1px solid #e2e8f0; padding-top: 30px;">
+            &copy; 2026 RakshaRide National Mobility Platform. An Official Governance Initiative.
+        </div>
+    </footer>
+
+    <!-- OTP Scanner Modal (Placeholder for JS logic) -->
+    <div id="otp-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10000; align-items:center; justify-content:center; backdrop-filter:blur(5px);">
+        <div style="background:white; padding:40px; border-radius:32px; max-width:400px; width:90%; text-align:center; box-shadow:var(--card-shadow-hover);">
+            <h3 style="font-family:Outfit; margin-bottom:12px;">Secure Ride Entry</h3>
+            <p id="otp-message" style="color:var(--text-muted); font-size:14px; margin-bottom:24px;">Please enter your email to proceed with verification.</p>
+            
+            <div id="email-step">
+                <input type="email" id="passenger-email" placeholder="official@email.com" style="width:100%; padding:14px; border-radius:12px; border:2px solid var(--primary-soft); margin-bottom:20px; font-size:16px; text-align:center;">
+                <button onclick="sendOTP()" class="btn btn-primary" style="width:100%;">Get Secure OTP</button>
+            </div>
+
+            <div id="otp-step" style="display:none;">
+                <input type="text" id="otp-code" placeholder="Enter 6-digit OTP" maxlength="6" style="width:100%; padding:14px; border-radius:12px; border:2px solid var(--accent); margin-bottom:20px; font-size:18px; font-weight:800; text-align:center; letter-spacing:4px;">
+                <button onclick="verifyOTP()" class="btn btn-accent" style="width:100%;">Verify & Authorize</button>
+            </div>
+
+            <button onclick="closeOTPModal()" style="margin-top:20px; background:none; border:none; color:var(--text-muted); font-size:14px; font-weight:600; cursor:pointer;">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        // Smooth card interactions handled by CSS
+        // Logic for OTP flow (to be implemented with Backend APIs)
+        
+        async function sendOTP() {
+            const email = document.getElementById('passenger-email').value.trim();
+            if(!email) return alert("Please enter email");
+            
+            const btn = event.target;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/passenger_scan_otp_request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+                
+                if(data.success) {
+                    document.getElementById('email-step').style.display = 'none';
+                    document.getElementById('otp-step').style.display = 'block';
+                    document.getElementById('otp-message').innerText = `OTP sent to ${email}. Please verify to proceed.`;
+                } else {
+                    alert(data.message);
+                }
+            } catch(e) {
+                alert("Connection Error. Is server running?");
+            } finally {
+                btn.innerHTML = 'Get Secure OTP';
+                btn.disabled = false;
+            }
+        }
+
+        function closeOTPModal() {
+            document.getElementById('otp-modal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

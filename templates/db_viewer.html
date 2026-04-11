@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RakshaRide — Live Database Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --yellow:#FFC107; --blue:#1565C0; --green:#2E7D32; --red:#C62828;
+  --bg:#F8FAFF; --card:#FFFFFF; --border:#E0E7FF; --text:#1A1A2E; --text2:#4A5568;
+  --sidebar:#1A1A2E; --sidebar-text:#E2E8F0; --sidebar-active:#FFC107;
+}
+[data-theme="dark"] {
+  --bg:#0D1117; --card:#161B22; --border:#30363D; --text:#F0F6FC; --text2:#8B949E;
+  --sidebar:#0D1117; --sidebar-text:#8B949E; --sidebar-active:#FFC107;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
+
+/* Sidebar */
+.sidebar{width:220px;background:var(--sidebar);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
+.sidebar-logo{padding:20px 16px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;gap:10px}
+.sidebar-logo .icon{width:36px;height:36px;background:linear-gradient(135deg,#FFC107,#1565C0);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.sidebar-logo .title{color:#fff;font-weight:700;font-size:0.9rem;line-height:1.2}
+.sidebar-logo .sub{color:rgba(255,255,255,0.5);font-size:0.7rem}
+.sidebar-section{padding:16px 16px 6px;font-size:0.65rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:1px}
+.table-btn{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;cursor:pointer;border:none;background:none;width:100%;text-align:left;color:var(--sidebar-text);font-size:0.85rem;transition:all 0.2s;border-left:3px solid transparent}
+.table-btn:hover{background:rgba(255,255,255,0.05);color:#fff}
+.table-btn.active{background:rgba(255,193,7,0.15);color:var(--sidebar-active);border-left-color:var(--sidebar-active)}
+.table-btn .count{background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:600}
+.table-btn.active .count{background:rgba(255,193,7,0.2);color:var(--sidebar-active)}
+
+/* Main */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:var(--card);border-bottom:1px solid var(--border);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.topbar-title{font-size:1.1rem;font-weight:700}
+.topbar-actions{display:flex;align-items:center;gap:12px}
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-weight:600;font-size:0.85rem;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px}
+.btn-yellow{background:#FFC107;color:#000}
+.btn-yellow:hover{background:#F9A825}
+.btn-outline{background:transparent;border:2px solid var(--border);color:var(--text2)}
+.btn-outline:hover{border-color:var(--yellow);color:var(--text)}
+.btn-sm{padding:5px 12px;font-size:0.78rem}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:0.72rem;font-weight:700}
+.badge-green{background:#E8F5E9;color:#2E7D32}
+.badge-blue{background:#E3F2FD;color:#1565C0}
+.badge-yellow{background:#FFF8E1;color:#F57F17}
+.badge-red{background:#FFEBEE;color:#C62828}
+.badge-gray{background:var(--bg);color:var(--text2)}
+
+/* Stats bar */
+.stats-bar{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;gap:20px;overflow-x:auto;flex-shrink:0}
+.stat-item{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.stat-icon{font-size:18px}
+.stat-val{font-size:1.1rem;font-weight:800;color:var(--yellow)}
+.stat-label{font-size:0.75rem;color:var(--text2)}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#4CAF50;animation:pulse 1.5s ease-in-out infinite;display:inline-block;margin-right:4px}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.3)}}
+
+/* Content */
+.content{flex:1;overflow-y:auto;padding:20px 24px}
+
+/* Table */
+.table-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.table-title{font-size:1.2rem;font-weight:700}
+.table-meta{font-size:0.82rem;color:var(--text2)}
+.search-box{padding:8px 14px;border:2px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:0.85rem;width:220px;transition:all 0.2s}
+.search-box:focus{outline:none;border-color:var(--yellow)}
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:0.82rem}
+thead{background:var(--bg);position:sticky;top:0;z-index:1}
+th{padding:12px 14px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text2);border-bottom:2px solid var(--border);white-space:nowrap}
+td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,193,7,0.04)}
+.null-val{color:var(--text2);font-style:italic;font-size:0.78rem}
+.mono{font-family:'JetBrains Mono',monospace;font-size:0.78rem}
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-top:1px solid var(--border);background:var(--card)}
+.page-info{font-size:0.82rem;color:var(--text2)}
+.page-btns{display:flex;gap:6px}
+
+/* Auto-refresh indicator */
+.refresh-bar{height:3px;background:var(--border);position:relative;overflow:hidden}
+.refresh-progress{height:100%;background:linear-gradient(90deg,var(--yellow),var(--blue));width:0%;transition:width linear}
+
+/* Empty state */
+.empty{text-align:center;padding:60px 20px;color:var(--text2)}
+.empty .icon{font-size:48px;margin-bottom:12px}
+
+/* Loading */
+.loading{text-align:center;padding:40px;color:var(--text2)}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--yellow);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Theme toggle */
+.theme-btn{width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--bg);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+.theme-btn:hover{border-color:var(--yellow)}
+
+/* Responsive */
+@media(max-width:768px){.sidebar{display:none}.stats-bar{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="icon">🛡️</div>
+    <div>
+      <div class="title">RakshaRide</div>
+      <div class="sub">Database Viewer</div>
+    </div>
+  </div>
+  <div class="sidebar-section">Tables</div>
+  <div id="tableList">
+    <div style="padding:20px;color:rgba(255,255,255,0.3);font-size:0.82rem">Loading...</div>
+  </div>
+  <div style="margin-top:auto;padding:16px;border-top:1px solid rgba(255,255,255,0.1)">
+    <a href="/" style="color:rgba(255,255,255,0.5);font-size:0.8rem;text-decoration:none">← Back to App</a>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="pageTitle">📊 Database Overview</div>
+    </div>
+    <div class="topbar-actions">
+      <span style="font-size:0.78rem;color:var(--text2)">
+        <span class="live-dot"></span>Auto-refresh: <span id="refreshCountdown">5s</span>
+      </span>
+      <button class="btn btn-yellow btn-sm" onclick="refreshAll()">🔄 Refresh Now</button>
+      <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+    </div>
+  </div>
+
+  <!-- Refresh Progress Bar -->
+  <div class="refresh-bar"><div class="refresh-progress" id="refreshBar"></div></div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar" id="statsBar">
+    <div class="loading" style="padding:8px">Loading stats...</div>
+  </div>
+
+  <!-- Content -->
+  <div class="content" id="mainContent">
+    <div id="overviewSection">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px" id="overviewCards"></div>
+    </div>
+    <div id="tableSection" style="display:none">
+      <div class="table-header">
+        <div>
+          <div class="table-title" id="tableTitle">Table</div>
+          <div class="table-meta" id="tableMeta"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." oninput="filterTable()">
+          <button class="btn btn-outline btn-sm" onclick="exportCSV()">⬇️ CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div id="tableContent"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+        <div class="pagination" id="pagination" style="display:none">
+          <div class="page-info" id="pageInfo"></div>
+          <div class="page-btns">
+            <button class="btn btn-outline btn-sm" id="prevBtn" onclick="changePage(-1)">← Prev</button>
+            <button class="btn btn-outline btn-sm" id="nextBtn" onclick="changePage(1)">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentTable = null;
+let currentPage = 1;
+let totalPages = 1;
+let allRows = [];
+let refreshInterval = null;
+let refreshTimer = 5;
+let tableData = {};
+
+// Theme
+function toggleTheme(){
+  const h=document.documentElement,t=h.getAttribute('data-theme')==='dark'?'light':'dark';
+  h.setAttribute('data-theme',t);
+  document.getElementById('themeBtn').textContent=t==='dark'?'☀️':'🌙';
+  localStorage.setItem('rr_theme',t);
+}
+(function(){
+  const t=localStorage.getItem('rr_theme')||'light';
+  document.documentElement.setAttribute('data-theme',t);
+  document.getElementById('themeBtn').textContent=t==='dark'?'☀️':'🌙';
+})();
+
+// Table icons
+const TABLE_ICONS = {
+  passengers:'👤', drivers:'🚗', rides:'🛣️', payments:'💳',
+  driver_documents:'📄', renter_requests:'🤝', ratings:'⭐',
+  otp_verification:'🔐', admins:'👑', sos_alerts:'🚨'
+};
+
+const TABLE_COLORS = {
+  passengers:'#1565C0', drivers:'#2E7D32', rides:'#E65100',
+  payments:'#6A1B9A', driver_documents:'#00838F', renter_requests:'#AD1457',
+  ratings:'#F57F17', otp_verification:'#37474F', admins:'#C62828', sos_alerts:'#B71C1C'
+};
+
+// Load tables list
+async function loadTables(){
+  const r = await fetch('/api/db/tables');
+  const d = await r.json();
+  if(!d.success) return;
+  tableData = {};
+  d.tables.forEach(t => tableData[t.name] = t.rows);
+  const list = document.getElementById('tableList');
+  list.innerHTML = d.tables.map(t => `
+    <button class="table-btn ${currentTable===t.name?'active':''}" onclick="loadTable('${t.name}')">
+      <span>${TABLE_ICONS[t.name]||'📋'} ${t.name}</span>
+      <span class="count">${t.rows}</span>
+    </button>`).join('');
+  if(!currentTable) renderOverview(d.tables);
+}
+
+// Render overview cards
+function renderOverview(tables){
+  document.getElementById('overviewSection').style.display='block';
+  document.getElementById('tableSection').style.display='none';
+  document.getElementById('pageTitle').textContent='📊 Database Overview';
+  const cards = document.getElementById('overviewCards');
+  cards.innerHTML = tables.map(t => `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;cursor:pointer;transition:all 0.2s;border-top:4px solid ${TABLE_COLORS[t.name]||'var(--yellow)'}"
+      onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,0.1)'"
+      onmouseout="this.style.transform='';this.style.boxShadow=''"
+      onclick="loadTable('${t.name}')">
+      <div style="font-size:32px;margin-bottom:8px">${TABLE_ICONS[t.name]||'📋'}</div>
+      <div style="font-size:1.6rem;font-weight:800;color:${TABLE_COLORS[t.name]||'var(--yellow)'}">${t.rows}</div>
+      <div style="font-weight:600;margin-top:4px">${t.name}</div>
+      <div style="font-size:0.75rem;color:var(--text2);margin-top:2px">rows</div>
+    </div>`).join('');
+}
+
+// Load table data
+async function loadTable(name, page=1){
+  currentTable = name;
+  currentPage = page;
+  document.getElementById('overviewSection').style.display='none';
+  document.getElementById('tableSection').style.display='block';
+  document.getElementById('pageTitle').textContent=`${TABLE_ICONS[name]||'📋'} ${name}`;
+  document.getElementById('tableTitle').textContent=name;
+  document.getElementById('tableContent').innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';
+  document.getElementById('pagination').style.display='none';
+
+  // Update sidebar active state
+  document.querySelectorAll('.table-btn').forEach(b=>{
+    b.classList.toggle('active', b.textContent.trim().includes(name));
+  });
+
+  const r = await fetch(`/api/db/table/${name}?page=${page}&per_page=25`);
+  const d = await r.json();
+  if(!d.success){
+    document.getElementById('tableContent').innerHTML=`<div class="empty"><div class="icon">⚠️</div><p>${d.message}</p></div>`;
+    return;
+  }
+
+  allRows = d.rows;
+  totalPages = d.pages;
+  document.getElementById('tableMeta').textContent=`${d.total} total rows • Page ${d.page} of ${d.pages}`;
+
+  renderTable(d.columns, d.rows);
+
+  if(d.pages > 1){
+    document.getElementById('pagination').style.display='flex';
+    document.getElementById('pageInfo').textContent=`Showing ${(page-1)*25+1}–${Math.min(page*25,d.total)} of ${d.total}`;
+    document.getElementById('prevBtn').disabled = page <= 1;
+    document.getElementById('nextBtn').disabled = page >= d.pages;
+  }
+}
+
+function renderTable(columns, rows){
+  if(rows.length === 0){
+    document.getElementById('tableContent').innerHTML='<div class="empty"><div class="icon">📭</div><p>No records found</p></div>';
+    return;
+  }
+  const thead = `<thead><tr>${columns.map(c=>`<th>${c}</th>`).join('')}</tr></thead>`;
+  const tbody = `<tbody>${rows.map(row=>`
+    <tr>${columns.map(col=>{
+      const val = row[col];
+      if(val === null || val === undefined) return `<td><span class="null-val">null</span></td>`;
+      if(typeof val === 'string' && val.startsWith('[') && val.includes('chars')) return `<td><span class="badge badge-gray">${val}</span></td>`;
+      if(col === 'status') return `<td>${getStatusBadge(val)}</td>`;
+      if(col === 'verification_status') return `<td>${getStatusBadge(val)}</td>`;
+      if(col === 'is_available') return `<td>${val?'<span class="badge badge-green">✅ Yes</span>':'<span class="badge badge-red">❌ No</span>'}</td>`;
+      if(col === 'role') return `<td><span class="badge badge-blue">${val}</span></td>`;
+      if(col.includes('_at') || col.includes('time')) return `<td class="mono" style="font-size:0.75rem">${val?new Date(val).toLocaleString():''}</td>`;
+      if(typeof val === 'number') return `<td class="mono">${val}</td>`;
+      const display = String(val).length > 40 ? String(val).substring(0,40)+'…' : val;
+      return `<td title="${String(val).replace(/"/g,'&quot;')}">${display}</td>`;
+    }).join('')}</tr>`).join('')}</tbody>`;
+  document.getElementById('tableContent').innerHTML=`<div style="overflow-x:auto"><table>${thead}${tbody}</table></div>`;
+}
+
+function getStatusBadge(val){
+  const map = {
+    'active':'badge-green','completed':'badge-blue','pending':'badge-yellow',
+    'cancelled':'badge-red','verified':'badge-green','VERIFIED':'badge-green',
+    'PENDING':'badge-yellow','APPROVED':'badge-green','REJECTED':'badge-red',
+    'pending_verification':'badge-yellow','available':'badge-green'
+  };
+  const cls = map[val] || 'badge-gray';
+  return `<span class="badge ${cls}">${val}</span>`;
+}
+
+function filterTable(){
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  if(!q){ renderTable(Object.keys(allRows[0]||{}), allRows); return; }
+  const filtered = allRows.filter(row=>
+    Object.values(row).some(v=>String(v||'').toLowerCase().includes(q))
+  );
+  renderTable(Object.keys(allRows[0]||{}), filtered);
+}
+
+function changePage(dir){
+  const newPage = currentPage + dir;
+  if(newPage < 1 || newPage > totalPages) return;
+  loadTable(currentTable, newPage);
+}
+
+function exportCSV(){
+  if(!allRows.length) return;
+  const cols = Object.keys(allRows[0]);
+  const csv = [cols.join(','), ...allRows.map(r=>cols.map(c=>JSON.stringify(r[c]??'')).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = `${currentTable}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// Load stats
+async function loadStats(){
+  const r = await fetch('/api/db/stats');
+  const d = await r.json();
+  if(!d.success) return;
+  const s = d.stats;
+  const time = new Date(d.timestamp).toLocaleTimeString();
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat-item"><span class="stat-icon">👤</span><div><div class="stat-val">${s.passengers||0}</div><div class="stat-label">Passengers</div></div></div>
+    <div class="stat-item"><span class="stat-icon">🚗</span><div><div class="stat-val">${s.drivers||0}</div><div class="stat-label">Drivers</div></div></div>
+    <div class="stat-item"><span class="stat-icon">✅</span><div><div class="stat-val">${s.verified_drivers||0}</div><div class="stat-label">Verified</div></div></div>
+    <div class="stat-item"><span class="stat-icon">🟢</span><div><div class="stat-val">${s.available_drivers||0}</div><div class="stat-label">Available</div></div></div>
+    <div class="stat-item"><span class="stat-icon">🛣️</span><div><div class="stat-val">${s.rides||0}</div><div class="stat-label">Total Rides</div></div></div>
+    <div class="stat-item"><span class="stat-icon">🚦</span><div><div class="stat-val">${s.active_rides||0}</div><div class="stat-label">Active Now</div></div></div>
+    <div class="stat-item"><span class="stat-icon">💰</span><div><div class="stat-val">₹${s.total_revenue||0}</div><div class="stat-label">Revenue</div></div></div>
+    <div class="stat-item"><span class="stat-icon">📄</span><div><div class="stat-val">${s.driver_documents||0}</div><div class="stat-label">Documents</div></div></div>
+    <div style="margin-left:auto;font-size:0.72rem;color:var(--text2);white-space:nowrap;align-self:center">Updated: ${time}</div>`;
+}
+
+// Auto-refresh
+function startAutoRefresh(){
+  refreshTimer = 5;
+  const bar = document.getElementById('refreshBar');
+  const countdown = document.getElementById('refreshCountdown');
+  clearInterval(refreshInterval);
+  refreshInterval = setInterval(()=>{
+    refreshTimer--;
+    countdown.textContent = refreshTimer + 's';
+    bar.style.width = ((5-refreshTimer)/5*100) + '%';
+    bar.style.transition = 'width 1s linear';
+    if(refreshTimer <= 0){
+      refreshAll();
+      refreshTimer = 5;
+      bar.style.transition = 'none';
+      bar.style.width = '0%';
+    }
+  }, 1000);
+}
+
+async function refreshAll(){
+  await Promise.all([loadStats(), loadTables()]);
+  if(currentTable) loadTable(currentTable, currentPage);
+}
+
+// Init
+loadStats();
+loadTables();
+startAutoRefresh();
+</script>
+</body>
+</html>

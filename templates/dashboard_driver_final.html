@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Dashboard | RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --primary: #003366;
+            --secondary: #ffcc00;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .card { background: var(--card); border-radius: 24px; padding: 30px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .profile-img { width: 120px; height: 120px; border-radius: 20px; object-fit: cover; border: 4px solid var(--secondary); }
+        .status-badge { padding: 6px 16px; border-radius: 50px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; }
+        .status-verified { background: #d1fae5; color: #065f46; }
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .form-label { display: block; font-weight: 700; font-size: 0.85rem; margin-bottom: 8px; color: var(--primary); }
+        .form-input { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 12px; margin-bottom: 15px; }
+        .btn { padding: 12px 24px; border-radius: 12px; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+        .doc-item { display: flex; align-items: center; justify-content: space-between; background: #f1f5f9; padding: 15px; border-radius: 12px; margin-bottom: 10px; }
+        .qr-card { text-align: center; }
+        .qr-img { width: 200px; height: 200px; margin: 0 auto 15px; border: 2px solid var(--secondary); border-radius: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1 style="font-family: 'Outfit'; color: var(--primary);">Official Driver Dashboard</h1>
+                <p style="color: var(--text-muted);">Welcome back, {{ driver.name }}</p>
+            </div>
+            <a href="/logout" class="btn btn-outline">Logout</a>
+        </div>
+
+        <div class="grid">
+            <!-- Profile Section -->
+            <div class="card">
+                <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 25px;">
+                    <img src="{{ url_for('static', filename='uploads/profile/' + driver.profile_image) if driver.profile_image else 'https://via.placeholder.com/150' }}" class="profile-img">
+                    <div>
+                        <h2 style="font-family: 'Outfit';">{{ driver.name }}</h2>
+                        <p style="font-size: 0.85rem; color: var(--text-muted);">{{ driver.email }}</p>
+                        <div style="margin-top: 10px;">
+                            <span class="status-badge {% if driver.status == 'verified' %}status-verified{% else %}status-pending{% endif %}">
+                                {{ driver.status }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="border-top: 1px solid #eee; padding-top: 20px;">
+                    <p><strong>Phone:</strong> {{ driver.phone }}</p>
+                    <p><strong>Type:</strong> {{ driver.driver_type.capitalize() }}</p>
+                    <p><strong>Vehicle:</strong> {{ driver.vehicle_details or 'Registration Pending' }}</p>
+                </div>
+
+                {% if driver.qr_code %}
+                <div class="qr-card" style="margin-top: 30px;">
+                    <p style="font-weight: 800; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Official Security QR</p>
+                    <img src="{{ url_for('static', filename='uploads/qr/' + driver.qr_code) }}" class="qr-img">
+                    <p style="font-size: 0.75rem;">Identity verified by RakshaRide Authority</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Documents Section -->
+            <div class="card">
+                <h3 style="font-family: 'Outfit'; margin-bottom: 20px;">Vault Documents</h3>
+                
+                {% if driver.driver_type == 'owner' %}
+                <form action="/driver/upload" method="POST" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label class="form-label">Profile Photo</label>
+                        <input type="file" name="profile_photo" class="form-input">
+                    </div>
+                    <div class="form-group mt-4">
+                        <label class="form-label">Aadhar Card</label>
+                        <input type="file" name="aadhar" class="form-input" {% if not docs or not docs.aadhar %}required{% endif %}>
+                    </div>
+                    <div class="form-group mt-2">
+                        <label class="form-label">Driving License</label>
+                        <input type="file" name="license" class="form-input" {% if not docs or not docs.license %}required{% endif %}>
+                    </div>
+                    <div class="form-group mt-2">
+                        <label class="form-label">Registration Certificate (RC)</label>
+                        <input type="file" name="rc" class="form-input" {% if not docs or not docs.rc %}required{% endif %}>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Upload & Verify Vault</button>
+                </form>
+                {% else %}
+                <div class="alert alert-info" style="font-size: 0.8rem; margin-bottom: 20px;">
+                    🔒 Access Control: Renters have <strong>View-Only</strong> access to system documents. Contact the vehicle owner for document updates.
+                </div>
+                <div class="doc-item">
+                    <span>Aadhar Card</span>
+                    <span style="color: var(--success); font-weight: 800;">{% if docs and docs.aadhar %}VIEWABLE ✅{% else %}PENDING ⏳{% endif %}</span>
+                </div>
+                <div class="doc-item">
+                    <span>Driving License</span>
+                    <span style="color: var(--success); font-weight: 800;">{% if docs and docs.license %}VIEWABLE ✅{% else %}PENDING ⏳{% endif %}</span>
+                </div>
+                <div class="doc-item">
+                    <span>Registration (RC)</span>
+                    <span style="color: var(--success); font-weight: 800;">{% if docs and docs.rc %}VIEWABLE ✅{% else %}PENDING ⏳{% endif %}</span>
+                </div>
+                {% endif %}
+
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 30px; text-align: center;">
+                    System Status: {% if driver.status == 'verified' %}✅ All documents verified. QR active.{% else %}⏳ Documents awaiting verification.{% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RakshaRide — Safe, Verified Rides</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/raksharide.css">
+<style>
+.hero-bg{background:linear-gradient(135deg,#FFFDE7 0%,#E3F2FD 60%,#EDE7F6 100%)}
+[data-theme="dark"] .hero-bg{background:linear-gradient(135deg,#0D1117 0%,#161B22 60%,#1C2333 100%)}
+.floating-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:16px 20px;box-shadow:0 8px 32px var(--shadow);display:flex;align-items:center;gap:12px;
+  position:absolute;animation:heroFloat 4s ease-in-out infinite}
+.floating-card:nth-child(2){animation-delay:-2s}
+.stat-big{font-size:2.5rem;font-weight:900;background:linear-gradient(135deg,var(--yellow),var(--blue));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.how-step{display:flex;gap:20px;align-items:flex-start;padding:24px;
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  transition:var(--transition)}
+.how-step:hover{border-color:var(--yellow);transform:translateX(8px)}
+.how-num{width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--yellow),var(--blue));
+  color:#000;font-weight:800;font-size:1.1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+</style>
+</head>
+<body>
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="container">
+    <a href="/" class="nav-logo">
+      <div class="logo-icon">🛡️</div>
+      <div class="logo-text"><span>Raksha</span><span>Ride</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#how" class="nav-link">How It Works</a>
+      <a href="#stats" class="nav-link">Stats</a>
+      <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme" id="themeBtn">🌙</button>
+    </div>
+    <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
+  </div>
+</nav>
+
+<!-- MOBILE SIDEBAR -->
+<div class="mobile-sidebar" id="mobileSidebar">
+  <div class="mobile-sidebar-overlay" onclick="toggleMobileMenu()"></div>
+  <div class="mobile-sidebar-panel">
+    <div class="nav-logo" style="margin-bottom:24px">
+      <div class="logo-icon">🛡️</div>
+      <div class="logo-text"><span>Raksha</span><span>Ride</span></div>
+    </div>
+    <a href="#features" class="sidebar-link" onclick="toggleMobileMenu()"><span class="icon">⭐</span><span class="label">Features</span></a>
+    <a href="#how" class="sidebar-link" onclick="toggleMobileMenu()"><span class="icon">📋</span><span class="label">How It Works</span></a>
+    <a href="#stats" class="sidebar-link" onclick="toggleMobileMenu()"><span class="icon">📊</span><span class="label">Stats</span></a>
+    <div class="divider"></div>
+    <a href="/login/driver" class="sidebar-link"><span class="icon">🚗</span><span class="label">Driver Login</span></a>
+    <a href="/login/passenger" class="sidebar-link"><span class="icon">👤</span><span class="label">Passenger Login</span></a>
+  </div>
+</div>
+
+<!-- HERO -->
+<section class="hero hero-bg wave-section">
+  <div class="container">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center">
+      <div class="hero-content slide-in-left">
+        <div class="hero-badge">🛡️ Verified & Safe Platform</div>
+        <h1 class="hero-title">
+          Your Ride,<br>
+          <span class="highlight">Your Safety</span><br>
+          Our Promise
+        </h1>
+        <p class="hero-desc">
+          Connect with verified drivers, track your journey in real-time, 
+          and pay securely. RakshaRide makes every trip safe and transparent.
+        </p>
+        <div class="hero-actions">
+          <a href="#main-boxes" class="btn btn-yellow btn-lg">🚀 Get Started</a>
+          <a href="#how" class="btn btn-outline btn-lg">📖 How It Works</a>
+        </div>
+      </div>
+      <div class="hero-visual" style="position:relative;height:400px">
+        <div style="font-size:180px;text-align:center;line-height:1" class="hero-float">🚗</div>
+        <div class="floating-card" style="top:20px;right:0">
+          <span style="font-size:24px">✅</span>
+          <div><div style="font-weight:700;font-size:0.9rem">Verified Driver</div><div style="font-size:0.78rem;color:var(--text2)">Documents checked</div></div>
+        </div>
+        <div class="floating-card" style="bottom:40px;left:0">
+          <span style="font-size:24px">📍</span>
+          <div><div style="font-weight:700;font-size:0.9rem">Live Tracking</div><div style="font-size:0.78rem;color:var(--text2)">Real-time GPS</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <svg class="wave-svg" viewBox="0 0 1440 80" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,40 Q360,80 720,40 T1440,40 L1440,80 L0,80 Z" fill="var(--bg)"/>
+  </svg>
+</section>
+
+<!-- MAIN BOXES -->
+<section id="main-boxes" style="padding:80px 0;background:var(--bg)">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-tag">Get Started</div>
+      <h2 class="section-title">Choose Your Role</h2>
+      <p class="section-desc">Login or register as a Driver or Passenger to get started with RakshaRide</p>
+    </div>
+    <div class="user-boxes">
+      <!-- DRIVER BOX -->
+      <div class="user-box fade-in">
+        <span class="box-icon">🚗</span>
+        <h2 class="box-title">I'm a Driver</h2>
+        <p class="box-desc">Register as a verified driver, upload your documents, get your unique QR code, and start earning with RakshaRide.</p>
+        <div class="box-btns">
+          <a href="/login/driver" class="btn btn-yellow btn-lg btn-full">🔐 Driver Login</a>
+          <a href="/register/driver/new" class="btn btn-blue btn-lg btn-full">📝 Register as Driver</a>
+        </div>
+      </div>
+      <!-- PASSENGER BOX -->
+      <div class="user-box fade-in" style="animation-delay:0.2s">
+        <span class="box-icon">👤</span>
+        <h2 class="box-title">I'm a Passenger</h2>
+        <p class="box-desc">Scan a driver's QR code, verify their details, track your ride in real-time, and pay securely after every trip.</p>
+        <div class="box-btns">
+          <a href="/login/passenger" class="btn btn-yellow btn-lg btn-full">🔐 Passenger Login</a>
+          <a href="/register/passenger" class="btn btn-blue btn-lg btn-full">📝 Register as Passenger</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" class="section wave-section" style="background:var(--bg2)">
+  <svg class="wave-svg-top" viewBox="0 0 1440 60" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,30 Q360,60 720,30 T1440,30 L1440,0 L0,0 Z" fill="var(--bg)"/>
+  </svg>
+  <div class="container" style="padding-top:40px">
+    <div class="section-header">
+      <div class="section-tag">Why RakshaRide</div>
+      <h2 class="section-title">Everything You Need</h2>
+      <p class="section-desc">A complete, secure, and modern ride-sharing platform built for safety and convenience</p>
+    </div>
+    <div class="grid-3">
+      <div class="feature-card"><div class="f-icon" style="background:var(--yellow-light)">🔐</div><div class="f-title">Verified Drivers</div><div class="f-desc">All drivers verified with Aadhaar, license, and background checks before they can drive</div></div>
+      <div class="feature-card"><div class="f-icon" style="background:var(--blue-light)">📍</div><div class="f-title">Real-Time GPS</div><div class="f-desc">Live tracking for both driver and passenger throughout the entire journey</div></div>
+      <div class="feature-card"><div class="f-icon" style="background:#E8F5E9">📱</div><div class="f-title">QR Scanner</div><div class="f-desc">Scan driver's unique QR code to verify identity and start your ride instantly</div></div>
+      <div class="feature-card"><div class="f-icon" style="background:#FFF3E0">💳</div><div class="f-title">Secure Payments</div><div class="f-desc">Pay via UPI QR code after ride completion. No cash handling required</div></div>
+      <div class="feature-card"><div class="f-icon" style="background:#F3E5F5">📧</div><div class="f-title">Email Alerts</div><div class="f-desc">Instant email notifications for registration, verification, and ride updates</div></div>
+      <div class="feature-card"><div class="f-icon" style="background:#E0F7FA">⭐</div><div class="f-title">Rating System</div><div class="f-desc">Rate your driver after every ride to maintain quality and safety standards</div></div>
+    </div>
+  </div>
+  <svg class="wave-svg" viewBox="0 0 1440 60" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,30 Q360,0 720,30 T1440,30 L1440,60 L0,60 Z" fill="var(--bg)"/>
+  </svg>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" class="section" style="background:var(--bg)">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-tag">Simple Process</div>
+      <h2 class="section-title">How It Works</h2>
+      <p class="section-desc">Get started in minutes with our simple, secure process</p>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start">
+      <div>
+        <h3 style="margin-bottom:20px;color:var(--yellow-dark)">🚗 For Drivers</h3>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="how-step"><div class="how-num">1</div><div><strong>Register & Upload Documents</strong><p style="font-size:0.88rem;margin-top:4px">Fill details, upload Aadhaar, license, RC book and selfie</p></div></div>
+          <div class="how-step"><div class="how-num">2</div><div><strong>Get Verified</strong><p style="font-size:0.88rem;margin-top:4px">Admin verifies your documents and approves your account</p></div></div>
+          <div class="how-step"><div class="how-num">3</div><div><strong>Receive Unique QR Code</strong><p style="font-size:0.88rem;margin-top:4px">Get your unique driver QR code to share with passengers</p></div></div>
+          <div class="how-step"><div class="how-num">4</div><div><strong>Start Earning</strong><p style="font-size:0.88rem;margin-top:4px">Accept rides, track GPS, and receive payments via QR</p></div></div>
+        </div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:20px;color:var(--blue)">👤 For Passengers</h3>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="how-step"><div class="how-num">1</div><div><strong>Register & Verify</strong><p style="font-size:0.88rem;margin-top:4px">Create account and verify with OTP sent to your email</p></div></div>
+          <div class="how-step"><div class="how-num">2</div><div><strong>Scan Driver QR</strong><p style="font-size:0.88rem;margin-top:4px">Scan the driver's QR code to see their verified profile</p></div></div>
+          <div class="how-step"><div class="how-num">3</div><div><strong>Confirm & Start Ride</strong><p style="font-size:0.88rem;margin-top:4px">Confirm driver details and start the ride with GPS tracking</p></div></div>
+          <div class="how-step"><div class="how-num">4</div><div><strong>Pay & Rate</strong><p style="font-size:0.88rem;margin-top:4px">Scan payment QR, pay via UPI, and rate your driver</p></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section id="stats" class="section wave-section" style="background:linear-gradient(135deg,var(--yellow-light),var(--blue-light))">
+  <div class="container">
+    <div class="grid-4" style="text-align:center">
+      <div><div class="stat-big" id="c1">0</div><div style="font-weight:600;color:var(--text2)">Verified Drivers</div></div>
+      <div><div class="stat-big" id="c2">0</div><div style="font-weight:600;color:var(--text2)">Happy Passengers</div></div>
+      <div><div class="stat-big" id="c3">0</div><div style="font-weight:600;color:var(--text2)">Rides Completed</div></div>
+      <div><div class="stat-big" id="c4">0</div><div style="font-weight:600;color:var(--text2)">Cities Covered</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer style="background:var(--bg2);border-top:1px solid var(--border);padding:48px 0 24px">
+  <div class="container">
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;margin-bottom:40px">
+      <div>
+        <div class="nav-logo" style="margin-bottom:16px">
+          <div class="logo-icon">🛡️</div>
+          <div class="logo-text"><span>Raksha</span><span>Ride</span></div>
+        </div>
+        <p style="font-size:0.9rem;max-width:280px">Safe, verified, and reliable ride-sharing platform connecting drivers and passengers across India.</p>
+      </div>
+      <div><h4 style="margin-bottom:16px">Drivers</h4>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <a href="/register/driver/new" class="nav-link" style="font-size:0.9rem">Register</a>
+          <a href="/login/driver" class="nav-link" style="font-size:0.9rem">Login</a>
+          <a href="#" class="nav-link" style="font-size:0.9rem">Documents</a>
+        </div>
+      </div>
+      <div><h4 style="margin-bottom:16px">Passengers</h4>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <a href="/register/passenger" class="nav-link" style="font-size:0.9rem">Register</a>
+          <a href="/login/passenger" class="nav-link" style="font-size:0.9rem">Login</a>
+          <a href="#" class="nav-link" style="font-size:0.9rem">Find Rides</a>
+        </div>
+      </div>
+      <div><h4 style="margin-bottom:16px">Support</h4>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <a href="#" class="nav-link" style="font-size:0.9rem">Help Center</a>
+          <a href="#" class="nav-link" style="font-size:0.9rem">Privacy Policy</a>
+          <a href="#" class="nav-link" style="font-size:0.9rem">Terms of Service</a>
+        </div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding-top:16px">
+      <p style="font-size:0.85rem">© 2024 RakshaRide. All rights reserved.</p>
+      <p style="font-size:0.85rem">Made with ❤️ for safe travel</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Theme
+function toggleTheme(){
+  const h=document.documentElement,t=h.getAttribute('data-theme')==='dark'?'light':'dark';
+  h.setAttribute('data-theme',t);
+  document.getElementById('themeBtn').textContent=t==='dark'?'☀️':'🌙';
+  localStorage.setItem('rr_theme',t);
+}
+(function(){
+  const t=localStorage.getItem('rr_theme')||'light';
+  document.documentElement.setAttribute('data-theme',t);
+  const b=document.getElementById('themeBtn');
+  if(b)b.textContent=t==='dark'?'☀️':'🌙';
+})();
+
+// Mobile menu
+function toggleMobileMenu(){
+  document.getElementById('mobileSidebar').classList.toggle('open');
+}
+
+// Counter animation
+function animateCounter(el,target,suffix=''){
+  let current=0;const step=Math.ceil(target/60);
+  const timer=setInterval(()=>{
+    current=Math.min(current+step,target);
+    el.textContent=current.toLocaleString()+suffix;
+    if(current>=target)clearInterval(timer);
+  },30);
+}
+const observer=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      animateCounter(document.getElementById('c1'),1240,'+');
+      animateCounter(document.getElementById('c2'),8500,'+');
+      animateCounter(document.getElementById('c3'),42000,'+');
+      animateCounter(document.getElementById('c4'),15,'+');
+      observer.disconnect();
+    }
+  });
+},{threshold:0.3});
+const statsEl=document.getElementById('stats');
+if(statsEl)observer.observe(statsEl);
+
+// Smooth scroll
+document.querySelectorAll('a[href^="#"]').forEach(a=>{
+  a.addEventListener('click',e=>{
+    const t=document.querySelector(a.getAttribute('href'));
+    if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth',block:'start'});}
+  });
+});
+
+// Toast helper
+function showToast(msg,type='info'){
+  const c=document.getElementById('toastContainer');
+  const icons={info:'ℹ️',success:'✅',error:'❌',warn:'⚠️'};
+  const t=document.createElement('div');
+  t.className='toast';
+  t.innerHTML=`<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(()=>t.remove(),4000);
+}
+</script>
+</body>
+</html>

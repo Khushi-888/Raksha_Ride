@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RakshaRide — Admin Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 48px 40px;
+            width: 380px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .logo .shield {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .logo h1 {
+            color: #fff;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .logo p {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            margin-top: 6px;
+            text-transform: uppercase;
+        }
+
+        label {
+            display: block;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .field {
+            margin-bottom: 18px;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: border-color .2s;
+        }
+
+        input:focus {
+            border-color: #f5576c;
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        .btn {
+            width: 100%;
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity .2s, transform .1s;
+            margin-top: 8px;
+        }
+
+        .btn:hover {
+            opacity: .9;
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .err {
+            background: rgba(245, 87, 108, 0.15);
+            border: 1px solid rgba(245, 87, 108, 0.4);
+            color: #fca5a5;
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 13px;
+            margin-top: 12px;
+            display: none;
+            text-align: center;
+        }
+
+        .info {
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
+            padding: 14px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            text-align: center;
+            margin-top: 24px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div class="logo">
+            <span class="shield">🛡️</span>
+            <h1>RakshaRide Admin</h1>
+            <p>KYC Verification Portal</p>
+            <span class="badge">⚡ Secure Admin Access</span>
+        </div>
+
+        <div class="field">
+            <label for="username">Username</label>
+            <input id="username" type="text" placeholder="admin" autocomplete="username" />
+        </div>
+        <div class="field">
+            <label for="password">Password</label>
+            <input id="password" type="password" placeholder="••••••••••" autocomplete="current-password" />
+        </div>
+
+        <button class="btn" onclick="doLogin()" id="loginBtn">🔐 Login to Admin Panel</button>
+        <div class="err" id="errBox"></div>
+
+        <div class="info">
+            🔒 Default: <strong>admin</strong> / <strong>admin@RakshaRide2024</strong><br />
+            Change password after first login.
+        </div>
+    </div>
+
+    <script>
+        async function doLogin() {
+            const btn = document.getElementById('loginBtn');
+            const err = document.getElementById('errBox');
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            if (!username || !password) { showErr('Please fill in all fields'); return; }
+            btn.textContent = '⏳ Authenticating…'; btn.disabled = true; err.style.display = 'none';
+            try {
+                const res = await fetch('/api/admin/login', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const d = await res.json();
+                if (d.success) { window.location.href = '/admin/dashboard'; }
+                else { showErr(d.message || 'Invalid credentials'); }
+            } catch (e) { showErr('Network error. Is the server running?'); }
+            finally { btn.textContent = '🔐 Login to Admin Panel'; btn.disabled = false; }
+        }
+        function showErr(msg) {
+            const e = document.getElementById('errBox');
+            e.textContent = msg; e.style.display = 'block';
+        }
+        document.addEventListener('keydown', e => e.key === 'Enter' && doLogin());
+    </script>
+</body>
+
+</html>

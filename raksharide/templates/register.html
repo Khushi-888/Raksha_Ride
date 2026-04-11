@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-page">
+    <div class="auth-card animate-fade" style="max-width: 650px;">
+        <div class="auth-header">
+            <h2>Join the Fleet</h2>
+            <p>Become a RakshaRide Passenger or Partner Driver</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <i data-lucide="info" style="width: 18px;"></i>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('register') }}">
+            <div class="role-tabs">
+                <input type="radio" name="role" id="reg-passenger" value="passenger" style="display: none;" checked>
+                <label for="reg-passenger" class="role-tab active" id="rtab-p">
+                    <i data-lucide="smile" style="width: 16px; margin-right: 5px; vertical-align: middle;"></i> Passenger
+                </label>
+
+                <input type="radio" name="role" id="reg-driver" value="driver" style="display: none;">
+                <label for="reg-driver" class="role-tab" id="rtab-d">
+                    <i data-lucide="shield-check" style="width: 16px; margin-right: 5px; vertical-align: middle;"></i> Driver Partner
+                </label>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" name="name" class="form-input" required placeholder="John Doe">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Phone Number</label>
+                    <input type="tel" name="phone" class="form-input" required placeholder="+91 9876543210">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input type="email" name="email" class="form-input" required placeholder="name@email.com">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Security Password</label>
+                <input type="password" name="password" class="form-input" required placeholder="••••••••">
+            </div>
+
+            <!-- Driver Specific Section -->
+            <div id="driver-fields" style="display: none; border-top: 1px solid var(--border); padding-top: 30px; margin-top: 10px;">
+                <h3 style="font-size: 16px; color: var(--primary); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px;">Vehicle & License Details</h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="form-group">
+                        <label class="form-label">Vehicle Number</label>
+                        <input type="text" name="vehicle_number" class="form-input" placeholder="MH 01 AB 1234">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Vehicle Type</label>
+                        <select name="vehicle_type" class="form-input" style="appearance: none;">
+                            <option value="auto">Auto Riksha</option>
+                            <option value="bike">Bike / Scooty</option>
+                            <option value="car">Taxi / Cab</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Driving License Number</label>
+                    <input type="text" name="license_number" class="form-input" placeholder="DL-1234567890">
+                </div>
+            </div>
+
+            <button type="submit" class="btn-primary" style="margin-top: 20px;">
+                Create Account <i data-lucide="user-plus" style="width: 18px;"></i>
+            </button>
+        </form>
+
+        <div style="margin-top: 30px; text-align: center; color: var(--text-dim); font-size: 14px;">
+            Already a member? 
+            <a href="{{ url_for('login') }}" style="color: var(--primary); text-decoration: none; font-weight: 700;">Login here</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    const rtabP = document.getElementById('rtab-p');
+    const rtabD = document.getElementById('rtab-d');
+    const driverFields = document.getElementById('driver-fields');
+
+    rtabP.onclick = () => {
+        rtabP.classList.add('active');
+        rtabD.classList.remove('active');
+        driverFields.style.display = 'none';
+        document.querySelectorAll('#driver-fields input').forEach(i => i.removeAttribute('required'));
+    };
+
+    rtabD.onclick = () => {
+        rtabD.classList.add('active');
+        rtabP.classList.remove('active');
+        driverFields.style.display = 'block';
+        document.querySelectorAll('#driver-fields input').forEach(i => i.setAttribute('required', ''));
+    };
+</script>
+{% endblock %}

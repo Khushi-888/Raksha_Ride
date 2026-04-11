@@ -1,62 +1,102 @@
+"""
+RakshaRide - JWT Authentication Utilities
+Handles token generation, validation, and user extraction
+"""
+import jwt
+import sqlite3
 from datetime import datetime, timedelta
-from typing import Optional, Union
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-import database
+from functools import wraps
+from flask import request, jsonify, session
 
-import bcrypt
+JWT_SECRET = 'raksharide-jwt-secret-2024-secure'
+JWT_ALGORITHM = 'HS256'
+JWT_EXPIRY_HOURS = 24
+DB_PATH = 'database_enhanced.db'
 
-# Configuration
-SECRET_KEY = "raksha-ride-production-secret-key-2024"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
+def generate_token(user_id: int, user_type: str, name: str) -> str:
+    """Generate a JWT token for authenticated user"""
+    payload = {
+        'user_id': user_id,
+        'user_type': user_type,
+        'name': name,
+        'iat': datetime.utcnow(),
+        'exp': datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-def verify_password(plain_password: str, hashed_password: str):
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-def get_password_hash(password: str):
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(database.get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+def decode_token(token: str) -> dict | None:
+    """Decode and validate a JWT token. Returns payload or None."""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("id")
-        role: str = payload.get("role")
-        if user_id is None or role is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    
-    if role == "driver":
-        stmt = select(database.Driver).where(database.Driver.id == user_id)
-    else:
-        stmt = select(database.Passenger).where(database.Passenger.id == user_id)
-        
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
-    
-    if user is None:
-        raise credentials_exception
-    return {"user": user, "role": role}
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+
+def get_current_user():
+    """
+    Extract authenticated user from request.
+    Checks (in order):
+      1. Authorization: Bearer <token> header
+      2. X-Auth-Token header
+      3. Flask session (fallback for cookie-based auth)
+    Returns dict with user_id, user_type, name — or None.
+    """
+    # 1. Check Authorization header
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+        payload = decode_token(token)
+        if payload:
+            return payload
+
+    # 2. Check X-Auth-Token header
+    token = request.headers.get('X-Auth-Token', '')
+    if token:
+        payload = decode_token(token)
+        if payload:
+            return payload
+
+    # 3. Fallback: Flask session
+    if 'user_id' in session:
+        return {
+            'user_id': session['user_id'],
+            'user_type': session.get('user_type', ''),
+            'name': session.get('user_name') or session.get('name', '')
+        }
+
+    return None
+
+
+def require_auth(user_type: str = None):
+    """
+    Decorator factory for protecting routes.
+    Usage:
+        @require_auth()           — any logged-in user
+        @require_auth('passenger') — only passengers
+        @require_auth('driver')    — only drivers
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                return jsonify({
+                    "success": False,
+                    "message": "Authentication required. Please login.",
+                    "code": "AUTH_REQUIRED"
+                }), 401
+            if user_type and user.get('user_type') != user_type:
+                return jsonify({
+                    "success": False,
+                    "message": f"Access denied. {user_type.capitalize()} account required.",
+                    "code": "WRONG_ROLE"
+                }), 403
+            # Inject user into kwargs
+            kwargs['current_user'] = user
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator

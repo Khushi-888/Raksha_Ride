@@ -1,0 +1,275 @@
+
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Passenger Dashboard — RakshaRide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/raksha.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-30px)}to{opacity:1;transform:translateX(0)}}
+</style>
+</head>
+<body>
+<div class="toast-wrap" id="toasts"></div>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="container">
+    <a href="/" class="logo"><div class="logo-shield">🛡️</div><div class="logo-text"><span class="y">Raksha</span><span class="b">Ride</span></div></a>
+    <div class="nav-right">
+      <div id="rideBadge" class="hidden"><span class="badge badge-g pulse">🚦 Ride Active</span></div>
+      <button id="sosNavBtn" class="btn btn-sm btn-sos hidden" onclick="triggerSOS()">🚨 SOS</button>
+      <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+      <button class="btn btn-sm btn-ghost" onclick="doLogout()">Logout</button>
+      <button class="hamburger" onclick="toggleMobileSidebar()">☰</button>
+    </div>
+  </div>
+</nav>
+
+<!-- MOBILE SIDEBAR -->
+<div id="mobSidebarBg" style="display:none;position:fixed;inset:0;z-index:997;background:rgba(0,0,0,.5)" onclick="toggleMobileSidebar()"></div>
+<div id="mobSidebar" style="display:none;position:fixed;left:0;top:0;bottom:0;width:270px;z-index:998;background:var(--card);padding:20px 14px;overflow-y:auto;animation:slideInLeft .3s ease">
+  <div class="sidebar-user" style="margin-bottom:16px">
+    <div class="sidebar-avatar" id="mobAvatar">👤</div>
+    <div><div class="sidebar-name" id="mobName">Loading...</div><div class="sidebar-id" id="mobId">PAX-XXXXX</div></div>
+  </div>
+  <div class="divider"></div>
+  <button class="sidebar-link" onclick="showSec('overview');toggleMobileSidebar()"><span class="si">📊</span><span class="sl">Overview</span></button>
+  <button class="sidebar-link" onclick="showSec('profile');toggleMobileSidebar()"><span class="si">👤</span><span class="sl">Profile & Emergency</span></button>
+  <button class="sidebar-link" onclick="showSec('scanner');toggleMobileSidebar()"><span class="si">📱</span><span class="sl">Scan Driver QR</span></button>
+  <button class="sidebar-link" onclick="showSec('nearby');toggleMobileSidebar()"><span class="si">📍</span><span class="sl">Nearby Drivers</span></button>
+  <button class="sidebar-link" onclick="showSec('tracking');toggleMobileSidebar()"><span class="si">🗺️</span><span class="sl">Live Tracking</span></button>
+  <button class="sidebar-link" onclick="showSec('history');toggleMobileSidebar()"><span class="si">📜</span><span class="sl">Ride History</span></button>
+  <button class="sidebar-link" onclick="doLogout()"><span class="si">🚪</span><span class="sl">Logout</span></button>
+</div>
+
+<div class="dash-wrap">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-user">
+      <img id="sidebarAvatar" src="" class="sidebar-avatar" style="font-size:0" onerror="this.textContent='👤';this.style.fontSize='20px'">
+      <div><div class="sidebar-name" id="sidebarName">Loading...</div><div class="sidebar-id" id="sidebarId">PAX-XXXXX</div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="sidebar-sec">Main</div>
+    <button class="sidebar-link active" onclick="showSec('overview')" id="nav-overview"><span class="si">📊</span><span class="sl">Overview</span></button>
+    <button class="sidebar-link" onclick="showSec('profile')" id="nav-profile"><span class="si">👤</span><span class="sl">Profile & Emergency</span></button>
+    <div class="sidebar-sec">Ride</div>
+    <button class="sidebar-link" onclick="showSec('scanner')" id="nav-scanner"><span class="si">📱</span><span class="sl">Scan Driver QR</span></button>
+    <button class="sidebar-link" onclick="showSec('nearby')" id="nav-nearby"><span class="si">📍</span><span class="sl">Nearby Drivers</span></button>
+    <button class="sidebar-link" onclick="showSec('tracking')" id="nav-tracking"><span class="si">🗺️</span><span class="sl">Live Tracking</span></button>
+    <div class="sidebar-sec">History</div>
+    <button class="sidebar-link" onclick="showSec('history')" id="nav-history"><span class="si">📜</span><span class="sl">Ride History</span></button>
+    <button class="sidebar-link" onclick="doLogout()"><span class="si">🚪</span><span class="sl">Logout</span></button>
+  </aside>
+
+  <main class="dash-main">
+
+    <!-- ── OVERVIEW ── -->
+    <div id="sec-overview">
+      <div class="dash-hdr">
+        <div><div class="dash-title">Hello, <span id="paxFirst">Passenger</span>! 👋</div><div class="dash-sub">Ready for your next ride?</div></div>
+        <button class="btn btn-y" onclick="showSec('scanner')">📱 Scan Driver QR</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon si-y">🚗</div><div><div class="stat-val" id="st-rides">0</div><div class="stat-lbl">Total Rides</div></div></div>
+        <div class="stat-card"><div class="stat-icon si-b">💰</div><div><div class="stat-val" id="st-spent">₹0</div><div class="stat-lbl">Total Spent</div></div></div>
+        <div class="stat-card"><div class="stat-icon si-g">📏</div><div><div class="stat-val" id="st-km">0 km</div><div class="stat-lbl">Distance Traveled</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#FFEBEE">🚨</div><div><div class="stat-val" id="st-sos" style="font-size:1rem;color:var(--r)">SOS Ready</div><div class="stat-lbl">Emergency Alert</div></div></div>
+      </div>
+      <!-- Active ride banner -->
+      <div id="activeRideBanner" class="hidden" style="background:linear-gradient(135deg,var(--yl),var(--bl));border:2px solid var(--y);border-radius:var(--rad);padding:18px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div class="flex-c gap2"><span style="font-size:28px">🚦</span><div><div style="font-weight:700">Ride in Progress</div><div style="font-size:.85rem;color:var(--text2)" id="activeRideInfo">Driver connected</div></div></div>
+        <div class="flex-c gap1">
+          <button class="btn btn-y btn-sm" onclick="showSec('tracking')">📍 Track Ride</button>
+          <button class="btn btn-b btn-sm" onclick="endRide()">🏁 End Ride</button>
+          <button class="btn btn-r btn-sm" onclick="triggerSOS()">🚨 SOS</button>
+        </div>
+      </div>
+      <!-- Quick actions -->
+      <div class="grid3 mb3">
+        <div class="card" style="cursor:pointer;text-align:center" onclick="showSec('scanner')"><div style="font-size:36px;margin-bottom:8px">📱</div><div style="font-weight:600">Scan Driver QR</div><div style="font-size:.82rem;color:var(--text2);margin-top:4px">Connect with a driver</div></div>
+        <div class="card" style="cursor:pointer;text-align:center" onclick="showSec('nearby')"><div style="font-size:36px;margin-bottom:8px">📍</div><div style="font-weight:600">Nearby Drivers</div><div style="font-size:.82rem;color:var(--text2);margin-top:4px">Find drivers near you</div></div>
+        <div class="card" style="cursor:pointer;text-align:center;border-color:var(--r)" onclick="showSec('profile')"><div style="font-size:36px;margin-bottom:8px">🚨</div><div style="font-weight:600">Emergency Contact</div><div style="font-size:.82rem;color:var(--r);margin-top:4px">Set up SOS contact</div></div>
+      </div>
+      <div class="card-flat">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h3>📜 Recent Rides</h3>
+          <button class="btn btn-ghost btn-sm" onclick="showSec('history')">View All →</button>
+        </div>
+        <div id="recentRides"><div style="text-align:center;padding:28px;color:var(--text3)">No rides yet</div></div>
+      </div>
+    </div>
+
+    <!-- ── PROFILE & EMERGENCY ── -->
+    <div id="sec-profile" class="hidden">
+      <div class="dash-hdr"><div class="dash-title">👤 Profile & Emergency Contact</div></div>
+      <div class="grid2">
+        <div class="card-flat tc">
+          <div class="avatar-wrap" style="margin-bottom:14px">
+            <img id="profileAvatar" src="" class="avatar" style="width:120px;height:120px" onerror="this.src='https://ui-avatars.com/api/?name=Passenger&background=1565C0&color=fff&size=120'">
+          </div>
+          <h3 id="profileName">Loading...</h3>
+          <p style="font-size:.82rem;color:var(--text2);margin-top:4px" id="profileId">PAX-XXXXX</p>
+        </div>
+        <div>
+          <div class="card-flat mb3">
+            <h3 style="margin-bottom:16px">Personal Information</h3>
+            <div class="grid2">
+              <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="editName" placeholder="Full Name"></div>
+              <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="editPhone" placeholder="Phone Number"></div>
+              <div class="form-group" style="grid-column:1/-1"><label class="form-label">Email</label><input class="form-input" id="editEmail" type="email" readonly style="opacity:.7"></div>
+            </div>
+            <button class="btn btn-y" onclick="saveProfile()">💾 Save Changes</button>
+          </div>
+          <!-- EMERGENCY CONTACT -->
+          <div class="card-flat card-r">
+            <div class="flex-c gap2 mb3">
+              <span style="font-size:28px">🚨</span>
+              <div><h3 style="color:var(--r)">Emergency Contact</h3><p style="font-size:.83rem;color:var(--text2)">This person will be alerted when you press SOS</p></div>
+            </div>
+            <div class="grid2">
+              <div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" id="emName" placeholder="Parent / Guardian"></div>
+              <div class="form-group"><label class="form-label">Emergency Mobile</label><input class="form-input" id="emMobile" placeholder="10-digit mobile" type="tel"></div>
+              <div class="form-group" style="grid-column:1/-1"><label class="form-label">Emergency Email</label><input class="form-input" id="emEmail" type="email" placeholder="emergency@email.com"></div>
+            </div>
+            <button class="btn btn-full" style="background:var(--r);color:white" onclick="saveEmergency()">💾 Save Emergency Contact</button>
+            <div class="alert alert-warn mt2">⚠️ Set this before your ride. SOS will send your live location + driver details to this contact.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SCANNER ── -->
+    <div id="sec-scanner" class="hidden">
+      <div class="dash-hdr"><div class="dash-title">📱 Scan Driver QR</div></div>
+      <div class="grid2" style="align-items:start">
+        <div class="card-flat">
+          <h3 style="margin-bottom:14px;text-align:center">Point camera at driver's QR code</h3>
+          <div class="scanner-wrap" id="scannerWrap">
+            <video id="scanVideo" autoplay playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
+            <div class="scanner-ui">
+              <div style="position:relative">
+                <div class="scanner-frame"></div>
+                <div class="scanner-line"></div>
+              </div>
+            </div>
+          </div>
+          <div class="flex-c gap1 mt2">
+            <button class="btn btn-y btn-full" onclick="startScan()" id="startScanBtn">📷 Start Camera</button>
+            <button class="btn btn-out btn-full hidden" onclick="stopScan()" id="stopScanBtn">⏹ Stop</button>
+          </div>
+          <div class="divider"></div>
+          <div class="form-group">
+            <label class="form-label">Or Enter Driver ID Manually</label>
+            <div class="flex-c gap1">
+              <input class="form-input" id="manualId" placeholder="e.g. DRV-ABC123">
+              <button class="btn btn-b" onclick="lookupDriver()">🔍 Find</button>
+            </div>
+          </div>
+        </div>
+        <!-- Driver details panel -->
+        <div id="driverPanel" class="hidden">
+          <div class="card-flat">
+            <h3 style="margin-bottom:14px">✅ Driver Found</h3>
+            <div style="text-align:center;margin-bottom:18px">
+              <img id="foundAvatar" src="" style="width:100px;height:100px;border-radius:50%;border:4px solid var(--y);margin-bottom:10px;object-fit:cover" onerror="this.src='https://ui-avatars.com/api/?name=Driver&background=FFC107&color=000&size=100'">
+              <div style="font-size:1.15rem;font-weight:700" id="foundName"></div>
+              <div style="font-size:.82rem;color:var(--text2)" id="foundUid"></div>
+              <div class="mt1"><span class="badge badge-g" id="foundStatus">✅ Verified</span></div>
+            </div>
+            <div style="background:var(--bg);border-radius:var(--rads);padding:14px;margin-bottom:14px">
+              <div class="grid2" style="gap:10px;font-size:.86rem">
+                <div><span style="color:var(--text2)">Vehicle:</span><div style="font-weight:600" id="foundVehicle"></div></div>
+                <div><span style="color:var(--text2)">Type:</span><div style="font-weight:600" id="foundType"></div></div>
+                <div><span style="color:var(--text2)">Rating:</span><div style="font-weight:600" id="foundRating"></div></div>
+                <div><span style="color:var(--text2)">Rides:</span><div style="font-weight:600" id="foundRides"></div></div>
+              </div>
+            </div>
+            <!-- Driver documents for passenger -->
+            <div id="driverDocsForPax" style="margin-bottom:14px"></div>
+            <button class="btn btn-y btn-full btn-lg" onclick="confirmDriver()">✅ Confirm & Start Ride</button>
+            <button class="btn btn-ghost btn-full mt1" onclick="cancelDriver()">✕ Cancel</button>
+          </div>
+        </div>
+        <div id="scanPlaceholder" class="card-flat tc" style="padding:44px">
+          <div style="font-size:60px;margin-bottom:14px">🔍</div>
+          <h3>Scan a Driver QR</h3>
+          <p style="color:var(--text2);margin-top:8px">Start the camera and point it at a driver's QR code to see their verified profile</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── NEARBY DRIVERS ── -->
+    <div id="sec-nearby" class="hidden">
+      <div class="dash-hdr">
+        <div class="dash-title">📍 Nearby Drivers</div>
+        <button class="btn btn-y" onclick="loadNearby()">🔄 Refresh</button>
+      </div>
+      <div class="map-wrap mb3" style="height:280px"><div id="nearbyMap" style="height:100%;width:100%"></div></div>
+      <div class="flex-c gap2 mb2" style="flex-wrap:wrap">
+        <select class="form-select" style="width:auto" id="filterType" onchange="filterNearby()">
+          <option value="">All Vehicles</option><option value="Car">Car</option><option value="Bike">Bike</option><option value="Auto">Auto</option>
+        </select>
+        <select class="form-select" style="width:auto" id="filterDist">
+          <option value="5">Within 5 km</option><option value="10">Within 10 km</option><option value="20">Within 20 km</option>
+        </select>
+      </div>
+      <div id="nearbyList"><div style="text-align:center;padding:44px;color:var(--text3)"><div class="spinner" style="margin:0 auto 14px"></div>Loading nearby drivers...</div></div>
+    </div>
+
+    <!-- ── LIVE TRACKING ── -->
+    <div id="sec-tracking" class="hidden">
+      <div class="dash-hdr">
+        <div class="dash-title">🗺️ Live Tracking</div>
+        <div class="flex-c gap1">
+          <button class="btn btn-b hidden" onclick="endRide()" id="endRideBtn">🏁 End Ride</button>
+          <button class="btn btn-sos hidden" onclick="triggerSOS()" id="sosPanelBtn">🚨 SOS</button>
+        </div>
+      </div>
+      <div class="card-flat mb3">
+        <div class="track-stats">
+          <div class="track-stat"><div class="track-val" id="t-dist">0 km</div><div class="track-lbl">Distance</div></div>
+          <div class="track-stat"><div class="track-val" id="t-time">0 min</div><div class="track-lbl">Duration</div></div>
+          <div class="track-stat"><div class="track-val" id="t-fare">₹0</div><div class="track-lbl">Est. Fare</div></div>
+        </div>
+      </div>
+      <div class="map-wrap mb3" style="height:420px">
+        <div class="map-overlay">
+          <div class="map-chip">📍 <span id="trackStatus">No active ride</span></div>
+          <div class="map-chip hidden" id="driverChip">🚗 Driver Connected</div>
+        </div>
+        <div id="paxMap" style="height:100%;width:100%"></div>
+      </div>
+      <!-- Payment section (shown after ride ends) -->
+      <div id="paySection" class="hidden">
+        <div class="card-flat tc">
+          <h3 style="margin-bottom:14px">💳 Pay for Your Ride</h3>
+          <div style="font-size:2rem;font-weight:800;color:var(--yd);margin-bottom:8px" id="finalFare">₹0</div>
+          <p style="color:var(--text2);margin-bottom:18px">Scan the driver's payment QR to pay</p>
+          <div id="payQRDisplay" style="margin-bottom:18px"></div>
+          <!-- Rating -->
+          <div style="margin-bottom:18px">
+            <p style="font-weight:600;margin-bottom:8px">Rate your driver:</p>
+            <div id="ratingStars" style="font-size:28px;cursor:pointer">
+              <span onclick="setRating(1)">⭐</span><span onclick="setRating(2)">⭐</span>
+              <span onclick="setRating(3)">⭐</span><span onclick="setRating(4)">⭐</span><span onclick="setRating(5)">⭐</span>
+            </div>
+          </div>
+          <button class="btn btn-y btn-lg" onclick="confirmPayment()">✅ Payment Done & Rate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── RIDE HISTORY ── -->
+    <div id="sec-history" class="hidden">
+      <div class="dash-hdr"><div class="dash-title">📜 Ride History</div></div>
+      <div id="rideHistoryList"><div style="text-align:center;padding:44px;color:var(--text3)"><div style="font-size:44px;margin-bottom:10px">📭</div>No rides yet</div></div>
+    </div>
+
+  </main>
+</div>

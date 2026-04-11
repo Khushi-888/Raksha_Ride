@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard fade-in">
+    <div class="sidebar">
+        <div style="text-align: center; margin-bottom: 40px; border-bottom: 1px solid var(--border); padding-bottom: 30px;">
+            <div style="width: 100px; height: 100px; background: var(--bg-input); border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; border: 2px solid var(--primary);">
+                <i class="ph-fill ph-car-profile" style="font-size: 40px; color: var(--primary);"></i>
+            </div>
+            <h3 style="font-size: 20px;">{{ driver.name }}</h3>
+            <p style="color: var(--text-gray); font-size: 13px;">{{ driver.vehicle_type|title }} • Partner #{{ driver.id }}</p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+             <div style="background: rgba(16, 185, 129, 0.1); padding: 15px; border-radius: 12px; border: 1px solid var(--success);">
+                <p style="font-size: 10px; color: var(--success); text-transform: uppercase;">Availability</p>
+                <p style="color: var(--text-white); font-weight: 800; font-size: 14px;"><i class="ph-fill ph-circle"></i> {{ driver.availability_status|upper }}</p>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px; text-align: center;">
+             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 15px;">PARTNER QR CODE</p>
+             <div style="background: white; padding: 15px; border-radius: 16px; display: inline-block;">
+                {% if driver.qr_code_url %}
+                    <img src="{{ url_for('static', filename='qrcodes/' + driver.qr_code_url) }}" style="width: 160px; height: 160px;">
+                {% endif %}
+             </div>
+             <p style="color: var(--text-muted); font-size: 11px; margin-top: 15px; padding: 0 10px;">Display this to Passenger for Trip Synchronization</p>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-val">₹ 4,850</div>
+                <div class="stat-label">Verified Income (GPay)</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val">{{ driver.total_rides }}</div>
+                <div class="stat-label">Successful Deployments</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val">{{ driver.rating }} ★</div>
+                <div class="stat-label">Service Quality Index</div>
+            </div>
+        </div>
+
+        <!-- Incoming Requests -->
+        {% if requests %}
+            <div class="feature-card" style="border-left: 5px solid var(--primary);">
+                <h3 style="margin-bottom: 25px;"><i class="ph ph-bell-ringing"></i> Incoming Service Requests</h3>
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    {% for req in requests %}
+                    <div style="background: var(--bg-input); padding: 25px; border-radius: 18px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h4 style="font-size: 18px; margin-bottom: 5px;">{{ req.passenger_name }}</h4>
+                            <p style="color: var(--text-gray);">Trajectory: {{ req.start_location }} &rarr; {{ req.end_location }}</p>
+                            <p style="color: var(--primary); font-weight: 800; margin-top: 5px;">Estimated Fare: ₹{{ req.calculated_fare }}</p>
+                        </div>
+                        <a href="{{ url_for('accept_ride', ride_id=req.id) }}" class="btn btn-primary">Accept & Dispatch</a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Active Journey -->
+        {% for r in history if r.status == 'ongoing' %}
+        <div class="feature-card" style="border: 2.5px solid var(--success);">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+                <h3><i class="ph ph-navigation-arrow"></i> Active Journey Logic</h3>
+                <span style="background: var(--success); color: #000; padding: 5px 15px; border-radius: 50px; font-weight: 800; font-size: 12px;">IN PROGRESS</span>
+            </div>
+            <div id="d-map" style="height: 350px; border-radius: 20px; border: 1px solid var(--border); margin-bottom: 20px;"></div>
+            <p style="text-align: center; color: var(--text-gray);">GPS tracking is live. Keep your device active for route integrity.</p>
+        </div>
+        {% endfor %}
+
+        <div class="table-container">
+            <h3 style="padding: 25px;">Mission History</h3>
+            <table>
+                <thead>
+                    <tr><th>Passenger</th><th>Timeline</th><th>Income</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    {% for h in history if h.status == 'completed' %}
+                    <tr>
+                        <td><strong>{{ h.passenger_name }}</strong></td>
+                        <td>{{ h.created_at.strftime('%d %B, %H:%M') }}</td>
+                        <td style="color: var(--primary); font-weight: 900;">₹{{ h.calculated_fare }}</td>
+                        <td><span style="color: var(--success); font-weight: 800;"><i class="ph-fill ph-check-circle"></i> VERIFIED (GPAY)</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const mapEl = document.getElementById('d-map');
+        if (mapEl) {
+            const map = L.map('d-map').setView([18.5204, 73.8567], 15);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            const marker = L.marker([18.5204, 73.8567]).addTo(map);
+            
+            let lat = 18.5204;
+            setInterval(() => {
+                lat += 0.0002;
+                marker.setLatLng([lat, 73.8567]);
+                map.panTo([lat, 73.8567]);
+            }, 3000);
+        }
+    });
+</script>
+{% endblock %}

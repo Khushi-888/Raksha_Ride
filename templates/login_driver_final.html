@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partner Login | RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-animated-parent">
+    <div class="bg-animated"></div>
+    <div class="center-container">
+        <div class="card glass animate-fade-up" style="max-width: 450px; width: 100%; padding: 40px;">
+            <div class="header text-center mb-4">
+                <img src="/static/img/logo_premium.png" alt="Logo" style="height: 50px; margin-bottom: 15px;">
+                <h2 style="font-family: 'Outfit'; color: var(--primary);">Partner Login</h2>
+                <p style="font-size: 0.9rem; color: var(--text-muted);">Access your driver dashboard</p>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-error mb-4">{{ error }}</div>
+            {% endif %}
+
+            <form action="/login/driver" method="POST">
+                <div class="form-group">
+                    <label class="form-label">EMAIL ADDRESS 📧</label>
+                    <input type="email" name="email" class="form-input" placeholder="rajesh@partner.in" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">PASSWORD 🔑</label>
+                    <input type="password" name="password" class="form-input" placeholder="••••••" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; font-weight: 800; padding: 18px;">
+                    🔓 Secure Access
+                </button>
+            </form>
+
+            <p class="text-center mt-4">
+                New partner? <a href="/register/driver" style="font-weight: 700; color: var(--primary);">Register Here</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

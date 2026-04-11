@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Passenger Dashboard | RakshaRide</title>
+  <meta name="description" content="RakshaRide Passenger Dashboard - Find drivers, scan QR codes, track rides in real-time.">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <link rel="stylesheet" href="/static/css/raksharide.css">
+  <style>
+    .tab-panel { display: none; animation: fadeIn 0.35s ease; }
+    .tab-panel.active { display: block; }
+
+    /* Hero action card */
+    .scan-hero {
+      background: linear-gradient(135deg, var(--brand-secondary) 0%, #001a4d 100%);
+      border-radius: var(--radius-xl);
+      padding: 40px 32px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: var(--transition);
+      margin-bottom: 24px;
+      color: white;
+    }
+    .scan-hero:hover { transform: translateY(-4px); box-shadow: 0 24px 60px rgba(0,51,102,0.4); }
+    .scan-hero::before {
+      content: '';
+      position: absolute;
+      width: 320px; height: 320px; border-radius: 50%;
+      background: rgba(252,163,17,0.1);
+      top: -100px; right: -80px;
+    }
+    .scan-hero::after {
+      content: '';
+      position: absolute;
+      width: 200px; height: 200px; border-radius: 50%;
+      background: rgba(20,184,166,0.08);
+      bottom: -70px; left: 20%;
+    }
+    .scan-hero-icon {
+      font-size: 64px;
+      display: block;
+      margin-bottom: 18px;
+      position: relative; z-index: 1;
+      animation: float 3s ease-in-out infinite;
+    }
+    .scan-hero h2 {
+      font-family: var(--font-heading);
+      font-size: 28px; font-weight: 800;
+      margin-bottom: 10px;
+      position: relative; z-index: 1;
+    }
+    .scan-hero p {
+      opacity: 0.75; font-size: 15px;
+      position: relative; z-index: 1;
+      margin-bottom: 24px;
+    }
+    .scan-hero-btn {
+      background: var(--brand-primary);
+      color: #13111a;
+      border: none; border-radius: var(--radius);
+      padding: 14px 32px;
+      font-weight: 800; font-size: 16px;
+      cursor: pointer;
+      position: relative; z-index: 1;
+      transition: var(--transition);
+      display: inline-flex; align-items: center; gap: 10px;
+      box-shadow: 0 8px 24px rgba(252,163,17,0.4);
+    }
+    .scan-hero-btn:hover { background: var(--brand-primary-dark); transform: scale(1.04); }
+
+    /* QR Scanner Overlay */
+    .scanner-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.97);
+      z-index: 3000;
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 28px;
+    }
+    .scanner-overlay.open { display: flex; }
+    .scanner-title { font-family: var(--font-heading); font-size: 22px; font-weight: 700; color: white; text-align: center; }
+    .scanner-sub { font-size: 14px; color: rgba(255,255,255,0.55); text-align: center; margin-top: -16px; }
+
+    #reader-container {
+      width: min(85vw, 340px);
+      height: min(85vw, 340px);
+      position: relative;
+      border-radius: 24px;
+      overflow: hidden;
+    }
+    #reader { width: 100%; height: 100%; border-radius: 24px; overflow: hidden; }
+    #reader video { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Corner brackets */
+    .scanner-brackets {
+      position: absolute; inset: 0; pointer-events: none; z-index: 2;
+      border-radius: 24px;
+    }
+    .scanner-brackets::before,
+    .scanner-brackets::after {
+      content: '';
+      position: absolute;
+      width: 42px; height: 42px;
+      border-color: var(--brand-primary);
+      border-style: solid;
+    }
+    .scanner-brackets::before { top: 12px; left: 12px; border-width: 4px 0 0 4px; border-radius: 10px 0 0 0; }
+    .scanner-brackets::after { bottom: 12px; right: 12px; border-width: 0 4px 4px 0; border-radius: 0 0 10px 0; }
+
+    /* Scan line animation */
+    .scan-line-anim {
+      position: absolute;
+      left: 10%; right: 10%;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--brand-primary), transparent);
+      border-radius: 2px;
+      animation: scanLine 2.5s ease-in-out infinite;
+      z-index: 3;
+    }
+    @keyframes scanLine {
+      0%, 100% { top: 15%; opacity: 0.5; }
+      50% { top: 80%; opacity: 1; }
+    }
+
+    /* Driver verification card */
+    .driver-verify-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .driver-verify-header {
+      background: linear-gradient(135deg, var(--brand-secondary) 0%, #001a4d 100%);
+      padding: 24px;
+      display: flex; align-items: center; gap: 16px;
+      color: white;
+    }
+    .driver-verify-avatar {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      border: 3px solid var(--brand-primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; flex-shrink: 0; overflow: hidden;
+    }
+    .driver-verify-info { flex: 1; }
+    .driver-verify-name { font-family: var(--font-heading); font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+    .driver-verify-vehicle { font-size: 13px; opacity: 0.75; }
+    .driver-verify-rating { display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 700; color: var(--brand-primary); margin-top: 6px; }
+
+    /* Nearby driver cards */
+    .nearby-driver-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 12px;
+      transition: var(--transition);
+      cursor: pointer;
+    }
+    .nearby-driver-card:hover { border-color: var(--brand-primary); box-shadow: 0 4px 20px rgba(252,163,17,0.15); transform: translateY(-2px); }
+    .nd-avatar {
+      width: 52px; height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--brand-secondary) 0%, var(--brand-secondary-light) 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; color: white; flex-shrink: 0;
+    }
+    .nd-info { flex: 1; min-width: 0; }
+    .nd-name { font-weight: 800; font-size: 15px; color: var(--text-primary); }
+    .nd-vehicle { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+    .nd-rating { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--brand-primary-dark); margin-top: 4px; }
+    [data-theme="dark"] .nd-rating { color: var(--brand-primary); }
+    .nd-meta { text-align: right; flex-shrink: 0; }
+    .nd-distance { font-weight: 800; font-size: 14px; color: var(--text-primary); }
+    .nd-status { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: var(--radius-full); background: rgba(34,197,94,0.15); color: var(--success); margin-top: 4px; display: inline-block; }
+
+    /* Filter pills */
+    .filter-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+    .filter-pill {
+      padding: 7px 16px; border-radius: var(--radius-full);
+      border: 1.5px solid var(--border);
+      background: var(--bg-card);
+      font-size: 13px; font-weight: 700; color: var(--text-muted);
+      cursor: pointer; transition: var(--transition);
+    }
+    .filter-pill.active { border-color: var(--brand-primary); background: rgba(252,163,17,0.1); color: var(--brand-primary-dark); }
+    [data-theme="dark"] .filter-pill.active { color: var(--brand-primary); }
+    .filter-pill:hover { border-color: var(--brand-primary); }
+
+    /* Active ride card */
+    .ride-in-progress {
+      background: linear-gradient(135deg, #003366 0%, #001a4d 100%);
+      border-radius: var(--radius-xl);
+      padding: 28px;
+      color: white;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .ride-in-progress::before {
+      content: '';
+      position: absolute;
+      width: 280px; height: 280px; border-radius: 50%;
+      background: rgba(252,163,17,0.1);
+      top: -80px; right: -60px;
+    }
+
+    /* Profile section */
+    .profile-banner {
+      background: linear-gradient(135deg, var(--brand-secondary) 0%, #001a4d 100%);
+      border-radius: var(--radius-xl);
+      padding: 36px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      color: white;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .profile-banner::before {
+      content: '';
+      position: absolute;
+      width: 280px; height: 280px; border-radius: 50%;
+      background: rgba(252,163,17,0.1);
+      top: -80px; right: -60px;
+    }
+    .profile-ava {
+      width: 84px; height: 84px;
+      border-radius: 50%;
+      border: 4px solid var(--brand-primary);
+      background: rgba(255,255,255,0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 34px; flex-shrink: 0;
+      overflow: hidden;
+      position: relative; z-index: 1;
+    }
+    .profile-banner-info { flex: 1; position: relative; z-index: 1; }
+    .profile-banner-info h2 { font-family: var(--font-heading); font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+    .profile-banner-info p { opacity: 0.7; font-size: 14px; }
+
+    /* Map container live */
+    #liveMap {
+      width: 100%;
+      height: 380px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border-radius: var(--radius-lg);
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .live-grid {
+      position: absolute; inset: 0;
+      background-image: linear-gradient(var(--border) 1px, transparent 1px),
+                        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.3;
+    }
+    .live-marker {
+      position: absolute;
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      animation: float 3s ease-in-out infinite;
+    }
+    .live-marker .m-label {
+      background: var(--brand-primary); color: #13111a;
+      font-size: 11px; font-weight: 800;
+      padding: 3px 10px; border-radius: var(--radius-full);
+      white-space: nowrap;
+    }
+    .live-marker.driver .m-label { background: var(--brand-secondary-light); color: white; }
+    .live-marker .m-dot {
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--brand-primary);
+      box-shadow: 0 0 0 4px rgba(252,163,17,0.3);
+      animation: pulse-dot 2s infinite;
+    }
+    .live-marker.driver .m-dot { background: var(--brand-secondary-light); box-shadow: 0 0 0 4px rgba(0,77,153,0.3); }
+    .live-line {
+      position: absolute;
+      background: linear-gradient(var(--brand-primary), var(--brand-secondary-light));
+      width: 2px;
+      opacity: 0.5;
+      z-index: 0;
+    }
+
+    /* Verify modal */
+    .verify-driver-modal {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(12px);
+      z-index: 4000;
+      align-items: flex-end; justify-content: center;
+      padding: 20px;
+    }
+    .verify-driver-modal.open { display: flex; }
+    .verify-sheet {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl) var(--radius-xl) var(--radius-lg) var(--radius-lg);
+      width: 100%; max-width: 540px;
+      animation: slideUp 0.4s cubic-bezier(0.34,1.56,0.64,1);
+      overflow: hidden;
+    }
+    .verify-sheet-handle {
+      width: 40px; height: 4px;
+      background: var(--border-strong);
+      border-radius: 2px;
+      margin: 12px auto;
+    }
+    .verify-sheet-header {
+      background: linear-gradient(135deg, var(--brand-secondary) 0%, #001a4d 100%);
+      padding: 24px 28px;
+      color: white;
+      display: flex; align-items: center; gap: 16px;
+    }
+    .verify-sheet-body { padding: 24px 28px; }
+    .verify-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+    .verify-row:last-child { border-bottom: none; }
+    .verify-row-label { color: var(--text-muted); font-weight: 600; }
+    .verify-row-value { font-weight: 800; color: var(--text-primary); text-align: right; }
+    .verify-sheet-actions { padding: 0 28px 24px; display: grid; grid-template-columns: 1fr 2fr; gap: 12px; }
+
+    @media (max-width: 660px) {
+      .scan-hero { padding: 28px 20px; }
+      .scan-hero-icon { font-size: 48px; }
+      .scan-hero h2 { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- QR Scanner Overlay -->
+  <div class="scanner-overlay" id="scannerOverlay">
+    <div class="scanner-title"><i class="fa-solid fa-qrcode" style="color:var(--brand-primary);margin-right:10px;"></i>Scan Driver QR Code</div>
+    <p class="scanner-sub">Point camera at the driver's screen or printed QR</p>
+    <div id="reader-container">
+      <div class="scan-line-anim"></div>
+      <div class="scanner-brackets"></div>
+      <div id="reader"></div>
+    </div>
+    <button class="btn btn-ghost" style="color:white;border-color:rgba(255,255,255,0.3);" onclick="closeScanner()">
+      <i class="fa-solid fa-xmark"></i> Cancel
+    </button>
+  </div>
+
+  <!-- Driver Verify Bottom Sheet -->
+  <div class="verify-driver-modal" id="verifyModal">
+    <div class="verify-sheet">
+      <div class="verify-sheet-handle"></div>
+      <div class="verify-sheet-header" id="verifySheetHeader">
+        <div class="driver-verify-avatar" id="verifyDriverAvatar">🚗</div>
+        <div>
+          <div class="driver-verify-name" id="verifyDriverName">Driver Name</div>
+          <div class="driver-verify-vehicle" id="verifyDriverVehicle">Auto</div>
+          <div class="driver-verify-rating">
+            <i class="fa-solid fa-star"></i>
+            <span id="verifyDriverRating">5.0</span>
+            <span style="color:rgba(255,255,255,0.5);font-weight:400;font-size:12px;">(Driver rating)</span>
+          </div>
+        </div>
+      </div>
+      <div class="verify-sheet-body">
+        <div id="verifyRows">
+          <div class="verify-row"><span class="verify-row-label">Vehicle No.</span><span class="verify-row-value" id="verifyVehicleNum">—</span></div>
+          <div class="verify-row"><span class="verify-row-label">Contact</span><span class="verify-row-value" id="verifyContact">—</span></div>
+          <div class="verify-row"><span class="verify-row-label">Verification</span><span class="verify-row-value" id="verifyStatus2">—</span></div>
+          <div class="verify-row"><span class="verify-row-label">Total Rides</span><span class="verify-row-value" id="verifyTotalRides">—</span></div>
+        </div>
+      </div>
+      <div class="verify-sheet-actions">
+        <button class="btn btn-ghost btn-full" onclick="closeVerifyModal()">Cancel</button>
+        <button class="btn btn-primary btn-full" id="confirmRideBtn">
+          <i class="fa-solid fa-check-circle"></i> Confirm & Start Ride
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NAVBAR ─── -->
+  <nav class="navbar">
+    <div class="container" style="max-width:100%;padding:0 20px;">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <a href="/" class="logo-wrap">
+          <div class="logo-icon">🛡️</div>
+          <span class="logo-text">RAKSHARIDE</span>
+        </a>
+        <span style="font-size:12px;font-weight:700;color:var(--text-muted);padding:4px 10px;background:rgba(20,184,166,0.12);border-radius:var(--radius-full);border:1px solid rgba(20,184,166,0.25);color:var(--brand-accent);">
+          Passenger
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="theme-toggle" id="themeToggle"><i class="fa-solid fa-sun" id="themeIcon"></i></button>
+        <button class="btn btn-danger btn-sm" onclick="logout()">
+          <i class="fa-solid fa-right-from-bracket"></i>
+          <span class="mobile-hide">Logout</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Sidebar backdrop -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <!-- ── SIDEBAR ─── -->
+  <aside class="sidebar" id="sidebar">
+    <div style="padding:20px 16px 16px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--brand-accent),#0d9488);display:flex;align-items:center;justify-content:center;font-size:20px;color:white;flex-shrink:0;" id="sidebarAvatar">👤</div>
+        <div>
+          <div style="font-weight:800;font-size:14px;color:var(--text-primary);" id="sidebarName">Loading...</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Passenger</div>
+        </div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Main</div>
+      <button class="nav-item active" onclick="showTab('home')" data-tab="home"><i class="fa-solid fa-house"></i> Home</button>
+      <button class="nav-item" onclick="showTab('profile')" data-tab="profile"><i class="fa-solid fa-user-circle"></i> My Profile</button>
+      <div class="nav-section-label">Rides</div>
+      <button class="nav-item" onclick="showTab('scan')" data-tab="scan"><i class="fa-solid fa-qrcode"></i> Scan & Ride</button>
+      <button class="nav-item" onclick="showTab('nearby')" data-tab="nearby"><i class="fa-solid fa-map-pin"></i> Nearby Drivers</button>
+      <button class="nav-item" onclick="showTab('track')" data-tab="track"><i class="fa-solid fa-location-dot"></i> Live Tracking</button>
+      <button class="nav-item" onclick="showTab('history')" data-tab="history"><i class="fa-solid fa-clock-rotate-left"></i> Ride History</button>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn btn-danger btn-full btn-sm" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Sign Out</button>
+    </div>
+  </aside>
+
+  <!-- ── MAIN CONTENT ─── -->
+  <main class="main-content" id="mainContent">
+
+    <!-- ═══════ HOME TAB ═══════ -->
+    <div class="tab-panel active" id="tab-home">
+      <div class="page-header">
+        <h1 class="page-title">Hello, <span id="headName" style="color:var(--brand-accent)">Passenger</span> 👋</h1>
+        <p class="page-subtitle">Where would you like to go today?</p>
+      </div>
+
+      <!-- Active Ride Banner (hidden by default) -->
+      <div class="ride-in-progress hidden" id="activeRideBanner">
+        <div class="ride-live-badge" style="margin-bottom:16px;">
+          <span class="status-dot online"></span> RIDE IN PROGRESS
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:relative;z-index:1;">
+          <div style="font-size:40px;">🚗</div>
+          <div style="flex:1;">
+            <div style="font-family:var(--font-heading);font-size:20px;font-weight:800;margin-bottom:4px;" id="activeRideDriver">Driver Name</div>
+            <div style="font-size:13px;opacity:0.7;" id="activeRideVehicle">Auto • —</div>
+          </div>
+          <button class="btn btn-primary" onclick="showTab('track')">
+            <i class="fa-solid fa-location-dot"></i> Track Ride
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid" style="margin-bottom:24px;">
+        <div class="stat-card animate-slide-up delay-100">
+          <div class="stat-icon teal"><i class="fa-solid fa-route"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Total Trips</div>
+            <div class="stat-value" id="statTrips">0</div>
+          </div>
+        </div>
+        <div class="stat-card animate-slide-up delay-200">
+          <div class="stat-icon yellow"><i class="fa-solid fa-indian-rupee-sign"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Amount Spent</div>
+            <div class="stat-value" id="statSpent">₹0</div>
+          </div>
+        </div>
+        <div class="stat-card animate-slide-up delay-300">
+          <div class="stat-icon green"><i class="fa-solid fa-shield-check"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Safe Rides</div>
+            <div class="stat-value" id="statSafe">0</div>
+          </div>
+        </div>
+        <div class="stat-card animate-slide-up delay-400">
+          <div class="stat-icon blue"><i class="fa-solid fa-map-pin"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Nearby Drivers</div>
+            <div class="stat-value" id="statNearby">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scan hero -->
+      <div class="scan-hero" onclick="showTab('scan')">
+        <span class="scan-hero-icon">📱</span>
+        <h2>Scan Driver QR Code</h2>
+        <p>Instantly verify your driver's identity and start a safe journey</p>
+        <button class="scan-hero-btn" onclick="event.stopPropagation();openScanner()">
+          <i class="fa-solid fa-qrcode"></i> Open Scanner
+        </button>
+      </div>
+
+      <!-- Recent Activity Preview -->
+      <div class="section-card">
+        <div class="section-header">
+          <span class="section-title"><i class="fa-solid fa-clock-rotate-left" style="color:var(--brand-primary)"></i> Recent Trips</span>
+          <button class="btn btn-ghost btn-sm" onclick="showTab('history')">View All</button>
+        </div>
+        <div id="recentTripsPreview">
+          <div style="text-align:center;padding:40px;color:var(--text-muted);">
+            <div class="loading-spinner" style="margin:0 auto 14px;"></div>
+            Loading trips...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ PROFILE TAB ═══════ -->
+    <div class="tab-panel" id="tab-profile">
+      <div class="page-header">
+        <h1 class="page-title">My Profile</h1>
+        <p class="page-subtitle">Manage your passenger account.</p>
+      </div>
+
+      <div class="profile-banner">
+        <div class="profile-ava" id="profileAva">👤</div>
+        <div class="profile-banner-info">
+          <h2 id="profName">—</h2>
+          <p id="profEmail">—</p>
+          <p id="profPhone" style="margin-top:4px;">—</p>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="color:white;border-color:rgba(255,255,255,0.3);position:relative;z-index:1;" onclick="openEditProfile()">
+          <i class="fa-solid fa-pen"></i> Edit
+        </button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="section-card">
+          <div class="section-header"><span class="section-title">Account Details</span></div>
+          <div class="section-body">
+            <div style="display:flex;flex-direction:column;gap:12px;" id="profileDetailsList">
+              <div class="info-item"><div class="info-label">Full Name</div><div class="info-value" id="profNameInfo">—</div></div>
+              <div class="info-item"><div class="info-label">Email</div><div class="info-value" id="profEmailInfo" style="font-size:13px;">—</div></div>
+              <div class="info-item"><div class="info-label">Phone</div><div class="info-value" id="profPhoneInfo">—</div></div>
+              <div class="info-item"><div class="info-label">Member Since</div><div class="info-value" id="profSince">—</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="section-header"><span class="section-title">Ride Summary</span></div>
+          <div class="section-body">
+            <div style="text-align:center;padding:20px;">
+              <div style="font-family:var(--font-heading);font-size:48px;font-weight:900;color:var(--text-primary);line-height:1;" id="profTotalRides">0</div>
+              <div style="font-size:14px;color:var(--text-muted);margin-top:6px;margin-bottom:20px;">Total Trips Taken</div>
+              <div style="display:flex;gap:16px;justify-content:center;">
+                <div style="text-align:center;">
+                  <div style="font-size:22px;font-weight:800;color:var(--success);" id="profTotalSpent">₹0</div>
+                  <div style="font-size:12px;color:var(--text-muted);">Total Spent</div>
+                </div>
+                <div style="width:1px;background:var(--border);"></div>
+                <div style="text-align:center;">
+                  <div style="font-size:22px;font-weight:800;color:var(--brand-primary-dark);" id="profSafeRides">0</div>
+                  <div style="font-size:12px;color:var(--text-muted);">Safe Rides</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ SCAN & RIDE TAB ═══════ -->
+    <div class="tab-panel" id="tab-scan">
+      <div class="page-header">
+        <h1 class="page-title">Scan Driver QR</h1>
+        <p class="page-subtitle">Verify your driver's identity before boarding.</p>
+      </div>
+
+      <div class="section-card" style="margin-bottom:24px;">
+        <div class="section-body" style="text-align:center;padding:40px;">
+          <i class="fa-solid fa-qrcode" style="font-size:56px;color:var(--brand-primary);margin-bottom:20px;display:block;animation:float 3s ease-in-out infinite;"></i>
+          <h3 style="font-family:var(--font-heading);font-size:20px;font-weight:700;margin-bottom:10px;">Ready to Scan?</h3>
+          <p style="color:var(--text-muted);font-size:14px;margin-bottom:28px;max-width:380px;margin-left:auto;margin-right:auto;">
+            Ask your driver to show their RakshaRide QR code. Point the camera to scan and verify their identity instantly.
+          </p>
+          <button class="btn btn-primary btn-lg" onclick="openScanner()">
+            <i class="fa-solid fa-camera"></i> Open QR Scanner
+          </button>
+        </div>
+      </div>
+
+      <!-- How it works mini -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+        <div class="section-card" style="text-align:center;padding:20px;">
+          <div style="font-size:32px;margin-bottom:10px;">📷</div>
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Scan QR</div>
+          <div style="font-size:12px;color:var(--text-muted);">Point camera at driver's code</div>
+        </div>
+        <div class="section-card" style="text-align:center;padding:20px;">
+          <div style="font-size:32px;margin-bottom:10px;">✅</div>
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Verify</div>
+          <div style="font-size:12px;color:var(--text-muted);">Check driver details & rating</div>
+        </div>
+        <div class="section-card" style="text-align:center;padding:20px;">
+          <div style="font-size:32px;margin-bottom:10px;">🚀</div>
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Ride!</div>
+          <div style="font-size:12px;color:var(--text-muted);">GPS tracking activates automatically</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ NEARBY DRIVERS TAB ═══════ -->
+    <div class="tab-panel" id="tab-nearby">
+      <div class="page-header">
+        <h1 class="page-title">Nearby Drivers</h1>
+        <p class="page-subtitle">Available drivers in your area.</p>
+      </div>
+
+      <div class="filter-pills">
+        <button class="filter-pill active" onclick="filterDrivers(this,'all')">All</button>
+        <button class="filter-pill" onclick="filterDrivers(this,'Auto')">🛺 Auto</button>
+        <button class="filter-pill" onclick="filterDrivers(this,'Car')">🚗 Car</button>
+        <button class="filter-pill" onclick="filterDrivers(this,'Bike')">🏍️ Bike</button>
+        <button class="filter-pill" onclick="filterDrivers(this,'E-Rickshaw')">⚡ E-Rickshaw</button>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:20px;align-items:center;">
+        <div style="position:relative;flex:1;">
+          <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:14px;"></i>
+          <input type="text" class="form-input" id="driverSearchInput" placeholder="Search by name or vehicle..." style="padding-left:40px;" oninput="searchDrivers()">
+        </div>
+        <button class="btn btn-ghost" onclick="loadNearbyDrivers()">
+          <i class="fa-solid fa-rotate"></i> Refresh
+        </button>
+      </div>
+
+      <div id="nearbyContainer">
+        <div style="text-align:center;padding:60px;color:var(--text-muted);">
+          <div class="loading-spinner" style="margin:0 auto 16px;"></div>
+          Finding nearby drivers...
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ LIVE TRACKING TAB ═══════ -->
+    <div class="tab-panel" id="tab-track">
+      <div class="page-header">
+        <h1 class="page-title">Live Tracking</h1>
+        <p class="page-subtitle">Real-time location of your ongoing ride.</p>
+      </div>
+
+      <div class="gps-live-panel" style="border-radius:var(--radius-xl);overflow:hidden;margin-bottom:24px;">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div class="gps-pulse"></div>
+            <div>
+              <div style="font-weight:700;font-size:15px;">Live Tracking</div>
+              <div style="font-size:12px;color:var(--text-muted);" id="trackStatusText">No active ride</div>
+            </div>
+          </div>
+          <span id="trackBadge" class="badge badge-warning">INACTIVE</span>
+        </div>
+        <div id="liveMap">
+          <div class="live-grid"></div>
+          <div class="live-marker" id="passMarker" style="top:40%;left:46%;display:none;">
+            <div class="m-label">👤 You</div>
+            <div class="m-dot"></div>
+          </div>
+          <div class="live-marker driver" id="drvMarker" style="top:30%;left:58%;display:none;">
+            <div class="m-label">🚗 Driver</div>
+            <div class="m-dot"></div>
+          </div>
+          <div style="text-align:center;position:relative;z-index:1;" id="trackPlaceholder">
+            <i class="fa-solid fa-location-dot" style="font-size:48px;color:var(--brand-primary);opacity:0.4;display:block;margin-bottom:14px;"></i>
+            <p style="color:var(--text-muted);font-weight:600;margin-bottom:6px;">No Active Ride</p>
+            <p style="font-size:13px;color:var(--text-muted);">Scan a driver's QR to start a ride</p>
+          </div>
+        </div>
+        <!-- Ride Info Strip -->
+        <div id="rideInfoStrip" class="hidden" style="padding:20px 24px;border-top:1px solid var(--border);">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);text-align:center;gap:20px;">
+            <div>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">Driver</div>
+              <div style="font-weight:800;font-size:14px;" id="trackDriver">—</div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">Vehicle</div>
+              <div style="font-weight:800;font-size:14px;" id="trackVehicle">—</div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">Started</div>
+              <div style="font-weight:800;font-size:14px;" id="trackTime">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GPS Coords -->
+      <div class="section-card">
+        <div class="section-header"><span class="section-title">Your Location</span></div>
+        <div class="section-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="info-item"><div class="info-label">Latitude</div><div class="info-value" id="myLat">—</div></div>
+            <div class="info-item"><div class="info-label">Longitude</div><div class="info-value" id="myLng">—</div></div>
+          </div>
+          <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="getMyLocation()">
+            <i class="fa-solid fa-location-crosshairs"></i> Get My Location
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ HISTORY TAB ═══════ -->
+    <div class="tab-panel" id="tab-history">
+      <div class="page-header">
+        <h1 class="page-title">Ride History</h1>
+        <p class="page-subtitle">All your past and ongoing trips.</p>
+      </div>
+      <div class="section-card">
+        <div class="section-header">
+          <span class="section-title">All Trips</span>
+          <span id="histCount" class="badge badge-primary">0 Trips</span>
+        </div>
+        <div id="histContainer">
+          <div style="text-align:center;padding:60px;color:var(--text-muted);">
+            <div class="loading-spinner" style="margin:0 auto 16px;"></div>
+            Loading history...
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Edit Profile Modal -->
+  <div class="modal-overlay" id="editProfileModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">Edit Profile</span>
+        <button class="modal-close" onclick="closeModal('editProfileModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label">Full Name</label><input type="text" class="form-input" id="editName" placeholder="Your full name"></div>
+        <div class="form-group"><label class="form-label">Phone</label><input type="tel" class="form-input" id="editPhone" placeholder="+91 9876543210"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('editProfileModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveProfile()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS -->
+  <script>
+    // ── Theme ─────────────────────────────────────────────
+    const html = document.documentElement;
+    const saved = localStorage.getItem('rakshaTheme') || 'dark';
+    html.setAttribute('data-theme', saved);
+    document.getElementById('themeIcon').className = saved === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      const n = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', n);
+      localStorage.setItem('rakshaTheme', n);
+      document.getElementById('themeIcon').className = n === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    });
+
+    // ── State ─────────────────────────────────────────────
+    let currentUser = null;
+    let currentTab = 'home';
+    let allDrivers = [];
+    let activeFilter = 'all';
+    let html5QrCode = null;
+    let verifiedDriverId = null;
+    let myLat = null, myLng = null;
+
+    // ── Tab ────────────────────────────────────────────────
+    function showTab(tab) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      document.getElementById(`tab-${tab}`)?.classList.add('active');
+      document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
+      currentTab = tab;
+      closeSidebar();
+      if (tab === 'nearby') loadNearbyDrivers();
+      if (tab === 'history') loadHistory();
+      if (tab === 'profile') populateProfile();
+      if (tab === 'track') loadTrackingView();
+    }
+
+    // ── Sidebar ────────────────────────────────────────────
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sidebarBackdrop').classList.toggle('open'); }
+    function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarBackdrop').classList.remove('open'); }
+
+    // ── Toast ──────────────────────────────────────────────
+    function showToast(msg, type = 'info') {
+      const tc = document.getElementById('toastContainer');
+      const t = document.createElement('div');
+      t.className = `toast ${type}`;
+      const icons = { success: 'check-circle', error: 'circle-xmark', info: 'circle-info', warning: 'triangle-exclamation' };
+      const colors = { success: 'var(--success)', error: 'var(--danger)', info: 'var(--info)', warning: 'var(--warning)' };
+      t.innerHTML = `<i class="fa-solid fa-${icons[type]||'bell'}" style="color:${colors[type]};font-size:18px;"></i> ${msg}`;
+      tc.appendChild(t);
+      setTimeout(() => { t.style.opacity='0'; t.style.transform='translateY(10px)'; t.style.transition='0.3s'; setTimeout(()=>t.remove(),300); }, 4000);
+    }
+
+    function openModal(id) { document.getElementById(id).classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    // ── Init ──────────────────────────────────────────────
+    window.onload = async () => {
+      try {
+        const res = await fetch('/api/get_profile');
+        const data = await res.json();
+        if (!data.success) { window.location.href = '/'; return; }
+        currentUser = data.profile;
+        populateSidebar();
+        populateHomeStats();
+        loadRecentTrips();
+        checkActiveRide();
+        getMyLocation();
+        loadNearbyCount();
+      } catch(e) { window.location.href = '/'; }
+    };
+
+    function populateSidebar() {
+      document.getElementById('sidebarName').textContent = currentUser.name || 'Passenger';
+      document.getElementById('headName').textContent = currentUser.name?.split(' ')[0] || 'Passenger';
+    }
+
+    function populateHomeStats() {
+      document.getElementById('statTrips').textContent = currentUser.total_rides || 0;
+      document.getElementById('statSpent').textContent = `₹${currentUser.total_spent || 0}`;
+      document.getElementById('statSafe').textContent = currentUser.total_rides || 0;
+    }
+
+    function populateProfile() {
+      if (!currentUser) return;
+      document.getElementById('profName').textContent = currentUser.name || '—';
+      document.getElementById('profEmail').textContent = currentUser.email || '—';
+      document.getElementById('profPhone').textContent = currentUser.phone || '—';
+      document.getElementById('profNameInfo').textContent = currentUser.name || '—';
+      document.getElementById('profEmailInfo').textContent = currentUser.email || '—';
+      document.getElementById('profPhoneInfo').textContent = currentUser.phone || '—';
+      document.getElementById('profSince').textContent = currentUser.created_at ? new Date(currentUser.created_at).toLocaleDateString('en-IN', {day:'numeric',month:'long',year:'numeric'}) : '—';
+      document.getElementById('profTotalRides').textContent = currentUser.total_rides || 0;
+      document.getElementById('profTotalSpent').textContent = `₹${currentUser.total_spent || 0}`;
+      document.getElementById('profSafeRides').textContent = currentUser.total_rides || 0;
+    }
+
+    async function loadNearbyCount() {
+      try {
+        const res = await fetch('/api/get_nearby_drivers');
+        const data = await res.json();
+        if (data.success && data.drivers) {
+          document.getElementById('statNearby').textContent = data.drivers.length;
+        }
+      } catch(e) {}
+    }
+
+    // ── QR Scanner ────────────────────────────────────────
+    function openScanner() {
+      document.getElementById('scannerOverlay').classList.add('open');
+      html5QrCode = new Html5Qrcode('reader');
+      html5QrCode.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 280, height: 280 } },
+        (decodedText) => {
+          html5QrCode.stop().then(() => {
+            document.getElementById('scannerOverlay').classList.remove('open');
+            handleQrScan(decodedText);
+          }).catch(() => {});
+        },
+        () => {}
+      ).catch(() => {
+        showToast('Camera access denied. Please allow camera.', 'error');
+        html5QrCode = null;
+        document.getElementById('scannerOverlay').classList.remove('open');
+      });
+    }
+
+    function closeScanner() {
+      if (html5QrCode) {
+        html5QrCode.stop().catch(() => {}).finally(() => { html5QrCode = null; });
+      }
+      document.getElementById('scannerOverlay').classList.remove('open');
+    }
+
+    async function handleQrScan(qrText) {
+      showToast('QR scanned! Verifying driver...', 'info');
+      try {
+        const res = await fetch('/api/scan_driver_qr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ qr_data: qrText })
+        });
+        const data = await res.json();
+        if (data.success && data.driver) {
+          showDriverVerifySheet(data.driver);
+        } else {
+          showToast(data.message || 'Driver not found or invalid QR', 'error');
+        }
+      } catch(e) {
+        showToast('Verification failed. Please try again.', 'error');
+      }
+    }
+
+    function showDriverVerifySheet(driver) {
+      verifiedDriverId = driver.id;
+      const vehEmojis = { Auto: '🛺', Car: '🚗', Bike: '🏍️' };
+      const emoji = vehEmojis[driver.vehicle_type] || '🚗';
+
+      document.getElementById('verifyDriverAvatar').textContent = emoji;
+      document.getElementById('verifyDriverName').textContent = driver.name || '—';
+      document.getElementById('verifyDriverVehicle').textContent = `${driver.vehicle_type || 'Auto'} • ${driver.vehicle_number || '—'}`;
+      document.getElementById('verifyDriverRating').textContent = driver.rating || '5.0';
+      document.getElementById('verifyVehicleNum').textContent = driver.vehicle_number || '—';
+      document.getElementById('verifyContact').textContent = driver.mobile || '—';
+      document.getElementById('verifyStatus2').innerHTML = driver.verification_status === 'verified'
+        ? '<span class="badge badge-success">✅ VERIFIED</span>'
+        : '<span class="badge badge-warning">⏳ PENDING</span>';
+      document.getElementById('verifyTotalRides').textContent = driver.total_rides || '0';
+
+      document.getElementById('confirmRideBtn').onclick = () => confirmRide(driver.id);
+      document.getElementById('verifyModal').classList.add('open');
+    }
+
+    function closeVerifyModal() {
+      document.getElementById('verifyModal').classList.remove('open');
+      verifiedDriverId = null;
+    }
+
+    async function confirmRide(driverId) {
+      const btn = document.getElementById('confirmRideBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Starting...';
+
+      try {
+        const res = await fetch('/api/start_ride', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            driver_id: driverId,
+            latitude: myLat,
+            longitude: myLng,
+            pickup_location: myLat ? `${myLat.toFixed(4)}, ${myLng.toFixed(4)}` : 'Current Location'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeVerifyModal();
+          showToast('🎉 Ride started! GPS tracking active.', 'success');
+          checkActiveRide();
+          showTab('track');
+        } else {
+          showToast(data.message || 'Could not start ride', 'error');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-check-circle"></i> Confirm & Start Ride';
+        }
+      } catch(e) {
+        showToast('Server error.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-check-circle"></i> Confirm & Start Ride';
+      }
+    }
+
+    // ── Nearby Drivers ────────────────────────────────────
+    async function loadNearbyDrivers() {
+      const container = document.getElementById('nearbyContainer');
+      container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);"><div class="loading-spinner" style="margin:0 auto 12px;"></div>Finding drivers...</div>`;
+
+      try {
+        const res = await fetch('/api/get_nearby_drivers');
+        const data = await res.json();
+        if (!data.success || !data.drivers?.length) {
+          container.innerHTML = `
+            <div style="text-align:center;padding:60px;color:var(--text-muted);">
+              <i class="fa-solid fa-car" style="font-size:40px;opacity:0.2;display:block;margin-bottom:14px;"></i>
+              <p style="font-weight:600;">No drivers available nearby</p>
+              <p style="font-size:13px;margin-top:6px;">Try refreshing in a moment</p>
+            </div>`;
+          return;
+        }
+        allDrivers = data.drivers;
+        renderDrivers(data.drivers);
+      } catch(e) {
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Failed to load drivers. Please refresh.</div>';
+      }
+    }
+
+    function renderDrivers(drivers) {
+      const container = document.getElementById('nearbyContainer');
+      if (!drivers.length) {
+        container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">No drivers match this filter.</div>`;
+        return;
+      }
+      const vehEmojis = { Auto: '🛺', Car: '🚗', Bike: '🏍️', 'E-Rickshaw': '⚡' };
+      container.innerHTML = drivers.map(d => `
+        <div class="nearby-driver-card" onclick="quickConnectDriver(${d.id},'${d.name?.replace(/'/g,"\\'")}','${d.vehicle_type}','${d.vehicle_number}')">
+          <div class="nd-avatar">${vehEmojis[d.vehicle_type] || '🚗'}</div>
+          <div class="nd-info">
+            <div class="nd-name">${d.name || 'Driver'}</div>
+            <div class="nd-vehicle">${d.vehicle_type || 'Auto'} • ${d.vehicle_number || '—'}</div>
+            <div class="nd-rating"><i class="fa-solid fa-star" style="font-size:12px;"></i> ${d.rating || '5.0'}</div>
+          </div>
+          <div class="nd-meta">
+            <div class="nd-distance">${d.distance_km ? d.distance_km + ' km' : '~2 km'}</div>
+            <div class="nd-status">Available</div>
+          </div>
+        </div>`).join('');
+    }
+
+    function filterDrivers(btn, type) {
+      document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilter = type;
+      const filtered = type === 'all' ? allDrivers : allDrivers.filter(d => d.vehicle_type === type);
+      renderDrivers(filtered);
+    }
+
+    function searchDrivers() {
+      const q = document.getElementById('driverSearchInput').value.toLowerCase();
+      const filtered = allDrivers.filter(d =>
+        (d.name || '').toLowerCase().includes(q) ||
+        (d.vehicle_number || '').toLowerCase().includes(q) ||
+        (d.vehicle_type || '').toLowerCase().includes(q)
+      );
+      renderDrivers(filtered);
+    }
+
+    async function quickConnectDriver(driverId, name, vType, vNum) {
+      try {
+        const res = await fetch('/api/get_driver_details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ driver_id: driverId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showDriverVerifySheet(data.driver);
+        } else {
+          // Fallback with available info
+          showDriverVerifySheet({ id: driverId, name, vehicle_type: vType, vehicle_number: vNum, rating: '5.0', verification_status: 'verified', total_rides: 0 });
+        }
+      } catch(e) {
+        showDriverVerifySheet({ id: driverId, name, vehicle_type: vType, vehicle_number: vNum, rating: '5.0', verification_status: 'verified', total_rides: 0 });
+      }
+    }
+
+    // ── Active Ride ────────────────────────────────────────
+    async function checkActiveRide() {
+      try {
+        const res = await fetch('/api/get_active_ride');
+        const data = await res.json();
+        const banner = document.getElementById('activeRideBanner');
+        if (data.success && data.active_ride) {
+          const ride = data.active_ride;
+          banner.classList.remove('hidden');
+          document.getElementById('activeRideDriver').textContent = ride.other_party_name || 'Driver';
+          document.getElementById('activeRideVehicle').textContent = `${ride.vehicle || 'Auto'} • Active`;
+
+          // Track tab
+          document.getElementById('trackStatusText').textContent = `Ride in progress with ${ride.other_party_name}`;
+          document.getElementById('trackBadge').textContent = 'ACTIVE';
+          document.getElementById('trackBadge').className = 'badge badge-success';
+          document.getElementById('trackPlaceholder').style.display = 'none';
+          document.getElementById('passMarker').style.display = 'flex';
+          document.getElementById('drvMarker').style.display = 'flex';
+          document.getElementById('rideInfoStrip').classList.remove('hidden');
+          document.getElementById('trackDriver').textContent = ride.other_party_name || '—';
+          document.getElementById('trackVehicle').textContent = ride.vehicle || '—';
+          document.getElementById('trackTime').textContent = ride.start_time ? new Date(ride.start_time).toLocaleTimeString() : '—';
+        } else {
+          banner.classList.add('hidden');
+        }
+      } catch(e) {}
+    }
+
+    // ── GPS ────────────────────────────────────────────────
+    function getMyLocation() {
+      if (!('geolocation' in navigator)) { showToast('GPS not supported', 'error'); return; }
+      navigator.geolocation.getCurrentPosition(pos => {
+        myLat = pos.coords.latitude;
+        myLng = pos.coords.longitude;
+        document.getElementById('myLat').textContent = myLat.toFixed(6);
+        document.getElementById('myLng').textContent = myLng.toFixed(6);
+        document.getElementById('passMarker').style.display = 'flex';
+        document.getElementById('trackPlaceholder').style.display = 'none';
+      }, () => {}, { enableHighAccuracy: true });
+    }
+
+    function loadTrackingView() {
+      if (myLat) {
+        document.getElementById('myLat').textContent = myLat.toFixed(6);
+        document.getElementById('myLng').textContent = myLng?.toFixed(6) || '—';
+        document.getElementById('passMarker').style.display = 'flex';
+        document.getElementById('trackPlaceholder').style.display = 'none';
+      }
+    }
+
+    // ── History ─────────────────────────────────────────────
+    async function loadHistory() {
+      const renderTo = (id, rides) => {
+        if (!rides?.length) {
+          document.getElementById(id).innerHTML = `<div style="text-align:center;padding:50px;color:var(--text-muted);"><i class="fa-solid fa-route" style="font-size:36px;opacity:0.2;display:block;margin-bottom:12px;"></i>No trips yet.</div>`;
+          return;
+        }
+        document.getElementById(id).innerHTML = rides.map(r => `
+          <div class="history-item">
+            <div class="history-icon"><i class="fa-solid fa-map-pin"></i></div>
+            <div class="history-info">
+              <div class="history-title">${r.driver_name || 'Driver'}</div>
+              <div class="history-sub">${r.start_time ? new Date(r.start_time).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'} • ${r.pickup_location || '—'}</div>
+            </div>
+            <div style="text-align:right;">
+              <div class="history-amount">₹${r.fare || 0}</div>
+              <span class="badge ${r.status === 'completed' ? 'badge-success' : r.status === 'ongoing' ? 'badge-warning' : 'badge-primary'}" style="margin-top:4px;">${r.status || '—'}</span>
+            </div>
+          </div>`).join('');
+      };
+
+      try {
+        const res = await fetch('/api/get_passenger_history');
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('histCount').textContent = `${data.rides?.length || 0} Trips`;
+          renderTo('histContainer', data.rides);
+          renderTo('recentTripsPreview', data.rides?.slice(0, 3));
+        }
+      } catch(e) {}
+    }
+
+    async function loadRecentTrips() {
+      try {
+        const res = await fetch('/api/get_passenger_history');
+        const data = await res.json();
+        if (data.success && data.rides?.length) {
+          const rides = data.rides.slice(0, 3);
+          document.getElementById('recentTripsPreview').innerHTML = rides.map(r => `
+            <div class="history-item">
+              <div class="history-icon"><i class="fa-solid fa-map-pin"></i></div>
+              <div class="history-info">
+                <div class="history-title">${r.driver_name || 'Driver'}</div>
+                <div class="history-sub">${r.start_time ? new Date(r.start_time).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '—'}</div>
+              </div>
+              <div class="history-amount">₹${r.fare || 0}</div>
+            </div>`).join('');
+        } else {
+          document.getElementById('recentTripsPreview').innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">No trips yet. Scan a QR to begin!</div>`;
+        }
+      } catch(e) {}
+    }
+
+    // ── Profile Edit ────────────────────────────────────────
+    function openEditProfile() {
+      document.getElementById('editName').value = currentUser?.name || '';
+      document.getElementById('editPhone').value = currentUser?.phone || '';
+      openModal('editProfileModal');
+    }
+
+    async function saveProfile() {
+      const name = document.getElementById('editName').value;
+      const phone = document.getElementById('editPhone').value;
+      try {
+        const res = await fetch('/api/update_profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Profile updated!', 'success');
+          currentUser.name = name;
+          currentUser.phone = phone;
+          populateSidebar();
+          populateProfile();
+          closeModal('editProfileModal');
+        } else { showToast(data.message || 'Update failed', 'error'); }
+      } catch(e) { showToast('Server error', 'error'); }
+    }
+
+    // ── Logout ───────────────────────────────────────────────
+    async function logout() {
+      try { await fetch('/api/logout', { method: 'POST' }); } catch(e) {}
+      localStorage.removeItem('rakshaUser');
+      window.location.href = '/';
+    }
+
+    // Auto-refresh active ride status
+    setInterval(checkActiveRide, 30000);
+  </script>
+</body>
+</html>

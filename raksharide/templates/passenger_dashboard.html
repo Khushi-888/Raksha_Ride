@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard fade-in">
+    <div class="sidebar">
+        <div style="text-align: center; margin-bottom: 40px; border-bottom: 1px solid var(--border); padding-bottom: 30px;">
+            <div style="width: 100px; height: 100px; background: var(--bg-input); border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; border: 2px solid var(--primary);">
+                <i class="ph-fill ph-user" style="font-size: 40px; color: var(--primary);"></i>
+            </div>
+            <h3 style="font-size: 20px;">{{ session['name'] }}</h3>
+            <p style="color: var(--text-gray); font-size: 13px;">Passenger #{{ session['user_id'] }}</p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+            <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border: 1px solid var(--border);">
+                <p style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Identity Status</p>
+                <p style="color: var(--success); font-weight: 800; font-size: 14px;"><i class="ph-fill ph-shield-check"></i> VERIFIED MEMBER</p>
+            </div>
+            <div style="background: rgba(255,179,0,0.05); padding: 15px; border-radius: 12px; border: 1px solid var(--primary);">
+                <p style="font-size: 10px; color: var(--primary); text-transform: uppercase;">Current Wallet</p>
+                <p style="color: var(--text-white); font-weight: 900; font-size: 20px;">₹ 1,250.00</p>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px; border-top: 1px solid var(--border); padding-top: 30px;">
+             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 15px;">SERVICES</p>
+             <button class="btn btn-outline" style="width: 100%; justify-content: flex-start; margin-bottom: 10px;"><i class="ph ph-map-trifold"></i> Trip Planner</button>
+             <button class="btn btn-outline" style="width: 100%; justify-content: flex-start;"><i class="ph ph-credit-card"></i> Payment Profile</button>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-val">{{ drivers|length }}</div>
+                <div class="stat-label">Active Partners Nearby</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val">{{ history|length }}</div>
+                <div class="stat-label">Total Shielded Trips</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val">3,450</div>
+                <div class="stat-label">Cumulative Safe Km</div>
+            </div>
+        </div>
+
+        <!-- Active Ride Section (If any) -->
+        {% for ride in history %}
+            {% if ride.status == 'accepted' or ride.status == 'ongoing' %}
+            <div class="feature-card" style="border: 2px solid var(--primary); background: radial-gradient(circle at top right, rgba(255,179,0,0.05), transparent);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+                    <h3 style="font-size: 24px;">Active Journey Protocol</h3>
+                    <span style="background: var(--primary); color: #000; padding: 5px 15px; border-radius: 50px; font-weight: 900; font-size: 12px;">{{ ride.status|upper }}</span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                    <div>
+                        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">PARTNER DETAILS</p>
+                        <h4 style="font-size: 20px;">{{ ride.driver_name }}</h4>
+                        <p style="color: var(--text-gray);">{{ ride.vehicle_type|title }} • {{ ride.vehicle_number }}</p>
+                        
+                        {% if ride.status == 'accepted' %}
+                        <form action="{{ url_for('verify_ride_qr', ride_id=ride.id) }}" method="POST" style="margin-top: 30px;">
+                            <button type="submit" class="btn btn-primary" style="width: auto;"><i class="ph ph-qr-code"></i> VERIFY QR & START</button>
+                        </form>
+                        {% else %}
+                        <div id="p-map" style="height: 250px; border-radius: 16px; margin-top: 20px; border: 1px solid var(--border);"></div>
+                        {% endif %}
+                    </div>
+                    
+                    <div style="text-align: right; border-left: 1px solid var(--border); padding-left: 30px;">
+                         <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">DYNAMIC FARE</p>
+                         <h2 style="font-size: 48px; color: var(--primary);">₹{{ ride.calculated_fare }}</h2>
+                         <p style="color: var(--text-gray); margin-bottom: 20px;">Calculated by GPS Distance</p>
+                         
+                         {% if ride.status == 'ongoing' %}
+                         <form action="{{ url_for('complete_ride', ride_id=ride.id) }}" method="POST">
+                             <button type="submit" class="btn btn-primary" style="background: var(--success); width: 100%; justify-content: center; height: 60px;">
+                                <i class="ph ph-fingerprint"></i> AUTHORIZE GPAY & END
+                             </button>
+                         </form>
+                         {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        {% endfor %}
+
+        <!-- Booking Section -->
+        <div class="feature-card">
+            <h3 style="margin-bottom: 30px;">Book Superior Transportation</h3>
+            <form action="{{ url_for('request_ride') }}" method="POST">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="form-group">
+                        <label class="form-label">Pickup Point</label>
+                        <input type="text" name="pickup" class="form-input" required placeholder="Academic Block">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Arrival Point</label>
+                        <input type="text" name="dropoff" class="form-input" required placeholder="City Mall">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Select Verified Vehicle</label>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
+                        {% for d in drivers %}
+                        <label class="pax-vehicle-card">
+                            <input type="radio" name="driver_id" value="{{ d.id }}" required style="display: none;">
+                            <div class="pax-vehicle-content">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span style="font-weight: 800;">{{ d.name }}</span>
+                                    <span style="color: var(--primary);">★{{ d.rating }}</span>
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-gray);">{{ d.vehicle_type|title }} • {{ d.vehicle_number }}</p>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <style>
+                    .pax-vehicle-card { cursor: pointer; }
+                    .pax-vehicle-content { background: var(--bg-input); padding: 15px; border-radius: 12px; border: 1.5px solid var(--border); transition: 0.3s; }
+                    input[type="radio"]:checked + .pax-vehicle-content { border-color: var(--primary); background: rgba(255,179,0,0.05); transform: scale(1.02); }
+                </style>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; height: 60px; margin-top: 10px;">
+                    DISPATCH REQUEST <i class="ph ph-paper-plane-tilt"></i>
+                </button>
+            </form>
+        </div>
+
+        <!-- History -->
+        <div class="table-container">
+            <h3 style="padding: 25px;">History Log</h3>
+            <table>
+                <thead>
+                    <tr><th>Identity</th><th>Timeline</th><th>Trajectory</th><th>Protocol Status</th></tr>
+                </thead>
+                <tbody>
+                    {% for h in history if h.status == 'completed' %}
+                    <tr>
+                        <td><strong>{{ h.driver_name }}</strong><br><small style="color:var(--text-muted)">{{ h.vehicle_number }}</small></td>
+                        <td>{{ h.created_at.strftime('%d %B, %H:%M') }}</td>
+                        <td>{{ h.start_location }} &rarr; {{ h.end_location }}</td>
+                        <td><span style="color: var(--success); font-weight: 800;"><i class="ph-fill ph-check-shield"></i> COMPLETED</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Map Simulation -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const mapEl = document.getElementById('p-map');
+        if (mapEl) {
+            const map = L.map('p-map').setView([18.5204, 73.8567], 15);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            const marker = L.marker([18.5204, 73.8567]).addTo(map);
+            
+            let lat = 18.5204;
+            setInterval(() => {
+                lat += 0.0002;
+                marker.setLatLng([lat, 73.8567]);
+                map.panTo([lat, 73.8567]);
+            }, 3000);
+        }
+    });
+</script>
+{% endblock %}

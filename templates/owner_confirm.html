@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Owner Confirmation - RakshaRide</title>
+    <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+<body>
+    <div class="animated-bg"></div>
+    
+    <!-- Theme Toggle -->
+    <div class="theme-toggle" onclick="toggleTheme()">
+        <span class="theme-toggle-icon" id="theme-icon">🌙</span>
+        <span id="theme-text">Dark Mode</span>
+    </div>
+
+    <div class="center-container">
+        <div class="card" style="max-width: 800px; width: 100%;">
+            <div class="card-header">
+                <img src="/static/images/logo.svg" alt="RakshaRide" style="width: 200px; height: 60px; margin: 0 auto 20px; display: block;">
+                <h1 class="card-title">🔐 Owner Confirmation Required</h1>
+                <p class="card-subtitle">A driver has requested to register using your vehicle</p>
+            </div>
+
+            <div id="driver-info" class="alert alert-info">
+                <h3>📋 Driver Details</h3>
+                <div class="loading" style="margin: 20px auto;"></div>
+                <p class="text-center">Loading driver information...</p>
+            </div>
+
+            <div class="alert alert-warning">
+                <h4>⚠️ Important Information</h4>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>By approving, you confirm this person is authorized to drive your vehicle</li>
+                    <li>You will be responsible for uploading vehicle documents</li>
+                    <li>Both you and the driver will receive login credentials after admin verification</li>
+                    <li>The driver will be able to VIEW your documents but NOT edit them</li>
+                </ul>
+            </div>
+
+            <div class="flex gap-2 mt-3">
+                <button class="btn btn-secondary" style="flex: 1;" onclick="confirmAction('APPROVE')">
+                    <span id="approve-text">✓ Approve Request</span>
+                    <span id="approve-loading" class="loading hidden"></span>
+                </button>
+                <button class="btn btn-outline" style="flex: 1;" onclick="confirmAction('REJECT')">
+                    <span id="reject-text">✗ Reject Request</span>
+                    <span id="reject-loading" class="loading hidden"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const token = "{{ token }}";
+
+        // Theme Toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            
+            document.getElementById('theme-icon').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+            document.getElementById('theme-text').textContent = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+            
+            localStorage.setItem('theme', newTheme);
+        }
+
+        // Load saved theme
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.getElementById('theme-icon').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+            document.getElementById('theme-text').textContent = savedTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+            
+            loadDetails();
+        });
+
+        async function loadDetails() {
+            try {
+                const res = await fetch(`/api/owner_confirm_load?token=${token}`);
+                const result = await res.json();
+                
+                if (result.success) {
+                    const d = result.driver;
+                    document.getElementById('driver-info').innerHTML = `
+                        <h3 style="margin-bottom: 20px;">📋 Driver Details</h3>
+                        <div style="display: grid; gap: 15px;">
+                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
+                                <span style="font-weight: 600;">Name:</span>
+                                <span>${d.name}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
+                                <span style="font-weight: 600;">Email:</span>
+                                <span>${d.email}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
+                                <span style="font-weight: 600;">Mobile:</span>
+                                <span>${d.mobile}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
+                                <span style="font-weight: 600;">Age:</span>
+                                <span>${d.age} years</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
+                                <span style="font-weight: 600;">Vehicle:</span>
+                                <span>${d.vehicle_number} (${d.vehicle_type})</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
+                                <span style="font-weight: 600;">License:</span>
+                                <span>${d.license_number}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
+                                <span style="font-weight: 600;">Request Date:</span>
+                                <span>${new Date(d.created_at).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    alert('❌ Error: ' + result.message);
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                alert('❌ Failed to load details: ' + error.message);
+                window.location.href = '/';
+            }
+        }
+
+        async function confirmAction(action) {
+            if (!confirm(`Are you sure you want to ${action.toLowerCase()} this request?`)) return;
+
+            const textId = action === 'APPROVE' ? 'approve-text' : 'reject-text';
+            const loadingId = action === 'APPROVE' ? 'approve-loading' : 'reject-loading';
+            
+            document.getElementById(textId).classList.add('hidden');
+            document.getElementById(loadingId).classList.remove('hidden');
+
+            try {
+                const res = await fetch('/api/owner_confirm_action', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ token, action })
+                });
+                const result = await res.json();
+                
+                document.getElementById(textId).classList.remove('hidden');
+                document.getElementById(loadingId).classList.add('hidden');
+                
+                if (result.success) {
+                    alert('✅ ' + result.message);
+                    if (action === 'APPROVE' && result.redirect_url) {
+                        window.location.href = result.redirect_url;
+                    } else {
+                        window.location.href = '/';
+                    }
+                } else {
+                    alert('❌ Error: ' + result.message);
+                }
+            } catch (error) {
+                document.getElementById(textId).classList.remove('hidden');
+                document.getElementById(loadingId).classList.add('hidden');
+                alert('❌ Action failed: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

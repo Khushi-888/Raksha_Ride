@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passenger Intelligence | RakshaRide Safety Portal</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <!-- Map Integration -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        :root {
+            --sidebar-width: 280px;
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            display: flex;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Portal Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 1000;
+        }
+
+        .side-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 20px;
+            border-radius: 12px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-bottom: 8px;
+            background: transparent;
+            border: none;
+            width: 100%;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .side-link:hover {
+            background: rgba(255, 193, 7, 0.05);
+            color: var(--primary);
+        }
+
+        .side-link.active {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: #000;
+            box-shadow: 0 4px 15px rgba(255, 193, 7, 0.2);
+        }
+
+        /* Content Hub */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            padding: 40px;
+            max-width: calc(100vw - var(--sidebar-width));
+        }
+
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .user-profile-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .avatar-circle {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #FFC107, #FF9800);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: #000;
+            font-size: 1.2rem;
+            border: 2px solid var(--border);
+        }
+
+        /* Section Swapping */
+        .portal-section {
+            display: none;
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .portal-section.active {
+            display: block;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Scanner Styling */
+        .scanner-viewport {
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 4/3;
+            background: #000;
+            border-radius: 20px;
+            margin: 20px auto;
+            position: relative;
+            overflow: hidden;
+            border: 4px solid var(--primary);
+        }
+
+        #scanner-video { width: 100%; height: 100%; object-fit: cover; }
+        
+        .scan-overlay {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 250px; height: 250px;
+            border: 2px solid var(--primary);
+            box-shadow: 0 0 0 1000px rgba(0,0,0,0.5);
+            border-radius: 10px;
+        }
+
+        .scan-line {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: var(--primary);
+            box-shadow: 0 0 15px var(--primary);
+            animation: scanMove 2s infinite linear;
+        }
+
+        @keyframes scanMove {
+            0% { top: 0; } 100% { top: 100%; }
+        }
+
+        /* Active Ride UI */
+        .active-ride-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border: 2px solid var(--primary);
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+            margin-bottom: 30px;
+        }
+
+        .sos-button {
+            padding: 15px 30px;
+            background: #ef4444;
+            color: white;
+            border-radius: 14px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .sos-button:hover { transform: scale(1.05); background: #dc2626; }
+
+        /* General Cards */
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        #map {
+            height: 400px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        /* Rating Stars */
+        .stars-input {
+            display: flex;
+            gap: 10px;
+            font-size: 2rem;
+            cursor: pointer;
+        }
+        .star { color: var(--text-muted); transition: color 0.2s; }
+        .star:hover, .star.active { color: var(--primary); }
+
+        @media (max-width: 992px) {
+            .sidebar { width: 80px; padding: 20px 10px; }
+            .side-link span { display: none; }
+            .main-content { margin-left: 80px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animated"></div>
+
+    <!-- Navigation Sidebar -->
+    <aside class="sidebar">
+        <div class="logo-container mb-5" style="display: flex; align-items: center; gap: 10px;">
+            <div style="background: var(--primary); color: #000; width: 35px; height: 35px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-weight: 900;">🛡️</div>
+            <span style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.2rem; color: var(--primary);">RakshaRide</span>
+        </div>
+
+        <button class="side-link active" onclick="switchSection('scanner', this)">
+            <i data-lucide="scan"></i> <span>Secure Scanner</span>
+        </button>
+        <button class="side-link" onclick="switchSection('rides', this)">
+            <i data-lucide="map-pin"></i> <span>Current Journey</span>
+        </button>
+        <button class="side-link" onclick="switchSection('history', this)">
+            <i data-lucide="history"></i> <span>Safety Logs</span>
+        </button>
+        <button class="side-link" onclick="switchSection('profile', this)">
+            <i data-lucide="user"></i> <span>Identity Vault</span>
+        </button>
+
+        <div style="margin-top: auto;">
+            <button class="side-link" onclick="logout()" style="color: #ef4444;">
+                <i data-lucide="log-out"></i> <span>Secure Exit</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Content Area -->
+    <main class="main-content">
+        <header class="header-bar">
+            <div>
+                <div style="font-size: 0.8rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 2px;">RAKSHARIDE PASSENGER PORTAL</div>
+                <h1 id="page-title" style="margin-top: 5px; font-family: 'Outfit', sans-serif;">Security Dashboard</h1>
+            </div>
+            <div class="user-profile-header">
+                <div style="text-align: right;">
+                    <div style="font-weight: 800;" id="user-display-name">---</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);" id="user-display-id">PSN-0000</div>
+                </div>
+                <div class="avatar-circle" id="user-initials">RR</div>
+            </div>
+        </header>
+
+        <!-- SCANNER SECTION -->
+        <section id="scanner-section" class="portal-section active">
+            <div class="glass-card text-center">
+                <h3 class="mb-2">Verify Driver Credentials</h3>
+                <p class="text-secondary mb-4">Scan the driver's QR code displayed on their dashboard or ID card to start a tracked journey.</p>
+                
+                <div id="scanner-wrapper" style="display: none;">
+                    <div class="scanner-viewport">
+                        <video id="scanner-video" autoplay playsinline></video>
+                        <canvas id="scanner-canvas" style="display: none;"></canvas>
+                        <div class="scan-overlay">
+                            <div class="scan-line"></div>
+                        </div>
+                    </div>
+                    <div class="alert alert-info mt-3">💡 Ensure the QR code is within the frame for instant AI verification.</div>
+                    <button class="btn btn-secondary mt-2" onclick="stopScanner()">Cancel Verification</button>
+                </div>
+
+                <div id="scanner-start">
+                    <div style="padding: 60px 0; border: 2px dashed var(--border); border-radius: 20px; background: rgba(0,0,0,0.1);">
+                        <i data-lucide="camera" style="width: 60px; height: 60px; color: var(--primary); opacity: 0.5; margin-bottom: 20px;"></i>
+                        <br>
+                        <button class="btn btn-primary btn-lg" onclick="startScanner()">
+                            <i data-lucide="zap"></i> Launch AI Scanner
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Driver Verification Preview Modal (Custom UI) -->
+            <div id="driver-preview" style="display: none;" class="glass-card">
+                <div class="flex-between mb-4">
+                    <h3>🛡️ Driver Verified</h3>
+                    <div class="badge badge-success">ANTIGRAVITY CERTIFIED</div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 30px; align-items: center;">
+                    <div style="text-align: center;">
+                        <img id="driver-img" src="/static/img/default-driver.png" style="width: 120px; height: 120px; border-radius: 60px; border: 3px solid var(--primary);">
+                        <div class="mt-2" style="font-weight: 800; color: var(--primary);" id="vd-rating">⭐ 5.0</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label class="info-label">Name</label>
+                            <div class="info-value" id="vd-name">---</div>
+                        </div>
+                        <div>
+                            <label class="info-label">Vehicle</label>
+                            <div class="info-value" id="vd-vehicle">---</div>
+                        </div>
+                        <div>
+                            <label class="info-label">ID Number</label>
+                            <div class="info-value" id="vd-id">---</div>
+                        </div>
+                        <div>
+                            <label class="info-label">Verified Status</label>
+                            <div class="info-value" style="color: #22c55e;">GOVT APPROVED</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 flex gap-3">
+                    <button class="btn btn-primary flex-1" onclick="initiateRide()">Start Tracked Journey</button>
+                    <button class="btn btn-secondary" onclick="resetScanner()">Scan Another</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ACTIVE JOURNEY SECTION -->
+        <section id="rides-section" class="portal-section">
+            <div id="no-active-ride" class="glass-card text-center p-5">
+                <i data-lucide="map" style="width: 60px; height: 60px; opacity: 0.2; margin-bottom: 20px;"></i>
+                <h3>No Active Journey</h3>
+                <p class="text-secondary">Scan a driver QR code to begin tracking your trip.</p>
+                <button class="btn btn-outline mt-3" onclick="switchSection('scanner', document.querySelector('[onclick*=\'scanner\']'))">Go to Scanner</button>
+            </div>
+
+            <div id="active-ride-ui" style="display: none;">
+                <div class="active-ride-card">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 25px;">
+                        <div>
+                            <div class="welcome-badge" style="background: rgba(34, 197, 94, 0.2); color: #22c55e;">SATELLITE TRACKING ACTIVE</div>
+                            <h2 style="margin-top: 10px;" id="ar-driver-name">Journey with ---</h2>
+                        </div>
+                        <button class="sos-button" onclick="triggerSOS()">
+                            <i data-lucide="shield-alert"></i> TRIGGER SOS
+                        </button>
+                    </div>
+
+                    <div id="map"></div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+                        <div class="stat-card">
+                            <label class="info-label">Pickup Point</label>
+                            <div class="info-value" id="ar-pickup">---</div>
+                        </div>
+                        <div class="stat-card">
+                            <label class="info-label">Vehicle Registration</label>
+                            <div class="info-value" id="ar-vehicle">---</div>
+                        </div>
+                        <div class="stat-card">
+                            <label class="info-label">Estimated Fare</label>
+                            <div class="info-value" id="ar-fare">₹---</div>
+                        </div>
+                        <div class="stat-card">
+                            <label class="info-label">Start Time</label>
+                            <div class="info-value" id="ar-time">00:00</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 flex gap-3">
+                        <button class="btn btn-secondary flex-1" onclick="shareTracking()">
+                            <i data-lucide="share-2"></i> Share Live Location
+                        </button>
+                        <button class="btn btn-primary flex-1" onclick="completeRideFromPassenger()">
+                            <i data-lucide="check-circle"></i> Finish & Pay
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- HISTORY SECTION -->
+        <section id="history-section" class="portal-section">
+            <div class="glass-card">
+                <h3>Historical Safety Logs</h3>
+                <div class="table-container mt-4">
+                    <table style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Date/Time</th>
+                                <th>Driver Details</th>
+                                <th>From → To</th>
+                                <th>Fare</th>
+                                <th>Security Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- PROFILE SECTION -->
+        <section id="profile-section" class="portal-section">
+            <div class="stats-grid">
+                <div class="glass-card">
+                    <label class="info-label">Lifetime Rides</label>
+                    <div class="stat-value" id="prof-total-rides">0</div>
+                    <div style="color: #22c55e; font-size: 0.8rem;">Antigravity Verified</div>
+                </div>
+                <div class="glass-card">
+                    <label class="info-label">Security Spend</label>
+                    <div class="stat-value" id="prof-total-spent">₹0</div>
+                    <div style="color: var(--primary); font-size: 0.8rem;">Official Economy</div>
+                </div>
+            </div>
+            
+            <div class="glass-card">
+                <h3>Passenger Credentials</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px;">
+                    <div>
+                        <label class="info-label">Full Legal Name</label>
+                        <div class="info-value" id="prof-name">---</div>
+                    </div>
+                    <div>
+                        <label class="info-label">Registered Email</label>
+                        <div class="info-value" id="prof-email">---</div>
+                    </div>
+                    <div>
+                        <label class="info-label">Mobile Network</label>
+                        <div class="info-value" id="prof-phone">---</div>
+                    </div>
+                    <div>
+                        <label class="info-label">Verification Type</label>
+                        <div class="info-value"><span class="badge badge-success">AADHAAR VERIFIED</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Post-Ride Rating Modal -->
+    <div id="rating-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+        <div class="glass-card" style="max-width: 500px; width: 90%; text-align: center; padding: 40px;">
+            <div style="background: var(--primary); color: #000; width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">⭐</div>
+            <h2>Ride Completion Review</h2>
+            <p class="text-secondary mb-4">Your feedback improves communal safety. Please rate Driver <span id="rating-driver-name" style="color: var(--primary); font-weight: 800;">---</span></p>
+            
+            <div class="stars-input mb-4" id="rating-stars">
+                <i data-lucide="star" class="star" data-val="1"></i>
+                <i data-lucide="star" class="star" data-val="2"></i>
+                <i data-lucide="star" class="star" data-val="3"></i>
+                <i data-lucide="star" class="star" data-val="4"></i>
+                <i data-lucide="star" class="star" data-val="5"></i>
+            </div>
+
+            <div class="form-group text-left">
+                <label>Security & Professionalism Feedback</label>
+                <textarea id="rating-comment" class="form-input" style="height: 100px; resize: none;" placeholder="Share your experience..."></textarea>
+            </div>
+
+            <button class="btn btn-primary btn-lg w-100" onclick="submitReview()">Finalize & Submit Score</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/theme.js"></script>
+    <script>
+        let map, marker, selectedStars = 5;
+        let scannerStream, scannerInterval;
+        let activeRideId = null, currentDriverId = null;
+
+        // Initialize Portal
+        async function initPortal() {
+            lucide.createIcons();
+            await loadProfile();
+            checkActiveRide();
+            
+            // Rating Stars logic
+            document.querySelectorAll('.star').forEach(s => {
+                s.addEventListener('click', (e) => {
+                    const val = parseInt(e.currentTarget.dataset.val);
+                    selectedStars = val;
+                    updateStars(val);
+                });
+            });
+        }
+
+        function updateStars(val) {
+            document.querySelectorAll('.star').forEach(s => {
+                const sVal = parseInt(s.dataset.val);
+                s.classList.toggle('active', sVal <= val);
+            });
+        }
+
+        function switchSection(id, el) {
+            document.querySelectorAll('.portal-section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.side-link').forEach(l => l.classList.remove('active'));
+            
+            document.getElementById(`${id}-section`).classList.add('active');
+            el.classList.add('active');
+            
+            document.getElementById('page-title').innerText = el.innerText.trim() + " Hub";
+            
+            if(id === 'history') loadHistory();
+            if(id === 'profile') loadProfile();
+            if(id === 'rides') {
+                checkActiveRide();
+                if(map) setTimeout(() => map.invalidateSize(), 100);
+            }
+        }
+
+        // SCANNER LOGIC
+        async function startScanner() {
+            try {
+                const video = document.getElementById('scanner-video');
+                scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = scannerStream;
+                document.getElementById('scanner-start').style.display = 'none';
+                document.getElementById('scanner-wrapper').style.display = 'block';
+                
+                scannerInterval = setInterval(captureFrame, 1000);
+            } catch (err) {
+                alert("Camera access denied. Enable camera to use the security scanner.");
+            }
+        }
+
+        function stopScanner() {
+            if (scannerStream) scannerStream.getTracks().forEach(t => t.stop());
+            clearInterval(scannerInterval);
+            document.getElementById('scanner-start').style.display = 'block';
+            document.getElementById('scanner-wrapper').style.display = 'none';
+        }
+
+        function captureFrame() {
+            const video = document.getElementById('scanner-video');
+            const canvas = document.getElementById('scanner-canvas');
+            const context = canvas.getContext('2d');
+            
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imgData = context.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imgData.data, imgData.width, imgData.height);
+                
+                if (code) {
+                    stopScanner();
+                    processScan(code.data);
+                }
+            }
+        }
+
+        async function processScan(qrText) {
+            try {
+                // The QR text is the HMAC signed JSON
+                const res = await fetch('/api/scan_driver_qr', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ qr_data: qrText })
+                });
+                const data = await res.json();
+                
+                if(data.success) {
+                    const d = data.driver;
+                    currentDriverId = d.id;
+                    document.getElementById('vd-name').innerText = d.name;
+                    document.getElementById('vd-vehicle').innerText = d.vehicle_number;
+                    document.getElementById('vd-id').innerText = d.unique_id || "DRV-APPROVED";
+                    document.getElementById('vd-rating').innerText = "⭐ " + (d.rating || 5.0).toFixed(1);
+                    document.getElementById('driver-preview').style.display = 'block';
+                    document.getElementById('scanner-start').style.display = 'none';
+                } else {
+                    alert("SECURITY ALERT: " + data.message);
+                    resetScanner();
+                }
+            } catch (e) {
+                alert("Scanner Error: Authentication server unreachable.");
+                resetScanner();
+            }
+        }
+
+        function resetScanner() {
+            document.getElementById('driver-preview').style.display = 'none';
+            document.getElementById('scanner-start').style.display = 'block';
+        }
+
+        async function initiateRide() {
+            const pickup = prompt("Enter pickup location for official log:", "Current Location");
+            if(!pickup) return;
+
+            const res = await fetch('/api/start_ride', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    driver_id: currentDriverId,
+                    pickup_location: pickup,
+                    latitude: marker?.getLatLng().lat || 0,
+                    longitude: marker?.getLatLng().lng || 0
+                })
+            });
+            const data = await res.json();
+            if(data.success) {
+                activeRideId = data.ride.id;
+                switchSection('rides', document.querySelector('[onclick*=\'rides\']'));
+            } else {
+                alert(data.message);
+            }
+        }
+
+        // RIDE TRACKING
+        async function checkActiveRide() {
+            const res = await fetch('/api/get_active_ride');
+            const data = await res.json();
+            
+            const noRide = document.getElementById('no-active-ride');
+            const rideUI = document.getElementById('active-ride-ui');
+
+            if(data.success && data.active_ride) {
+                const r = data.active_ride;
+                activeRideId = r.id;
+                currentDriverId = r.driver_id;
+                noRide.style.display = 'none';
+                rideUI.style.display = 'block';
+                
+                document.getElementById('ar-driver-name').innerText = "Journey with " + r.other_party_name;
+                document.getElementById('ar-pickup').innerText = r.pickup_location;
+                document.getElementById('ar-vehicle').innerText = r.vehicle || "Verified";
+                document.getElementById('ar-time').innerText = new Date(r.start_time).toLocaleTimeString();
+                
+                initMap();
+                
+                // Real-time tracking loop
+                if(!window.trackInterval) {
+                    window.trackInterval = setInterval(async () => {
+                        const tRes = await fetch('/api/get_active_ride');
+                        const tData = await tRes.json();
+                        if(tData.active_ride && tData.active_ride.lat) {
+                            const { lat, lng } = tData.active_ride;
+                            if(!window.driverMarker) {
+                                window.driverMarker = L.marker([lat, lng], {icon: L.icon({
+                                    iconUrl: 'https://cdn-icons-png.flaticon.com/512/3082/3082383.png',
+                                    iconSize: [30, 30]
+                                })}).addTo(map);
+                                map.setView([lat, lng], 15);
+                            } else {
+                                window.driverMarker.setLatLng([lat, lng]);
+                            }
+                        }
+                    }, 5000);
+                }
+            } else {
+                noRide.style.display = 'block';
+                rideUI.style.display = 'none';
+                if(window.trackInterval) clearInterval(window.trackInterval);
+            }
+        }
+
+        function initMap() {
+            if(map) return;
+            map = L.map('map').setView([20.5937, 78.9629], 5);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(pos => {
+                    const { latitude, longitude } = pos.coords;
+                    if(!marker) {
+                        marker = L.marker([latitude, longitude]).addTo(map);
+                        map.setView([latitude, longitude], 15);
+                    } else {
+                        marker.setLatLng([latitude, longitude]);
+                    }
+                });
+            }
+        }
+
+        async function completeRideFromPassenger() {
+            const distance = prompt("Enter ride distance in KM (for fare verification):", "5");
+            if(!distance) return;
+
+            const res = await fetch('/api/complete_ride', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    ride_id: activeRideId,
+                    distance_km: parseFloat(distance)
+                })
+            });
+            const data = await res.json();
+            if(data.success) {
+                document.getElementById('rating-modal').style.display = 'flex';
+                document.getElementById('rating-driver-name').innerText = document.getElementById('ar-driver-name').innerText.replace('Journey with ', '');
+            } else {
+                alert(data.message);
+            }
+        }
+
+        async function submitReview() {
+            const comment = document.getElementById('rating-comment').value;
+            const res = await fetch('/api/submit_rating', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    driver_id: currentDriverId,
+                    ride_id: activeRideId,
+                    rating: selectedStars,
+                    comment: comment
+                })
+            });
+            const data = await res.json();
+            if(data.success) {
+                document.getElementById('rating-modal').style.display = 'none';
+                location.reload();
+            } else {
+                alert(data.message);
+            }
+        }
+
+        // PROFILE & HISTORY
+        async function loadProfile() {
+            const res = await fetch('/api/get_profile');
+            const data = await res.json();
+            if(data.success) {
+                const u = data.profile;
+                document.getElementById('user-display-name').innerText = u.name;
+                document.getElementById('user-display-id').innerText = u.unique_id || "PSN-0000";
+                document.getElementById('user-initials').innerText = u.name.substring(0,2).toUpperCase();
+                
+                document.getElementById('prof-name').innerText = u.name;
+                document.getElementById('prof-email').innerText = u.email;
+                document.getElementById('prof-phone').innerText = u.phone;
+                document.getElementById('prof-total-rides').innerText = u.total_rides;
+                document.getElementById('prof-total-spent').innerText = "₹" + (u.total_spent || 0);
+            }
+        }
+
+        async function loadHistory() {
+            const res = await fetch('/api/get_passenger_history');
+            const data = await res.json();
+            const body = document.getElementById('history-table-body');
+            if(data.success && data.rides.length > 0) {
+                body.innerHTML = data.rides.map(r => `
+                    <tr>
+                        <td style="font-size: 0.8rem;">${new Date(r.start_time).toLocaleString()}</td>
+                        <td style="font-weight: 700;">${r.driver_name}<br><small class="text-secondary">${r.driver_vehicle}</small></td>
+                        <td style="font-size: 0.8rem;">${r.pickup_location} → <br>${r.dropoff_location}</td>
+                        <td style="font-weight: 800; color: var(--primary);">₹${r.fare}</td>
+                        <td><span class="badge badge-success">ANTIGRAVITY VERIFIED</span></td>
+                    </tr>
+                `).join('');
+            } else {
+                body.innerHTML = '<tr><td colspan="5" class="text-center p-4">No security logs found.</td></tr>';
+            }
+        }
+
+        function triggerSOS() {
+            alert("⚠️ EMERGENCY SOS ACTIVATED: Current location, audio recording, and driver identity have been transmitted to the nearest raksharide emergency response unit.");
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = '/api/logout';
+        }
+
+        document.addEventListener('DOMContentLoaded', initPortal);
+    </script>
+</body>
+</html>

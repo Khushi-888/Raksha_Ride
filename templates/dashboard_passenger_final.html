@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citizen Dashboard | RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        :root {
+            --bg: #f0f4f8;
+            --primary: #003366;
+            --secondary: #ffcc00;
+        }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); padding: 20px; }
+        .card { background: white; padding: 30px; border-radius: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .scanner-container { display: none; margin-top: 20px; border-radius: 20px; overflow: hidden; border: 4px solid var(--primary); }
+        .btn-scan { background: var(--primary); color: white; border: none; padding: 20px; border-radius: 15px; width: 100%; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+    <div style="max-width: 600px; margin: 0 auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+            <h1 style="font-family: 'Outfit'; color: var(--primary);">Citizen Portal</h1>
+            <a href="/logout" style="color: var(--primary); font-weight: 700; text-decoration: none;">Logout</a>
+        </div>
+
+        <div class="card mb-4">
+            <h2 style="font-family: 'Outfit'; margin-bottom: 10px;">{{ session.name }}</h2>
+            <p style="color: grey; font-size: 0.9rem;">Citizen ID: PSR-{{ session.user_id }}</p>
+            <p style="color: grey; font-size: 0.9rem;">Mobile: {{ session.mobile or 'Verified' }}</p>
+        </div>
+
+        <div class="card">
+            <h3 style="font-family: 'Outfit'; margin-bottom: 20px;">Safety Verification</h3>
+            <p style="font-size: 0.9rem; color: #64748b; margin-bottom: 20px;">Scan the driver's official QR code to verify their identity before starting your ride.</p>
+            
+            <button id="scan-btn" class="btn-scan" onclick="startScanner()">
+                <i data-lucide="qr-code"></i> SCAN DRIVER QR
+            </button>
+
+            <div id="scanner-wrapper" class="scanner-container">
+                <div id="reader" style="width: 100%;"></div>
+                <button onclick="stopScanner()" style="width: 100%; margin-top: 10px; padding: 10px; background: red; color: white; border: none; font-weight: 700;">Cancel Scan</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let html5QrCode;
+
+        function startScanner() {
+            document.getElementById('scanner-wrapper').style.display = 'block';
+            document.getElementById('scan-btn').style.display = 'none';
+
+            html5QrCode = new Html5Qrcode("reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            // Usually valid URL: http://.../driver/5
+            console.log(`Code matched = ${decodedText}`, decodedResult);
+            stopScanner();
+            window.location.href = decodedText;
+        }
+
+        function stopScanner() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById('scanner-wrapper').style.display = 'none';
+                    document.getElementById('scan-btn').style.display = 'flex';
+                }).catch(err => console.log(err));
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.lucide) lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

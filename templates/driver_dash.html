@@ -1,0 +1,600 @@
+
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Driver Dashboard — RakshaRide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/raksha.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+<div class="toast-wrap" id="toasts"></div>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="container">
+    <a href="/" class="logo"><div class="logo-shield">🛡️</div><div class="logo-text"><span class="y">Raksha</span><span class="b">Ride</span></div></a>
+    <div class="nav-right">
+      <div class="flex-c gap1">
+        <div class="dot" id="statusDot" style="width:10px;height:10px"></div>
+        <span style="font-size:.82rem;font-weight:600" id="statusTxt">Available</span>
+      </div>
+      <button class="btn btn-sm btn-out" onclick="toggleAvail()" id="availBtn">Set Busy</button>
+      <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+      <button class="btn btn-sm btn-ghost" onclick="doLogout()">Logout</button>
+      <button class="hamburger" onclick="toggleMobileSidebar()">☰</button>
+    </div>
+  </div>
+</nav>
+
+<!-- MOBILE SIDEBAR OVERLAY -->
+<div id="mobSidebarBg" style="display:none;position:fixed;inset:0;z-index:997;background:rgba(0,0,0,.5)" onclick="toggleMobileSidebar()"></div>
+<div id="mobSidebar" style="display:none;position:fixed;left:0;top:0;bottom:0;width:270px;z-index:998;background:var(--card);padding:20px 14px;overflow-y:auto;animation:slideInLeft .3s ease">
+  <div class="sidebar-user" style="margin-bottom:16px">
+    <div class="sidebar-avatar" id="mobAvatar">👤</div>
+    <div><div class="sidebar-name" id="mobName">Loading...</div><div class="sidebar-id" id="mobId">DRV-XXXXX</div></div>
+  </div>
+  <div class="divider"></div>
+  <button class="sidebar-link" onclick="showSec('overview');toggleMobileSidebar()"><span class="si">📊</span><span class="sl">Overview</span></button>
+  <button class="sidebar-link" onclick="showSec('profile');toggleMobileSidebar()"><span class="si">👤</span><span class="sl">Profile</span></button>
+  <button class="sidebar-link" onclick="showSec('vehicle');toggleMobileSidebar()"><span class="si">🚗</span><span class="sl">Vehicle</span></button>
+  <button class="sidebar-link" onclick="showSec('documents');toggleMobileSidebar()"><span class="si">📄</span><span class="sl">Documents</span></button>
+  <button class="sidebar-link" onclick="showSec('payment');toggleMobileSidebar()"><span class="si">💳</span><span class="sl">Payment QR</span></button>
+  <button class="sidebar-link" onclick="showSec('tracking');toggleMobileSidebar()"><span class="si">📍</span><span class="sl">GPS Tracking</span></button>
+  <button class="sidebar-link" onclick="showSec('history');toggleMobileSidebar()"><span class="si">📜</span><span class="sl">Ride History</span></button>
+  <button class="sidebar-link" onclick="showSec('qr');toggleMobileSidebar()"><span class="si">📱</span><span class="sl">My QR Code</span></button>
+  <button class="sidebar-link" onclick="doLogout()"><span class="si">🚪</span><span class="sl">Logout</span></button>
+</div>
+
+<div class="dash-wrap">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-user">
+      <img id="sidebarAvatar" src="" class="sidebar-avatar" style="font-size:0" onerror="this.textContent='👤';this.style.fontSize='20px'">
+      <div><div class="sidebar-name" id="sidebarName">Loading...</div><div class="sidebar-id" id="sidebarId">DRV-XXXXX</div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="sidebar-sec">Main</div>
+    <button class="sidebar-link active" onclick="showSec('overview')" id="nav-overview"><span class="si">📊</span><span class="sl">Overview</span></button>
+    <button class="sidebar-link" onclick="showSec('profile')" id="nav-profile"><span class="si">👤</span><span class="sl">Profile</span></button>
+    <button class="sidebar-link" onclick="showSec('vehicle')" id="nav-vehicle"><span class="si">🚗</span><span class="sl">Vehicle</span></button>
+    <button class="sidebar-link" onclick="showSec('documents')" id="nav-documents"><span class="si">📄</span><span class="sl">Documents</span></button>
+    <button class="sidebar-link" onclick="showSec('payment')" id="nav-payment"><span class="si">💳</span><span class="sl">Payment QR</span></button>
+    <div class="sidebar-sec">Ride</div>
+    <button class="sidebar-link" onclick="showSec('tracking')" id="nav-tracking"><span class="si">📍</span><span class="sl">GPS Tracking</span></button>
+    <button class="sidebar-link" onclick="showSec('history')" id="nav-history"><span class="si">📜</span><span class="sl">Ride History</span></button>
+    <div class="sidebar-sec">Account</div>
+    <button class="sidebar-link" onclick="showSec('qr')" id="nav-qr"><span class="si">📱</span><span class="sl">My QR Code</span></button>
+    <button class="sidebar-link" onclick="doLogout()"><span class="si">🚪</span><span class="sl">Logout</span></button>
+  </aside>
+
+  <main class="dash-main">
+
+    <!-- ── OVERVIEW ── -->
+    <div id="sec-overview">
+      <div class="dash-hdr">
+        <div><div class="dash-title">Good day, <span id="driverFirst">Driver</span>! 👋</div><div class="dash-sub">Here's your dashboard overview</div></div>
+        <button class="btn btn-y" onclick="showSec('tracking')">📍 Start Tracking</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon si-y">🚗</div><div><div class="stat-val" id="st-rides">0</div><div class="stat-lbl">Total Rides</div></div></div>
+        <div class="stat-card"><div class="stat-icon si-b">💰</div><div><div class="stat-val" id="st-earned">₹0</div><div class="stat-lbl">Total Earned</div></div></div>
+        <div class="stat-card"><div class="stat-icon si-g">⭐</div><div><div class="stat-val" id="st-rating">5.0</div><div class="stat-lbl">Rating</div></div></div>
+        <div class="stat-card"><div class="stat-icon si-p">📏</div><div><div class="stat-val" id="st-km">0 km</div><div class="stat-lbl">Distance Covered</div></div></div>
+      </div>
+      <!-- Active ride banner -->
+      <div id="activeRideBanner" class="hidden" style="background:linear-gradient(135deg,var(--yl),var(--bl));border:2px solid var(--y);border-radius:var(--rad);padding:18px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div class="flex-c gap2"><span style="font-size:28px">🚦</span><div><div style="font-weight:700">Active Ride in Progress</div><div style="font-size:.85rem;color:var(--text2)" id="activeRideInfo">Passenger connected</div></div></div>
+        <div class="flex-c gap1">
+          <button class="btn btn-y btn-sm" onclick="showSec('tracking')">📍 View Map</button>
+          <button class="btn btn-b btn-sm" onclick="completeRide()">✅ Complete Ride</button>
+        </div>
+      </div>
+      <!-- Quick QR -->
+      <div class="card-flat mb3">
+        <h3 style="margin-bottom:14px">📱 Your Driver QR Code</h3>
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+          <div class="qr-box"><img id="qrThumb" src="" style="width:140px;height:140px" alt="QR"><div class="qr-lbl" id="qrId">Loading...</div></div>
+          <div>
+            <p style="margin-bottom:10px;font-size:.88rem;color:var(--text2)">Share this QR code with passengers to connect and start rides.</p>
+            <div class="flex-c gap1">
+              <button class="btn btn-y btn-sm" onclick="downloadQR()">⬇️ Download</button>
+              <button class="btn btn-out btn-sm" onclick="showSec('qr')">🔍 View Full</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Recent rides -->
+      <div class="card-flat">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h3>📜 Recent Rides</h3>
+          <button class="btn btn-ghost btn-sm" onclick="showSec('history')">View All →</button>
+        </div>
+        <div id="recentRides"><div style="text-align:center;padding:28px;color:var(--text3)">No rides yet</div></div>
+      </div>
+    </div>
+
+    <!-- ── PROFILE ── -->
+    <div id="sec-profile" class="hidden">
+      <div class="dash-hdr"><div class="dash-title">👤 My Profile</div></div>
+      <div class="grid2">
+        <div class="card-flat tc">
+          <div class="avatar-wrap" style="margin-bottom:14px">
+            <img id="profileAvatar" src="" class="avatar" style="width:120px;height:120px" onerror="this.src='https://ui-avatars.com/api/?name=Driver&background=FFC107&color=000&size=120'">
+            <label class="avatar-edit" for="avatarInput" title="Change photo">📷</label>
+            <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="uploadAvatar(this)">
+          </div>
+          <h3 id="profileName">Loading...</h3>
+          <p style="font-size:.82rem;color:var(--text2);margin-top:4px" id="profileUid">DRV-XXXXX</p>
+          <div class="mt1"><span class="badge badge-g" id="profileStatus">✅ Verified</span></div>
+          <div style="margin-top:14px;padding:12px;background:var(--bg);border-radius:var(--rads)">
+            <div style="font-size:1.5rem;font-weight:800" id="profileRating">5.0 ⭐</div>
+            <div style="font-size:.75rem;color:var(--text2)">Average Rating</div>
+          </div>
+        </div>
+        <div class="card-flat">
+          <h3 style="margin-bottom:18px">Personal Information</h3>
+          <div class="grid2">
+            <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="editName" placeholder="Full Name"></div>
+            <div class="form-group"><label class="form-label">Age</label><input class="form-input" id="editAge" type="number" placeholder="Age"></div>
+            <div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="editMobile" placeholder="Mobile Number"></div>
+            <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="editEmail" type="email" readonly style="opacity:.7"></div>
+            <div class="form-group" style="grid-column:1/-1"><label class="form-label">Address</label><textarea class="form-textarea" id="editAddress" placeholder="Full Address" rows="3"></textarea></div>
+          </div>
+          <button class="btn btn-y" onclick="saveProfile()">💾 Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── VEHICLE ── -->
+    <div id="sec-vehicle" class="hidden">
+      <div class="dash-hdr"><div class="dash-title">🚗 Vehicle Details</div></div>
+      <div class="card-flat">
+        <div class="grid2">
+          <div class="form-group"><label class="form-label">Vehicle Number</label><input class="form-input" id="veh-num" readonly></div>
+          <div class="form-group"><label class="form-label">Vehicle Type</label><input class="form-input" id="veh-type" readonly></div>
+          <div class="form-group"><label class="form-label">RC Number</label><input class="form-input" id="veh-rc" readonly></div>
+          <div class="form-group"><label class="form-label">License Number</label><input class="form-input" id="veh-lic" readonly></div>
+          <div class="form-group"><label class="form-label">Role</label><input class="form-input" id="veh-role" readonly></div>
+          <div class="form-group"><label class="form-label">Aadhaar (masked)</label><input class="form-input" id="veh-aadh" readonly></div>
+        </div>
+        <div class="alert alert-info mt2">ℹ️ Vehicle details are set during registration. Contact admin to update.</div>
+      </div>
+    </div>
+
+    <!-- ── DOCUMENTS ── -->
+    <div id="sec-documents" class="hidden">
+      <div class="dash-hdr">
+        <div class="dash-title">📄 Documents</div>
+        <div id="docUploadBtn"></div>
+      </div>
+      <div id="rentNotice" class="hidden mb3">
+        <div class="alert alert-warn">🔒 You are a Rent Driver. Documents are uploaded by the vehicle owner. You can view but not edit or delete.</div>
+      </div>
+      <div class="doc-grid" id="docsGrid">
+        <div class="doc-card"><div class="doc-icon-big">⏳</div><div class="doc-name">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- ── PAYMENT ── -->
+    <div id="sec-payment" class="hidden">
+      <div class="dash-hdr"><div class="dash-title">💳 Payment QR</div></div>
+      <div class="grid2">
+        <div class="card-flat">
+          <h3 style="margin-bottom:14px">Current Payment QR</h3>
+          <div id="currentPayQR" style="text-align:center;padding:20px">
+            <div style="font-size:44px;margin-bottom:10px">💳</div>
+            <p style="color:var(--text2)">No payment QR uploaded yet</p>
+          </div>
+        </div>
+        <div class="card-flat">
+          <h3 style="margin-bottom:14px">Upload / Update QR</h3>
+          <div class="doc-card" id="payDropzone" onclick="document.getElementById('payInput').click()" style="margin-bottom:14px">
+            <span class="doc-icon-big">📤</span>
+            <div class="doc-name">Click to upload payment QR</div>
+            <div class="doc-status">JPG, PNG — Max 5MB</div>
+          </div>
+          <input type="file" id="payInput" accept="image/*" style="display:none" onchange="previewPayQR(this)">
+          <div class="form-group">
+            <label class="form-label">UPI ID (Optional)</label>
+            <input class="form-input" id="upiId" placeholder="yourname@upi">
+          </div>
+          <button class="btn btn-y btn-full" onclick="savePayQR()">💾 Save Payment QR</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── GPS TRACKING ── -->
+    <div id="sec-tracking" class="hidden">
+      <div class="dash-hdr">
+        <div class="dash-title">📍 GPS Tracking</div>
+        <div class="flex-c gap1">
+          <button class="btn btn-y" onclick="startTracking()" id="startTrackBtn">▶ Start Tracking</button>
+          <button class="btn btn-out hidden" onclick="stopTracking()" id="stopTrackBtn">⏹ Stop</button>
+        </div>
+      </div>
+      <div class="card-flat mb3">
+        <div class="track-stats">
+          <div class="track-stat"><div class="track-val" id="t-speed">0 km/h</div><div class="track-lbl">Speed</div></div>
+          <div class="track-stat"><div class="track-val" id="t-dist">0 km</div><div class="track-lbl">Distance</div></div>
+          <div class="track-stat"><div class="track-val" id="t-fare">₹0</div><div class="track-lbl">Est. Fare</div></div>
+        </div>
+      </div>
+      <div class="map-wrap" style="height:440px">
+        <div class="map-overlay">
+          <div class="map-chip">📍 <span id="mapStatus">Waiting for GPS...</span></div>
+          <div class="map-chip hidden" id="paxChip">👤 Passenger Connected</div>
+        </div>
+        <div id="driverMap" style="height:100%;width:100%"></div>
+      </div>
+    </div>
+
+    <!-- ── RIDE HISTORY ── -->
+    <div id="sec-history" class="hidden">
+      <div class="dash-hdr"><div class="dash-title">📜 Ride History</div></div>
+      <div id="rideHistoryList"><div style="text-align:center;padding:44px;color:var(--text3)"><div style="font-size:44px;margin-bottom:10px">📭</div>No rides yet</div></div>
+    </div>
+
+    <!-- ── MY QR CODE ── -->
+    <div id="sec-qr" class="hidden">
+      <div class="dash-hdr"><div class="dash-title">📱 My QR Code</div></div>
+      <div class="grid2" style="align-items:start">
+        <div class="card-flat tc">
+          <h3 style="margin-bottom:18px">Your Unique Driver QR</h3>
+          <div class="qr-box" style="display:inline-block">
+            <img id="fullQR" src="" style="width:220px;height:220px" alt="Driver QR">
+            <div class="qr-lbl" id="fullQRId">Loading...</div>
+          </div>
+          <div class="flex-cc gap1 mt3">
+            <button class="btn btn-y" onclick="downloadQR()">⬇️ Download</button>
+            <button class="btn btn-out" onclick="shareQR()">📤 Share</button>
+          </div>
+        </div>
+        <div class="card-flat">
+          <h3 style="margin-bottom:14px">How to Use</h3>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div class="step-row"><div class="step-num" style="width:34px;height:34px;font-size:.85rem">1</div><div><strong>Show QR to Passenger</strong><p style="font-size:.83rem;margin-top:3px;color:var(--text2)">Display this QR code to your passenger</p></div></div>
+            <div class="step-row"><div class="step-num" style="width:34px;height:34px;font-size:.85rem">2</div><div><strong>Passenger Scans</strong><p style="font-size:.83rem;margin-top:3px;color:var(--text2)">They scan using the RakshaRide app</p></div></div>
+            <div class="step-row"><div class="step-num" style="width:34px;height:34px;font-size:.85rem">3</div><div><strong>Ride Starts</strong><p style="font-size:.83rem;margin-top:3px;color:var(--text2)">GPS tracking activates automatically</p></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- DOCUMENT VIEW MODAL -->
+<div class="modal-bg hidden" id="docModal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-hdr">
+      <h3 class="modal-title" id="docModalTitle">Document</h3>
+      <button class="modal-close" onclick="closeDocModal()">✕</button>
+    </div>
+    <img id="docModalImg" src="" style="width:100%;border-radius:var(--rads);max-height:420px;object-fit:contain" alt="Document">
+    <p id="docModalMsg" style="text-align:center;color:var(--text2);padding:20px;display:none">Document image not available</p>
+  </div>
+</div>
+
+<script>
+let driverData={}, mapInst=null, driverMarker=null, paxMarker=null;
+let tracking=false, trackTimer=null, rideStart=null, totalDist=0, lastPos=null;
+let payQRData=null;
+
+// ── THEME ──
+function toggleTheme(){
+  const h=document.documentElement,t=h.getAttribute('data-theme')==='dark'?'light':'dark';
+  h.setAttribute('data-theme',t);document.getElementById('themeBtn').textContent=t==='dark'?'☀️':'🌙';
+  localStorage.setItem('rr_theme',t);
+}
+(function(){
+  const t=localStorage.getItem('rr_theme')||'light';
+  document.documentElement.setAttribute('data-theme',t);
+  const b=document.getElementById('themeBtn');if(b)b.textContent=t==='dark'?'☀️':'🌙';
+})();
+
+// ── TOAST ──
+function toast(msg,type='info'){
+  const c=document.getElementById('toasts');
+  const icons={info:'ℹ️',success:'✅',error:'❌',warn:'⚠️'};
+  const el=document.createElement('div');el.className='toast';
+  el.innerHTML=`<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  c.appendChild(el);setTimeout(()=>el.remove(),4000);
+}
+
+// ── SECTION NAV ──
+function showSec(name){
+  document.querySelectorAll('[id^="sec-"]').forEach(s=>s.classList.add('hidden'));
+  document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.remove('active'));
+  document.getElementById('sec-'+name).classList.remove('hidden');
+  const nb=document.getElementById('nav-'+name);if(nb)nb.classList.add('active');
+  if(name==='tracking')initMap();
+  if(name==='documents')loadDocs();
+  if(name==='history')loadHistory();
+  if(name==='payment')loadPayQR();
+  if(name==='qr'){document.getElementById('fullQR').src=document.getElementById('qrThumb').src;document.getElementById('fullQRId').textContent=document.getElementById('qrId').textContent;}
+}
+
+function toggleMobileSidebar(){
+  const s=document.getElementById('mobSidebar'),b=document.getElementById('mobSidebarBg');
+  const open=s.style.display==='none';
+  s.style.display=open?'block':'none';b.style.display=open?'block':'none';
+}
+
+// ── LOAD DATA ──
+async function loadData(){
+  try{
+    const r=await fetch('/api/driver_profile');const d=await r.json();
+    if(!d.success){window.location.href='/login/driver';return;}
+    driverData=d.driver;
+    const name=driverData.name||'Driver';
+    const uid=driverData.unique_id||'DRV-XXXXX';
+    document.getElementById('sidebarName').textContent=name;
+    document.getElementById('mobName').textContent=name;
+    document.getElementById('sidebarId').textContent=uid;
+    document.getElementById('mobId').textContent=uid;
+    document.getElementById('driverFirst').textContent=name.split(' ')[0];
+    document.getElementById('profileName').textContent=name;
+    document.getElementById('profileUid').textContent=uid;
+    document.getElementById('profileRating').textContent=(driverData.rating||5.0).toFixed(1)+' ⭐';
+    document.getElementById('st-rides').textContent=driverData.total_rides||0;
+    document.getElementById('st-earned').textContent='₹'+(driverData.total_earned||0);
+    document.getElementById('st-rating').textContent=(driverData.rating||5.0).toFixed(1);
+    document.getElementById('editName').value=driverData.name||'';
+    document.getElementById('editAge').value=driverData.age||'';
+    document.getElementById('editMobile').value=driverData.mobile||'';
+    document.getElementById('editEmail').value=driverData.email||'';
+    document.getElementById('veh-num').value=driverData.vehicle_number||'';
+    document.getElementById('veh-type').value=driverData.vehicle_type||'';
+    document.getElementById('veh-rc').value=driverData.rc_number||'';
+    document.getElementById('veh-lic').value=driverData.license_number||'';
+    document.getElementById('veh-role').value=driverData.role||'OWNER';
+    document.getElementById('veh-aadh').value=driverData.aadhaar_number?'XXXX-XXXX-'+String(driverData.aadhaar_number).slice(-4):'';
+    // Avatar
+    const av=`https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FFC107&color=000&size=120`;
+    document.getElementById('sidebarAvatar').src=av;
+    document.getElementById('mobAvatar').style.backgroundImage=`url(${av})`;
+    document.getElementById('profileAvatar').src=av;
+    // QR
+    if(driverData.qr_image){document.getElementById('qrThumb').src=driverData.qr_image;document.getElementById('fullQR').src=driverData.qr_image;}
+    document.getElementById('qrId').textContent=uid;document.getElementById('fullQRId').textContent=uid;
+    // Rent notice
+    if(driverData.role==='RENT')document.getElementById('rentNotice').classList.remove('hidden');
+    // Availability
+    updateAvailUI(driverData.is_available!==0);
+    // Active ride
+    checkActiveRide();loadRecentRides();
+  }catch(e){toast('Failed to load profile','error');}
+}
+
+async function checkActiveRide(){
+  try{
+    const r=await fetch('/api/get_active_ride');const d=await r.json();
+    if(d.success&&d.ride){
+      document.getElementById('activeRideBanner').classList.remove('hidden');
+      document.getElementById('activeRideInfo').textContent=`Passenger: ${d.ride.passenger_name} | Started: ${new Date(d.ride.start_time).toLocaleTimeString()}`;
+    }
+  }catch(e){}
+}
+
+async function loadRecentRides(){
+  try{
+    const r=await fetch('/api/driver_ride_history?limit=3');const d=await r.json();
+    const el=document.getElementById('recentRides');
+    if(!d.success||!d.rides?.length){el.innerHTML='<div style="text-align:center;padding:28px;color:var(--text3)">No rides yet</div>';return;}
+    el.innerHTML=d.rides.map(ride=>`
+      <div class="ride-card mb1">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:600">${ride.passenger_name||'Passenger'}</div>
+          <span class="badge ${ride.status==='completed'?'badge-g':'badge-gray'}">${ride.status}</span>
+        </div>
+        <div style="font-size:.82rem;color:var(--text2);margin-top:5px">
+          ${new Date(ride.created_at).toLocaleDateString()} • ₹${ride.fare||0} • ${ride.distance_km||0} km
+        </div>
+      </div>`).join('');
+  }catch(e){}
+}
+
+async function loadHistory(){
+  try{
+    const r=await fetch('/api/driver_ride_history');const d=await r.json();
+    const el=document.getElementById('rideHistoryList');
+    if(!d.success||!d.rides?.length){el.innerHTML='<div style="text-align:center;padding:44px;color:var(--text3)"><div style="font-size:44px;margin-bottom:10px">📭</div>No rides yet</div>';return;}
+    el.innerHTML=d.rides.map(ride=>`
+      <div class="ride-card mb2">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div><div style="font-weight:700">${ride.passenger_name||'Passenger'}</div>
+            <div style="font-size:.8rem;color:var(--text2)">${new Date(ride.created_at).toLocaleString()}</div></div>
+          <div style="text-align:right">
+            <div style="font-weight:700;color:var(--yd)">₹${ride.fare||0}</div>
+            <span class="badge ${ride.status==='completed'?'badge-g':'badge-gray'}">${ride.status}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;margin-top:8px;font-size:.8rem;color:var(--text2)">
+          <span>📏 ${ride.distance_km||0} km</span><span>⏱ ${ride.duration_minutes||0} min</span>
+          <span>💳 ${ride.payment_status||'pending'}</span>
+        </div>
+      </div>`).join('');
+  }catch(e){toast('Failed to load history','error');}
+}
+
+// ── DOCUMENTS ──
+async function loadDocs(){
+  try{
+    const r=await fetch('/api/get_driver_documents');const d=await r.json();
+    const grid=document.getElementById('docsGrid');
+    const isRent=driverData.role==='RENT';
+    if(!isRent){
+      document.getElementById('docUploadBtn').innerHTML=`<button class="btn btn-y" onclick="window.location.href='/upload_docs?driver_id=${driverData.id}'">📤 Upload Documents</button>`;
+    }
+    const docTypes=[
+      {key:'aadhaar-front',label:'Aadhaar Front',icon:'🪪'},
+      {key:'aadhaar-back',label:'Aadhaar Back',icon:'🪪'},
+      {key:'license',label:'Driving License',icon:'🚗'},
+      {key:'rc',label:'RC Book',icon:'📋'},
+      {key:'selfie',label:'Live Selfie',icon:'🤳'}
+    ];
+    const docs=d.documents||{};
+    grid.innerHTML=docTypes.map(dt=>{
+      const info=docs[dt.key];
+      const has=info&&info.uploaded;
+      const hasImg=info&&info.data;
+      return `<div class="doc-card ${has?'has-doc':''}" onclick="${has?`viewDoc('${dt.key}','${dt.label}')`:''}" style="cursor:${has?'pointer':'default'}">
+        ${hasImg?`<img src="${info.data}" class="doc-thumb" alt="${dt.label}">`:`<span class="doc-icon-big">${dt.icon}</span>`}
+        <div class="doc-name">${dt.label}</div>
+        <div class="doc-status">${has?'✅ Uploaded — Click to view':'⏳ Not uploaded'}</div>
+        ${has?'<div class="doc-view-overlay">👁 View Document</div>':''}
+      </div>`;
+    }).join('');
+  }catch(e){toast('Failed to load documents','error');}
+}
+
+function viewDoc(key,label){
+  document.getElementById('docModalTitle').textContent=label;
+  document.getElementById('docModalImg').src='';
+  document.getElementById('docModalImg').style.display='block';
+  document.getElementById('docModalMsg').style.display='none';
+  document.getElementById('docModal').classList.remove('hidden');
+  fetch('/api/get_document/'+key).then(r=>r.json()).then(d=>{
+    if(d.success&&d.data){document.getElementById('docModalImg').src=d.data;}
+    else{document.getElementById('docModalImg').style.display='none';document.getElementById('docModalMsg').style.display='block';}
+  }).catch(()=>toast('Failed to load document','error'));
+}
+function closeDocModal(){document.getElementById('docModal').classList.add('hidden');}
+
+// ── PAYMENT QR ──
+async function loadPayQR(){
+  try{
+    const r=await fetch('/api/get_payment_qr');const d=await r.json();
+    if(d.success&&d.qr_image){
+      document.getElementById('currentPayQR').innerHTML=`<img src="${d.qr_image}" style="max-width:180px;border-radius:var(--rads)"><div style="margin-top:8px;font-size:.82rem;color:var(--text2)">✅ Active Payment QR</div>`;
+    }
+    if(d.upi_id)document.getElementById('upiId').value=d.upi_id;
+  }catch(e){}
+}
+
+function previewPayQR(input){
+  const file=input.files[0];if(!file)return;
+  if(file.size>5*1024*1024){toast('File too large (max 5MB)','error');input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    payQRData=e.target.result;
+    document.getElementById('payDropzone').innerHTML=`<img src="${payQRData}" style="max-width:100%;border-radius:8px"><div class="doc-status mt1" style="color:var(--b)">✅ Ready to save</div>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function savePayQR(){
+  if(!payQRData){toast('Please select a QR image first','warn');return;}
+  try{
+    const r=await fetch('/api/upload_payment_qr',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({qr_image:payQRData,upi_id:document.getElementById('upiId').value})});
+    const d=await r.json();
+    if(d.success){toast('Payment QR saved!','success');loadPayQR();}
+    else toast(d.message,'error');
+  }catch(e){toast('Failed to save QR','error');}
+}
+
+// ── AVAILABILITY ──
+function updateAvailUI(avail){
+  const dot=document.getElementById('statusDot'),txt=document.getElementById('statusTxt'),btn=document.getElementById('availBtn');
+  if(avail){dot.className='dot dot-g pulse';txt.textContent='Available';btn.textContent='Set Busy';}
+  else{dot.className='dot dot-r';txt.textContent='Busy';btn.textContent='Set Available';}
+}
+async function toggleAvail(){
+  try{
+    const r=await fetch('/api/toggle_availability',{method:'POST'});const d=await r.json();
+    if(d.success){updateAvailUI(d.is_available);toast(d.is_available?'You are now Available':'You are now Busy','success');}
+  }catch(e){toast('Failed to update status','error');}
+}
+
+// ── GPS MAP ──
+function initMap(){
+  if(mapInst)return;
+  mapInst=L.map('driverMap').setView([20.5937,78.9629],5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(mapInst);
+  document.getElementById('mapStatus').textContent='Map ready. Click Start Tracking.';
+}
+
+function startTracking(){
+  if(!navigator.geolocation){toast('GPS not supported','error');return;}
+  tracking=true;rideStart=Date.now();totalDist=0;lastPos=null;
+  document.getElementById('startTrackBtn').classList.add('hidden');
+  document.getElementById('stopTrackBtn').classList.remove('hidden');
+  document.getElementById('mapStatus').textContent='📍 Tracking active...';
+  trackTimer=setInterval(updateLoc,5000);updateLoc();
+  toast('GPS tracking started','success');
+}
+
+function stopTracking(){
+  tracking=false;clearInterval(trackTimer);
+  document.getElementById('startTrackBtn').classList.remove('hidden');
+  document.getElementById('stopTrackBtn').classList.add('hidden');
+  document.getElementById('mapStatus').textContent='Tracking stopped';
+  toast('GPS tracking stopped','info');
+}
+
+function updateLoc(){
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const lat=pos.coords.latitude,lng=pos.coords.longitude;
+    const spd=pos.coords.speed?Math.round(pos.coords.speed*3.6):0;
+    document.getElementById('t-speed').textContent=spd+' km/h';
+    if(lastPos){
+      const dist=calcDist(lastPos.lat,lastPos.lng,lat,lng);
+      totalDist+=dist;
+      document.getElementById('t-dist').textContent=totalDist.toFixed(2)+' km';
+      document.getElementById('t-fare').textContent='₹'+Math.round(50+totalDist*15);
+    }
+    lastPos={lat,lng};
+    if(!driverMarker){driverMarker=L.marker([lat,lng],{icon:L.divIcon({html:'🚗',className:'',iconSize:[30,30]})}).addTo(mapInst).bindPopup('You (Driver)');}
+    else driverMarker.setLatLng([lat,lng]);
+    mapInst.setView([lat,lng],15);
+    document.getElementById('mapStatus').textContent=`📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    fetch('/api/update_location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat,lng,type:'driver'})}).catch(()=>{});
+  },err=>{document.getElementById('mapStatus').textContent='GPS error: '+err.message;},{enableHighAccuracy:true,timeout:10000});
+}
+
+function calcDist(lat1,lon1,lat2,lon2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+// ── PROFILE SAVE ──
+async function saveProfile(){
+  const data={name:document.getElementById('editName').value,age:document.getElementById('editAge').value,mobile:document.getElementById('editMobile').value,address:document.getElementById('editAddress').value};
+  try{
+    const r=await fetch('/api/update_driver_profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const d=await r.json();
+    if(d.success){toast('Profile updated!','success');loadData();}else toast(d.message,'error');
+  }catch(e){toast('Failed to save','error');}
+}
+
+// ── COMPLETE RIDE ──
+async function completeRide(){
+  if(!confirm('Complete this ride?'))return;
+  try{
+    const r=await fetch('/api/get_active_ride');const d=await r.json();
+    if(!d.success||!d.ride){toast('No active ride','warn');return;}
+    const r2=await fetch('/api/complete_ride',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ride_id:d.ride.id,distance_km:totalDist||1})});
+    const d2=await r2.json();
+    if(d2.success){toast('Ride completed! Fare: ₹'+d2.ride?.fare,'success');document.getElementById('activeRideBanner').classList.add('hidden');stopTracking();loadData();}
+    else toast(d2.message,'error');
+  }catch(e){toast('Failed to complete ride','error');}
+}
+
+// ── QR ──
+function downloadQR(){const img=document.getElementById('fullQR');const a=document.createElement('a');a.href=img.src;a.download='raksharide-qr.png';a.click();}
+function shareQR(){if(navigator.share)navigator.share({title:'My RakshaRide QR',url:window.location.href});else{navigator.clipboard.writeText(window.location.href);toast('Link copied!','success');}}
+
+// ── LOGOUT ──
+async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/';}
+
+// ── INIT ──
+loadData();
+</script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citizen Enrollment | RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-animated-parent">
+    <div class="bg-animated"></div>
+    <div class="center-container">
+        <div class="card glass animate-fade-up" style="max-width: 550px; width: 100%; padding: 40px;">
+            <div class="header text-center mb-4">
+                <img src="/static/img/logo.png" alt="Logo" style="height: 50px; margin-bottom: 10px;">
+                <h2 style="font-family: 'Outfit'; color: var(--primary);">Citizen Enrollment</h2>
+                <p style="font-size: 0.9rem; color: var(--text-muted);">Government Grade Identity Integration (Passenger)</p>
+            </div>
+
+            <div id="alert-box" class="alert" style="display: none; margin-bottom: 20px; padding: 15px; border-radius: 12px; font-weight: 600;">
+            </div>
+
+            <div id="otp-init-section">
+                <div class="form-group">
+                    <label class="form-label" style="color: var(--secondary);">GOVERNMENT REGISTERED EMAIL 📧</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="email" id="email" class="form-input" style="flex: 1;" placeholder="citizen@official.gov.in" required>
+                        <button id="send-otp-btn" class="btn btn-primary" onclick="handleSendOTP()" style="white-space: nowrap; padding: 0 20px;">Get OTP</button>
+                    </div>
+                </div>
+
+                <div id="otp-verify-section" style="display: none; margin-top: 20px;">
+                    <label class="form-label" style="color: var(--secondary);">DIGITAL SECURITY TOKEN 🔐</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="otp" class="form-input" maxlength="6" style="flex: 1; text-align: center; letter-spacing: 10px; font-weight: 800;" placeholder="000000">
+                        <button class="btn btn-primary" onclick="handleVerifyOTP()" style="white-space: nowrap; padding: 0 20px; background: var(--secondary); color: var(--primary);">Verify Identity</button>
+                    </div>
+                </div>
+            </div>
+
+            <form id="enrollmentForm" style="display: none; margin-top: 20px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;" class="mb-4">
+                    <div class="form-group mb-0">
+                        <label class="form-label" style="color: var(--secondary);">FULL NAME 👤</label>
+                        <input type="text" id="name" class="form-input" placeholder="Khushi" required>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="form-label" style="color: var(--secondary);">MOBILE HUB 📱</label>
+                        <input type="tel" id="mobile" class="form-input" placeholder="9877359933" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="color: var(--secondary);">ACCESS TOKEN (PASSWORD) 🔑</label>
+                    <input type="password" id="password" class="form-input" placeholder="••••••" required minlength="6">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; font-weight: 800; padding: 18px; font-size: 1rem;">
+                    ✅ Finalize Portal Enrollment
+                </button>
+            </form>
+
+            <p class="text-center mt-4">
+                Already enrolled? <a href="/login/passenger" style="font-weight: 700; color: var(--primary);">Secure Portal Login</a>
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        function showAlert(msg, isError = true) {
+            const box = document.getElementById('alert-box');
+            box.innerText = msg;
+            box.style.display = 'block';
+            if (isError) {
+                box.style.background = '#fff1f2';
+                box.style.border = '1px solid #fda4af';
+                box.style.color = '#be123c';
+            } else {
+                box.style.background = '#dcfce7';
+                box.style.border = '1px solid #86efac';
+                box.style.color = '#166534';
+            }
+        }
+
+        async function handleSendOTP() {
+            const email = document.getElementById('email').value;
+            if(!email) return showAlert("Email is required.");
+            
+            const btn = document.getElementById('send-otp-btn');
+            btn.innerText = "Transmitting...";
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/send_otp', {
+                    method: 'POST', body: JSON.stringify({email}), headers: {'Content-Type':'application/json'}
+                });
+                const data = await res.json();
+                
+                if(data.success) {
+                    document.getElementById('otp-verify-section').style.display = 'block';
+                    showAlert("Token Transmitted Successfully.", false);
+                } else {
+                    showAlert(data.message || "Failed to send OTP", true);
+                    btn.innerText = "Get OTP";
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                showAlert("Network connection error.", true);
+                btn.innerText = "Get OTP";
+                btn.disabled = false;
+            }
+        }
+
+        async function handleVerifyOTP() {
+            const email = document.getElementById('email').value;
+            const otp = document.getElementById('otp').value;
+            if(!otp) return showAlert("OTP is required.");
+
+            try {
+                const res = await fetch('/api/verify_otp', {
+                    method: 'POST', body: JSON.stringify({email, otp}), headers: {'Content-Type':'application/json'}
+                });
+                const data = await res.json();
+                
+                if(data.success) {
+                    document.getElementById('otp-init-section').style.display = 'none';
+                    document.getElementById('enrollmentForm').style.display = 'block';
+                    showAlert("Identity Confirmed. Access Granted.", false);
+                } else {
+                    showAlert(data.message || "Invalid Token", true);
+                }
+            } catch(err) {
+                showAlert("Verification failed.", true);
+            }
+        }
+
+        document.getElementById('enrollmentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const name = document.getElementById('name').value;
+            const mobile = document.getElementById('mobile').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch('/register/passenger', {
+                    method: 'POST', body: JSON.stringify({email, name, mobile, password}), headers: {'Content-Type':'application/json'}
+                });
+                const data = await res.json();
+                
+                if(data.success) {
+                    showAlert("✅ Enrollment Recorded. Redirecting...", false);
+                    setTimeout(() => window.location.href = '/login/passenger', 1500);
+                } else {
+                    showAlert(data.message || "Registration failed", true);
+                }
+            } catch (err) {
+                showAlert("Failed to insert record.", true);
+            }
+        });
+    </script>
+</body>
+</html>

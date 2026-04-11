@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verified Driver Profile - RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .profile-container {
+            max-width: 500px;
+            width: 100%;
+            margin: 20px;
+            padding: 40px;
+            text-align: center;
+        }
+        .profile-photo {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 5px solid var(--primary);
+            box-shadow: 0 10px 30px rgba(255, 193, 7, 0.3);
+            margin-bottom: 25px;
+        }
+        .verified-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(76, 175, 80, 0.1);
+            color: #4CAF50;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 30px 0;
+        }
+        .stat-card {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+        }
+        .stat-value { font-size: 1.4rem; font-weight: 800; color: var(--primary); }
+        .stat-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-top: 5px; }
+        .vehicle-tag {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 12px;
+            display: inline-block;
+            margin-top: 20px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="bg-animated-parent">
+    <div class="bg-animated"></div>
+    
+    <div class="center-container">
+        <div class="card glass animate-fade-up profile-container">
+            <div class="verified-badge">
+                <i data-lucide="shield-check"></i> RAKSHARIDE VERIFIED
+            </div>
+
+            <img src="{{ '/' + driver['profile_image'] if driver['profile_image'] else '/static/img/default_avatar.png' }}" 
+                 alt="Driver" class="profile-photo">
+            
+            <h1 style="font-size: 2rem; color: var(--primary);">{{ driver['name'] }}</h1>
+            <p style="color: var(--text-secondary); margin-top: 5px;">{{ driver['unique_id'] }} | {{ driver['role'] }}</p>
+
+            <div class="vehicle-tag">
+                {{ driver['vehicle_type'] }} : {{ driver['vehicle_number'] }}
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">{{ driver['rating'] }} ⭐</div>
+                    <div class="stat-label">Safety Rating</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ driver['total_rides'] }}</div>
+                    <div class="stat-label">Total Rides</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 30px; padding: 20px; background: rgba(33, 150, 243, 0.05); border-radius: 15px; border-left: 4px solid var(--primary-blue);">
+                <p style="text-align: left; font-size: 0.9rem;">
+                    <strong>Verification Details:</strong><br>
+                    Official residential record confirmed ✅<br>
+                    Vehicle insurance active ✅<br>
+                    Identity proof verified ✅
+                </p>
+            </div>
+
+            <button class="btn btn-primary" style="width: 100%; margin-top: 30px; padding: 18px;" onclick="window.history.back()">
+                Close Security Insight
+            </button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.lucide) lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

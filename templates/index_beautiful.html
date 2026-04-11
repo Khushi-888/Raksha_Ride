@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RakshaRide - Safe Rides for Women</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <style>
+        /* Landing Page Specific Styles */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 100px 20px 60px;
+            position: relative;
+        }
+
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 0;
+            z-index: 1000;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            animation: slideDown 0.5s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .navbar .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            box-shadow: 0 4px 15px rgba(255, 193, 7, 0.3);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .hero-content {
+            max-width: 500px;
+            width: 100%;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hero-title {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+        }
+
+        .hero-subtitle {
+            font-size: 18px;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+
+        .auth-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(30px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 48px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        .auth-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .auth-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .auth-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        .role-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            padding: 6px;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 14px;
+            margin-bottom: 32px;
+        }
+
+        .role-btn {
+            padding: 14px;
+            border: none;
+            background: transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .role-btn.active {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: var(--dark);
+            box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+        }
+
+        .role-icon {
+            font-size: 20px;
+        }
+
+        .link-text {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .link-text a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .link-text a:hover {
+            color: var(--primary-dark);
+            text-decoration: underline;
+        }
+
+        .otp-section {
+            margin-top: 24px;
+            padding: 24px;
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.2);
+            border-radius: 14px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 24px;
+            margin-top: 60px;
+        }
+
+        .feature-card {
+            padding: 24px;
+            background: rgba(30, 41, 59, 0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--primary);
+            box-shadow: 0 8px 25px rgba(255, 193, 7, 0.2);
+        }
+
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .feature-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .feature-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 36px;
+            }
+
+            .auth-card {
+                padding: 32px 24px;
+            }
+
+            .nav-links {
+                gap: 8px;
+            }
+
+            .btn {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animated"></div>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">
+                <div class="logo-icon">🛡️</div>
+                <span>RAKSHARIDE</span>
+            </a>
+            <div class="nav-links">
+                <button class="btn btn-ghost" onclick="showLogin()">Sign In</button>
+                <button class="btn btn-primary" onclick="showRegister()">Join Now</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <!-- Welcome Screen -->
+                <div id="welcome-screen">
+                    <h1 class="hero-title">Safe Rides for Women</h1>
+                    <p class="hero-subtitle">
+                        Join RakshaRide - India's most trusted ride-sharing platform designed specifically for women's safety. Travel with confidence, anytime, anywhere.
+                    </p>
+                    
+                    <div class="features">
+                        <div class="feature-card">
+                            <div class="feature-icon">🔒</div>
+                            <div class="feature-title">100% Secure</div>
+                            <div class="feature-desc">Verified drivers with background checks</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📱</div>
+                            <div class="feature-title">QR Code System</div>
+                            <div class="feature-desc">Scan and verify driver details instantly</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">💳</div>
+                            <div class="feature-title">Easy Payments</div>
+                            <div class="feature-desc">Secure QR-based payment system</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Login Form -->
+                <div id="login-form" class="auth-card hidden">
+                    <div class="auth-header">
+                        <h2 class="auth-title">Welcome Back</h2>
+                        <p class="auth-subtitle">Sign in to continue your journey</p>
+                    </div>
+
+                    <div class="role-selector">
+                        <button class="role-btn active" onclick="switchLoginRole('passenger')">
+                            <span class="role-icon">👤</span>
+                            <span>Passenger</span>
+                        </button>
+                        <button class="role-btn" onclick="switchLoginRole('driver')">
+                            <span class="role-icon">🚗</span>
+                            <span>Driver</span>
+                        </button>
+                    </div>
+
+                    <div id="message-login" class="alert hidden"></div>
+
+                    <form id="passenger-login" onsubmit="loginPassenger(event)">
+                        <div class="form-group">
+                            <label class="form-label">Email or Phone Number</label>
+                            <input type="text" class="form-input" id="login-passenger-credential" placeholder="name@email.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-input" id="login-passenger-password" placeholder="••••••••" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Sign In</button>
+                    </form>
+
+                    <form id="driver-login" class="hidden" onsubmit="loginDriver(event)">
+                        <div class="form-group">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" class="form-input" id="login-driver-email" placeholder="name@email.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-input" id="login-driver-password" placeholder="••••••••" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Sign In</button>
+                    </form>
+
+                    <div class="divider"><span>OR</span></div>
+                    <div class="link-text">
+                        Don't have an account? <a href="#" onclick="showRegister(); return false;">Create Account</a>
+                    </div>
+                </div>
+
+                <!-- Register Form -->
+                <div id="register-form" class="auth-card hidden">
+                    <div class="auth-header">
+                        <h2 class="auth-title">Join the Fleet</h2>
+                        <p class="auth-subtitle">Create your account in minutes</p>
+                    </div>
+
+                    <div class="role-selector">
+                        <button class="role-btn active" onclick="switchRegisterRole('passenger')">
+                            <span class="role-icon">👤</span>
+                            <span>Passenger</span>
+                        </button>
+                        <button class="role-btn" onclick="switchRegisterRole('driver')">
+                            <span class="role-icon">🚗</span>
+                            <span>Driver</span>
+                        </button>
+                    </div>
+
+                    <div id="message-register" class="alert hidden"></div>
+
+                    <!-- Passenger Registration -->
+                    <form id="passenger-register" onsubmit="registerPassenger(event)">
+                        <div class="form-group">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-input" id="reg-passenger-name" placeholder="John Doe" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Phone Number</label>
+                            <input type="tel" class="form-input" id="reg-passenger-phone" placeholder="+91 9876543210" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" class="form-input" id="reg-passenger-email" placeholder="name@email.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-input" id="reg-passenger-password" placeholder="••••••••" required minlength="6">
+                        </div>
+                        <button type="button" class="btn btn-secondary" style="width: 100%;" onclick="sendOTP('passenger')">Send OTP</button>
+                        
+                        <div id="passenger-otp-section" class="otp-section hidden">
+                            <div class="form-group">
+                                <label class="form-label">Enter OTP Code</label>
+                                <input type="text" class="form-input" id="reg-passenger-otp" placeholder="000000" maxlength="6">
+                            </div>
+                            <button type="submit" class="btn btn-primary" style="width: 100%;">Create Account</button>
+                        </div>
+                    </form>
+
+                    <!-- Driver Registration -->
+                    <form id="driver-register" class="hidden" onsubmit="registerDriver(event)">
+                        <div class="form-group">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-input" id="reg-driver-name" placeholder="John Doe" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Age</label>
+                            <input type="number" class="form-input" id="reg-driver-age" placeholder="30" required min="18" max="70">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Mobile Number</label>
+                            <input type="tel" class="form-input" id="reg-driver-mobile" placeholder="+91 9876543210" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" class="form-input" id="reg-driver-email" placeholder="name@email.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Vehicle Type</label>
+                            <select class="form-select" id="reg-driver-vehicle-type">
+                                <option value="Car">Car</option>
+                                <option value="Auto">Auto</option>
+                                <option value="Bike">Bike</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Vehicle Number</label>
+                            <input type="text" class="form-input" id="reg-driver-vehicle" placeholder="DL01AB1234" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">RC Number</label>
+                            <input type="text" class="form-input" id="reg-driver-rc" placeholder="RC123456789" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-input" id="reg-driver-password" placeholder="••••••••" required minlength="6">
+                        </div>
+                        <button type="button" class="btn btn-secondary" style="width: 100%;" onclick="sendOTP('driver')">Send OTP</button>
+                        
+                        <div id="driver-otp-section" class="otp-section hidden">
+                            <div class="form-group">
+                                <label class="form-label">Enter OTP Code</label>
+                                <input type="text" class="form-input" id="reg-driver-otp" placeholder="000000" maxlength="6">
+                            </div>
+                            <button type="submit" class="btn btn-primary" style="width: 100%;">Create Account</button>
+                        </div>
+                    </form>
+
+                    <div class="divider"><span>OR</span></div>
+                    <div class="link-text">
+                        Already have an account? <a href="#" onclick="showLogin(); return false;">Sign In</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        let currentRole = 'passenger';
+
+        function showMessage(elementId, message, type) {
+            const msgEl = document.getElementById(elementId);
+            msgEl.textContent = message;
+            msgEl.className = `alert alert-${type}`;
+            msgEl.classList.remove('hidden');
+            setTimeout(() => msgEl.classList.add('hidden'), 5000);
+        }
+
+        function showWelcome() {
+            document.getElementById('welcome-screen').classList.remove('hidden');
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('register-form').classList.add('hidden');
+        }
+
+        function showLogin() {
+            document.getElementById('welcome-screen').classList.add('hidden');
+            document.getElementById('login-form').classList.remove('hidden');
+            document.getElementById('register-form').classList.add('hidden');
+        }
+
+        function showRegister() {
+            document.getElementById('welcome-screen').classList.add('hidden');
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('register-form').classList.remove('hidden');
+        }
+
+        function switchLoginRole(role) {
+            currentRole = role;
+            document.querySelectorAll('#login-form .role-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.closest('.role-btn').classList.add('active');
+            
+            if (role === 'passenger') {
+                document.getElementById('passenger-login').classList.remove('hidden');
+                document.getElementById('driver-login').classList.add('hidden');
+            } else {
+                document.getElementById('passenger-login').classList.add('hidden');
+                document.getElementById('driver-login').classList.remove('hidden');
+            }
+        }
+
+        function switchRegisterRole(role) {
+            currentRole = role;
+            document.querySelectorAll('#register-form .role-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.closest('.role-btn').classList.add('active');
+            
+            if (role === 'passenger') {
+                document.getElementById('passenger-register').classList.remove('hidden');
+                document.getElementById('driver-register').classList.add('hidden');
+            } else {
+                document.getElementById('passenger-register').classList.add('hidden');
+                document.getElementById('driver-register').classList.remove('hidden');
+            }
+        }
+
+        async function sendOTP(role) {
+            const email = role === 'passenger' 
+                ? document.getElementById('reg-passenger-email').value
+                : document.getElementById('reg-driver-email').value;
+
+            if (!email) {
+                showMessage('message-register', 'Please enter email first', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/send_otp', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email})
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById(`${role}-otp-section`).classList.remove('hidden');
+                    
+                    if (data.email_sent) {
+                        // Email sent successfully - Don't show OTP
+                        showMessage('message-register', `✅ OTP sent to ${email}. Check your inbox!`, 'success');
+                    } else {
+                        // Email failed - Show OTP as fallback
+                        showMessage('message-register', `⚠️ ${data.message}`, 'warning');
+                        if (data.dev_otp) {
+                            alert(`⚠️ Email Delivery Failed\n\nBackup OTP: ${data.dev_otp}\n\nPlease fix Gmail configuration for production.`);
+                        }
+                    }
+                } else {
+                    showMessage('message-register', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('message-register', 'Failed to send OTP', 'error');
+            }
+        }
+
+        async function registerPassenger(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('reg-passenger-email').value;
+            const otp = document.getElementById('reg-passenger-otp').value;
+
+            try {
+                const otpResponse = await fetch('/api/verify_otp', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, otp})
+                });
+
+                const otpData = await otpResponse.json();
+                
+                if (!otpData.success) {
+                    showMessage('message-register', otpData.message, 'error');
+                    return;
+                }
+
+                const regResponse = await fetch('/api/register_passenger', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        name: document.getElementById('reg-passenger-name').value,
+                        phone: document.getElementById('reg-passenger-phone').value,
+                        email: email,
+                        password: document.getElementById('reg-passenger-password').value
+                    })
+                });
+
+                const regData = await regResponse.json();
+                
+                if (regData.success) {
+                    showMessage('message-register', '✅ Account created successfully!', 'success');
+                    setTimeout(() => showLogin(), 2000);
+                } else {
+                    showMessage('message-register', regData.message, 'error');
+                }
+            } catch (error) {
+                showMessage('message-register', 'Registration failed', 'error');
+            }
+        }
+
+        async function registerDriver(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('reg-driver-email').value;
+            const otp = document.getElementById('reg-driver-otp').value;
+
+            try {
+                const otpResponse = await fetch('/api/verify_otp', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, otp})
+                });
+
+                const otpData = await otpResponse.json();
+                
+                if (!otpData.success) {
+                    showMessage('message-register', otpData.message, 'error');
+                    return;
+                }
+
+                const regResponse = await fetch('/api/register_driver', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        name: document.getElementById('reg-driver-name').value,
+                        age: document.getElementById('reg-driver-age').value,
+                        mobile: document.getElementById('reg-driver-mobile').value,
+                        email: email,
+                        vehicle_type: document.getElementById('reg-driver-vehicle-type').value,
+                        vehicle_number: document.getElementById('reg-driver-vehicle').value,
+                        rc_number: document.getElementById('reg-driver-rc').value,
+                        password: document.getElementById('reg-driver-password').value
+                    })
+                });
+
+                const regData = await regResponse.json();
+                
+                if (regData.success) {
+                    showMessage('message-register', '✅ Driver account created!', 'success');
+                    setTimeout(() => showLogin(), 2000);
+                } else {
+                    showMessage('message-register', regData.message, 'error');
+                }
+            } catch (error) {
+                showMessage('message-register', 'Registration failed', 'error');
+            }
+        }
+
+        async function loginPassenger(e) {
+            e.preventDefault();
+            
+            try {
+                const response = await fetch('/api/login_passenger', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        credential: document.getElementById('login-passenger-credential').value,
+                        password: document.getElementById('login-passenger-password').value
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    showMessage('message-login', '✅ Login successful!', 'success');
+                    setTimeout(() => window.location.href = '/dashboard/passenger', 1000);
+                } else {
+                    showMessage('message-login', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('message-login', 'Login failed', 'error');
+            }
+        }
+
+        async function loginDriver(e) {
+            e.preventDefault();
+            
+            try {
+                const response = await fetch('/api/login_driver', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        email: document.getElementById('login-driver-email').value,
+                        password: document.getElementById('login-driver-password').value
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    showMessage('message-login', '✅ Login successful!', 'success');
+                    setTimeout(() => window.location.href = '/dashboard/driver', 1000);
+                } else {
+                    showMessage('message-login', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('message-login', 'Login failed', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

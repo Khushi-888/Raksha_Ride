@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RakshaRide — Live Ride Tracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0d0d1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .live-badge {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .8px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .5
+            }
+        }
+
+        .main {
+            padding: 20px;
+            max-width: 520px;
+            margin: 0 auto;
+        }
+
+        /* Driver Card */
+        .driver-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+
+        .driver-card .row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .avatar {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #818cf8, #6366f1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .driver-name {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .verified-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .info-item label {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .info-item span {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        /* Status */
+        .status-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-icon {
+            font-size: 28px;
+        }
+
+        .status-label {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .status-val {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .status-active .status-val {
+            color: #22c55e;
+        }
+
+        .status-completed .status-val {
+            color: #94a3b8;
+        }
+
+        /* Map Placeholder */
+        .map-placeholder {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            height: 220px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 14px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .map-iframe {
+            width: 100%;
+            height: 220px;
+            border: none;
+            border-radius: 16px;
+            margin-bottom: 16px;
+        }
+
+        /* Error */
+        .error-box {
+            text-align: center;
+            padding: 48px 24px;
+        }
+
+        .error-box .icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        .error-box h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .error-box p {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 24px;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+        }
+
+        .safety-note {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 12px;
+            color: #fca5a5;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+        }
+
+        .refresh-info {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <span style="font-size:22px;">🛡️</span>
+        <h1>RakshaRide Live Tracker</h1>
+        <span class="live-badge">LIVE</span>
+    </div>
+
+    <div class="main" id="mainContent">
+        <div style="text-align:center;padding:48px;color:rgba(255,255,255,0.4);">
+            <div style="font-size:32px;margin-bottom:12px;">⏳</div>
+            Loading ride information…
+        </div>
+    </div>
+
+    <script>
+        const shareToken = "{{ share_token }}";
+        let pollInterval = null;
+
+        async function fetchRideData() {
+            try {
+                const res = await fetch(`/api/ride/track/${shareToken}`);
+                const d = await res.json();
+                if (!d.success) { showError(d.message); return; }
+                renderRide(d.ride);
+            } catch (e) {
+                showError('Unable to connect. Please check your network.');
+            }
+        }
+
+        function renderRide(ride) {
+            const isActive = ride.status === 'active';
+            const statusClass = isActive ? 'status-active' : 'status-completed';
+            const statusLabel = isActive ? 'Ride in Progress' : 'Ride Completed';
+
+            // Build maps URL
+            let mapHtml = '';
+            if (ride.driver_live_lat && ride.driver_live_lng) {
+                const mapUrl = `https://maps.google.com/maps?q=${ride.driver_live_lat},${ride.driver_live_lng}&z=15&output=embed`;
+                mapHtml = `<iframe class="map-iframe" src="${mapUrl}" allowfullscreen loading="lazy"></iframe>`;
+            } else {
+                mapHtml = `<div class="map-placeholder">
+      <span style="font-size:32px;">🗺️</span>
+      <span>Live map will appear when driver location is available</span>
+    </div>`;
+            }
+
+            const verifiedBadge = ride.driver_verified
+                ? `<span class="verified-badge">✅ Verified Driver</span>`
+                : `<span class="verified-badge" style="background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.3);color:#f59e0b;">⏳ Pending Verification</span>`;
+
+            document.getElementById('mainContent').innerHTML = `
+    <div class="safety-note">
+      🔒 This link was shared by the passenger for safety tracking. No personal data is exposed.
+    </div>
+
+    <div class="status-card ${statusClass}">
+      <span class="status-icon">${isActive ? '🚗' : '🏁'}</span>
+      <div>
+        <div class="status-label">Current Status</div>
+        <div class="status-val">${statusLabel}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:2px;">
+          Started: ${ride.start_time ? ride.start_time.slice(0, 16).replace('T', ' ') : '—'}
+        </div>
+      </div>
+    </div>
+
+    <div class="driver-card">
+      <div class="row">
+        <div class="avatar">🧑</div>
+        <div>
+          <div class="driver-name">${ride.driver_name}</div>
+          ${verifiedBadge}
+        </div>
+      </div>
+      <div class="info-grid">
+        <div class="info-item"><label>Vehicle</label><span>${ride.driver_vehicle}</span></div>
+        <div class="info-item"><label>Contact</label><span>${ride.driver_mobile}</span></div>
+        <div class="info-item"><label>From</label><span>${ride.pickup_location || '—'}</span></div>
+        <div class="info-item"><label>To</label><span>${ride.dropoff_location || '—'}</span></div>
+      </div>
+    </div>
+
+    ${mapHtml}
+
+    <div class="refresh-info">Auto-refreshes every 15 seconds · ${new Date().toLocaleTimeString()}</div>
+  `;
+        }
+
+        function showError(msg) {
+            clearInterval(pollInterval);
+            document.getElementById('mainContent').innerHTML = `
+    <div class="error-box">
+      <div class="icon">🔗</div>
+      <h2>Link Unavailable</h2>
+      <p>${msg || 'This tracking link has expired or is no longer active.'}</p>
+    </div>`;
+        }
+
+        // Start polling
+        fetchRideData();
+        pollInterval = setInterval(fetchRideData, 15000);
+    </script>
+
+    <div class="footer">
+        Powered by RakshaRide &mdash; Women's Safety Platform<br />
+        This page is public and requires no login.
+    </div>
+</body>
+
+</html>

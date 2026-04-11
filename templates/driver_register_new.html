@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Registration - RakshaRide</title>
+    <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+<body>
+    <div class="animated-bg"></div>
+    
+    <!-- Theme Toggle -->
+    <div class="theme-toggle" onclick="toggleTheme()">
+        <span class="theme-toggle-icon" id="theme-icon">🌙</span>
+        <span id="theme-text">Dark Mode</span>
+    </div>
+
+    <div class="center-container">
+        <div class="card" style="max-width: 700px; width: 100%;">
+            <div class="card-header">
+                <img src="/static/images/logo.svg" alt="RakshaRide" style="width: 200px; height: 60px; margin: 0 auto 20px; display: block;">
+                <h1 class="card-title">🚗 Driver Registration</h1>
+                <p class="card-subtitle">Join RakshaRide as a Professional Driver</p>
+            </div>
+
+            <!-- Step Indicator -->
+            <div class="step-indicator">
+                <div class="step-indicator-progress" id="progress-bar" style="width: 33%;"></div>
+                <div class="step-item active" id="step1-ind">
+                    <div class="step-circle">1</div>
+                    <div class="step-label">Select Role</div>
+                </div>
+                <div class="step-item" id="step2-ind">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">Enter Details</div>
+                </div>
+                <div class="step-item" id="step3-ind">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">Confirm</div>
+                </div>
+            </div>
+
+            <!-- Step 1: Role Selection -->
+            <div class="section active" id="step1">
+                <h2 class="text-center mb-2">Select Your Role</h2>
+                <p class="text-center text-secondary mb-3">Choose how you'll be driving with us</p>
+                
+                <div class="role-grid">
+                    <div class="role-card" onclick="selectRole('OWNER')">
+                        <span class="role-icon">👤</span>
+                        <h3 class="role-title">Vehicle Owner</h3>
+                        <p class="role-description">I own the vehicle and will drive it myself</p>
+                    </div>
+                    <div class="role-card" onclick="selectRole('RENT')">
+                        <span class="role-icon">🤝</span>
+                        <h3 class="role-title">Rent Driver</h3>
+                        <p class="role-description">I drive a rented vehicle from an owner</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Driver Details -->
+            <div class="section hidden" id="step2">
+                <h2 class="text-center mb-3">Driver Information</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Full Name *</label>
+                    <input type="text" class="form-input" id="name" placeholder="Enter your full name" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Age *</label>
+                    <input type="number" class="form-input" id="age" placeholder="18-70" min="18" max="70" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mobile Number *</label>
+                    <input type="tel" class="form-input" id="mobile" placeholder="10-digit mobile number" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Email Address *</label>
+                    <input type="email" class="form-input" id="email" placeholder="your.email@example.com" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Vehicle Number *</label>
+                    <input type="text" class="form-input" id="vehicle_number" placeholder="e.g., DL01AB1234" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Vehicle Type *</label>
+                    <select class="form-select" id="vehicle_type" required>
+                        <option value="Car">Car</option>
+                        <option value="Bike">Bike</option>
+                        <option value="Auto">Auto</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Full Residential Address *</label>
+                    <textarea class="form-input" id="address" placeholder="Enter complete address for verification" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">RC Number *</label>
+                    <input type="text" class="form-input" id="rc_number" placeholder="Registration Certificate Number" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Driving License Number *</label>
+                    <input type="text" class="form-input" id="license_number" placeholder="DL Number" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Aadhaar Number *</label>
+                    <input type="text" class="form-input" id="aadhaar_number" placeholder="12-digit Aadhaar" maxlength="12" required>
+                </div>
+
+                <!-- Owner Fields (Only for RENT drivers) -->
+                <div id="owner-fields" class="hidden">
+                    <div class="alert alert-warning">
+                        <h4>🔐 Owner Verification Required</h4>
+                        <p>Enter the vehicle owner's email address for registration approval</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Owner's Email *</label>
+                        <input type="email" class="form-input" id="owner_email" name="owner_email" placeholder="Vehicle owner's registered email">
+                    </div>
+                </div>
+
+                <div class="flex gap-2 mt-3">
+                    <button class="btn btn-outline" style="flex: 1;" onclick="goToStep(1)">← Back</button>
+                    <button class="btn btn-primary" style="flex: 1;" onclick="goToStep(3)">Next →</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Confirmation -->
+            <div class="section hidden" id="step3">
+                <h2 class="text-center mb-3">Confirm Registration</h2>
+                
+                <div id="confirm-details" class="alert alert-info"></div>
+
+                <div class="alert alert-success">
+                    <h4>📋 Next Steps:</h4>
+                    <ul id="next-steps-list" style="margin-left: 20px; margin-top: 10px;"></ul>
+                </div>
+
+                <div class="flex gap-2 mt-3">
+                    <button class="btn btn-outline" style="flex: 1;" onclick="goToStep(2)">← Back</button>
+                    <button class="btn btn-secondary" style="flex: 1;" onclick="submitReg()">
+                        <span id="submit-text">✓ Submit Registration</span>
+                        <span id="submit-loading" class="loading hidden"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        let selectedRole = '';
+
+        // Theme Toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            
+            document.getElementById('theme-icon').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+            document.getElementById('theme-text').textContent = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+            
+            localStorage.setItem('theme', newTheme);
+        }
+
+        // Load saved theme
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.getElementById('theme-icon').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+            document.getElementById('theme-text').textContent = savedTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+        });
+
+        function selectRole(role) {
+            selectedRole = role;
+            document.querySelectorAll('.role-card').forEach(card => card.classList.remove('selected'));
+            event.target.closest('.role-card').classList.add('selected');
+            setTimeout(() => goToStep(2), 500);
+        }
+
+        function goToStep(step) {
+            if (step === 3 && currentStep === 2) {
+                if (!validateStep2()) return;
+                populateConfirm();
+            }
+
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.add('hidden');
+                section.classList.remove('active');
+            });
+            
+            // Update step indicators
+            document.querySelectorAll('.step-item').forEach(item => {
+                item.classList.remove('active');
+            });
+
+            // Show target section
+            document.getElementById(`step${step}`).classList.remove('hidden');
+            document.getElementById(`step${step}`).classList.add('active');
+            document.getElementById(`step${step}-ind`).classList.add('active');
+            
+            // Mark completed steps
+            for (let i = 1; i < step; i++) {
+                document.getElementById(`step${i}-ind`).classList.add('completed');
+            }
+            
+            // Update progress bar
+            const progress = (step / 3) * 100;
+            document.getElementById('progress-bar').style.width = progress + '%';
+            
+            // Show owner fields if RENT driver
+            if (step === 2 && selectedRole === 'RENT') {
+                document.getElementById('owner-fields').classList.remove('hidden');
+            }
+
+            currentStep = step;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function validateStep2() {
+            const fields = ['name', 'age', 'mobile', 'email', 'vehicle_number', 'rc_number', 'license_number', 'aadhaar_number'];
+            
+            for (let field of fields) {
+                const value = document.getElementById(field).value.trim();
+                if (!value) {
+                    alert(`Please fill in ${field.replace('_', ' ')}`);
+                    document.getElementById(field).focus();
+                    return false;
+                }
+            }
+
+            if (selectedRole === 'RENT') {
+                const ownerEmail = document.getElementById('owner_email').value.trim();
+                if (!ownerEmail) {
+                    alert('Please enter owner email');
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        function populateConfirm() {
+            const details = `
+                <p><strong>Role:</strong> ${selectedRole === 'OWNER' ? '👤 Vehicle Owner' : '🤝 Rent Driver'}</p>
+                <p><strong>Name:</strong> ${document.getElementById('name').value}</p>
+                <p><strong>Email:</strong> ${document.getElementById('email').value}</p>
+                <p><strong>Mobile:</strong> ${document.getElementById('mobile').value}</p>
+                <p><strong>Address:</strong> ${document.getElementById('address').value}</p>
+                <p><strong>Vehicle:</strong> ${document.getElementById('vehicle_number').value} (${document.getElementById('vehicle_type').value})</p>
+                <p><strong>License:</strong> ${document.getElementById('license_number').value}</p>
+            `;
+            document.getElementById('confirm-details').innerHTML = details;
+
+            const nextSteps = selectedRole === 'OWNER' 
+                ? `<li>✉️ Confirmation email will be sent to your email</li>
+                   <li>📄 Upload required documents (Aadhaar, License, RC, Selfie)</li>
+                   <li>⏳ Admin will verify your documents</li>
+                   <li>🔑 Login credentials will be sent after approval</li>`
+                : `<li>📧 Owner will receive verification email</li>
+                   <li>✅ Owner must confirm your request</li>
+                   <li>📄 Document upload page will open after owner confirmation</li>
+                   <li>⏳ Admin will verify documents</li>
+                   <li>🔑 Both you and owner will receive credentials</li>`;
+            
+            document.getElementById('next-steps-list').innerHTML = nextSteps;
+        }
+
+        async function submitReg() {
+            document.getElementById('submit-text').classList.add('hidden');
+            document.getElementById('submit-loading').classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('role', selectedRole);
+            formData.append('name', document.getElementById('name').value.trim());
+            formData.append('age', document.getElementById('age').value);
+            formData.append('mobile', document.getElementById('mobile').value.trim());
+            formData.append('email', document.getElementById('email').value.trim());
+            formData.append('vehicle_number', document.getElementById('vehicle_number').value.trim());
+            formData.append('vehicle_type', document.getElementById('vehicle_type').value);
+            formData.append('rc_number', document.getElementById('rc_number').value.trim());
+            formData.append('license_number', document.getElementById('license_number').value.trim());
+            formData.append('aadhaar_number', document.getElementById('aadhaar_number').value.trim());
+            formData.append('address', document.getElementById('address').value.trim());
+
+            if (selectedRole === 'RENT') {
+                formData.append('owner_email', document.getElementById('owner_email').value.trim());
+            }
+
+            try {
+                const res = await fetch('/api/register_driver_v2', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await res.json();
+                
+                document.getElementById('submit-text').classList.remove('hidden');
+                document.getElementById('submit-loading').classList.add('hidden');
+                
+                if (result.success) {
+                    alert('✅ ' + result.message);
+                    if (selectedRole === 'OWNER') {
+                        window.location.href = '/upload_docs?driver_id=' + result.driver_id;
+                    } else {
+                        window.location.href = '/';
+                    }
+                } else {
+                    alert('❌ Error: ' + result.message);
+                }
+            } catch (error) {
+                document.getElementById('submit-text').classList.remove('hidden');
+                document.getElementById('submit-loading').classList.add('hidden');
+                alert('❌ Registration failed: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

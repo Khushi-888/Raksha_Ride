@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live GPS Tracking | RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    
+    <!-- Leaflet GPS Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; padding: 0; margin: 0; box-sizing: border-box;}
+        .header { background: white; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); z-index: 1000; position: relative; }
+        .info-panel { background: white; padding: 20px; margin: 20px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); position: absolute; bottom: 20px; left: 0; right: 0; z-index: 1000; max-width: 500px; margin: 20px auto; }
+        #map { height: calc(100vh - 60px); width: 100%; position: absolute; top: 60px; left: 0; z-index: 1; }
+        
+        .pulse-dot {
+            width: 15px; height: 15px; background: #10b981; border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 1); animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        form { box-sizing: border-box; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2 style="font-family: 'Outfit'; color: var(--primary); margin: 0; text-align: center;">🛡️ Live GPS Tracking</h2>
+    </div>
+
+    <!-- Map container -->
+    <div id="map"></div>
+
+    <!-- Info Panel at bottom -->
+    <div class="info-panel" id="ride-info">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div>
+                <h3 style="margin: 0; font-family: 'Outfit'; color: var(--primary);">Driver: {{ ride.driver_name }}</h3>
+                <p style="margin: 5px 0 0 0; color: #64748b; font-size: 0.85rem;">{{ ride.vehicle_details or 'Authorized Vehicle' }}</p>
+            </div>
+            <div class="pulse-dot"></div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; background: #f1f5f9; padding: 15px; border-radius: 12px;">
+            <div>
+                <span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Status</span>
+                <div style="color: #10b981; font-weight: 800;">EN ROUTE 🟢</div>
+            </div>
+            <div style="text-align: right;">
+                <span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Est. Arrival</span>
+                <div style="color: var(--primary); font-weight: 800;">~12 Mins</div>
+            </div>
+        </div>
+
+        <button onclick="endRide()" class="btn" style="width: 100%; background: #ef4444; color: white; border: none; padding: 15px; border-radius: 12px; font-weight: 800; font-size: 1rem; cursor: pointer;">
+            ⏹️ Journey Completed
+        </button>
+    </div>
+
+    <!-- Rating Panel (Hidden initially) -->
+    <div class="info-panel" id="rating-panel" style="display: none;">
+        <h3 style="font-family: 'Outfit'; margin-bottom: 15px; text-align: center;">Safety Check-In</h3>
+        <p style="text-align: center; color: #64748b; font-size: 0.85rem;">How was your secure ride with {{ ride.driver_name }}?</p>
+        
+        <form action="/rate_ride" method="POST">
+            <input type="hidden" name="driver_id" value="{{ ride.driver_id }}">
+            <input type="hidden" name="ride_id" value="{{ ride.id }}">
+            
+            <div style="margin: 15px 0;">
+                <select name="rating" style="width: 100%; padding: 15px; border-radius: 12px; border: 2px solid #eee; font-weight: 700;">
+                    <option value="5">⭐⭐⭐⭐⭐ Excellent Security</option>
+                    <option value="4">⭐⭐⭐⭐ Professional</option>
+                    <option value="3">⭐⭐⭐ Standard</option>
+                    <option value="2">⭐⭐ Poor</option>
+                    <option value="1">⭐ Unsafe</option>
+                </select>
+            </div>
+            <textarea name="comment" placeholder="Add a safety log..." style="width: 100%; padding: 15px; border-radius: 12px; border: 2px solid #eee; margin-bottom: 15px; box-sizing: border-box; resize: none;" rows="3"></textarea>
+            <button type="submit" class="btn btn-primary" style="width: 100%; background: var(--secondary); color: var(--primary); border: none; padding: 15px; border-radius: 12px; font-weight: 800; font-size: 1rem; cursor: pointer;">Submit Safety Log</button>
+        </form>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Init Map (Centered on a default city center, e.g. New Delhi)
+        const map = L.map('map', {zoomControl: false}).setView([28.6139, 77.2090], 14);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            maxZoom: 20
+        }).addTo(map);
+
+        // Simulated Rickshaw GPS Marker
+        const vehicleIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/3204/3204481.png',
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
+        });
+
+        // Passenger Location Marker
+        const passengerIcon = L.divIcon({
+            html: '<div style="width:15px; height:15px; background:blue; border-radius:50%; border:3px solid white; box-shadow:0 0 5px rgba(0,0,0,0.5);"></div>',
+            className: 'passenger-dot',
+            iconSize: [20,20]
+        });
+
+        const startLat = 28.6139;
+        const startLng = 77.2090;
+        
+        let rikLat = startLat - 0.005;
+        let rikLng = startLng - 0.005;
+
+        L.marker([startLat, startLng], {icon: passengerIcon}).addTo(map);
+        const driverMarker = L.marker([rikLat, rikLng], {icon: vehicleIcon}).addTo(map);
+
+        // Simulation loop
+        let routeAnim = setInterval(() => {
+            rikLat += 0.0001;
+            rikLng += 0.0001;
+            driverMarker.setLatLng([rikLat, rikLng]);
+            map.panTo([rikLat, rikLng]);
+        }, 1000);
+
+        function endRide() {
+            clearInterval(routeAnim);
+            document.getElementById('ride-info').style.display = 'none';
+            document.getElementById('rating-panel').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

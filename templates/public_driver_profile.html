@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Verification | RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; padding: 20px; text-align: center; }
+        .profile-card { background: white; max-width: 500px; margin: 0 auto; padding: 40px; border-radius: 30px; box-shadow: 0 20px 50px rgba(0,51,102,0.1); border: 1px solid #e2e8f0; }
+        .driver-img { width: 150px; height: 150px; border-radius: 25px; margin-bottom: 20px; border: 5px solid var(--secondary); object-fit: cover; }
+        .verified-seal { background: #dcfce7; color: #166534; padding: 8px 16px; border-radius: 50px; font-weight: 800; font-size: 0.8rem; display: inline-block; margin-bottom: 20px; }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 25px; border-top: 1px solid #eee; padding-top: 25px; }
+        .stat-item { text-align: left; }
+        .stat-label { font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; }
+        .stat-value { font-weight: 800; color: var(--primary); }
+    </style>
+</head>
+<body>
+    <div class="profile-card">
+        <div class="verified-seal">🛡️ OFFICIAL VERIFIED DRIVER</div>
+        <br>
+        <img src="{{ url_for('static', filename='uploads/profile/' + driver.profile_image) if driver.profile_image else 'https://via.placeholder.com/150' }}" class="driver-img">
+        <h1 style="font-family: 'Outfit'; color: var(--primary); margin: 0;">{{ driver.name }}</h1>
+        <p style="color: grey;">{{ driver.driver_type.capitalize() }} Partner</p>
+        
+        <div class="stat-grid">
+            <div class="stat-item">
+                <div class="stat-label">Vehicle Details</div>
+                <div class="stat-value">{{ driver.vehicle_details or 'Verified Security Vehicle' }}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Driver Rating</div>
+                <div class="stat-value">⭐ {{ "%.1f"|format(driver.avg_rating or 0) }} / 5.0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Total Rides</div>
+                <div class="stat-value">{{ driver.total_rides or 0 }} Completed</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Security Status</div>
+                <div class="stat-value" style="color: #10b981;">LOGGED ✅</div>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee;" id="action-section">
+            <h3 style="font-family: 'Outfit'; margin-bottom: 20px;">Ready for your journey?</h3>
+            <button onclick="startSecureRide({{ driver.id }})" class="btn btn-primary" style="width: 100%; font-weight: 800; padding: 18px; font-size: 1.1rem; border-radius: 15px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                📍 Start Secure Tracked Ride
+            </button>
+        </div>
+
+        <script>
+            async function startSecureRide(driverId) {
+                const btn = document.querySelector('button');
+                btn.innerText = "Initializing GPS Tracker...";
+                btn.disabled = true;
+                
+                try {
+                    const res = await fetch('/api/start_ride', {
+                        method: 'POST',
+                        body: JSON.stringify({driver_id: driverId}),
+                        headers: {'Content-Type': 'application/json'}
+                    });
+                    const data = await res.json();
+                    if(data.success) {
+                        window.location.href = `/ride/${data.ride_id}/track`;
+                    } else {
+                        alert("Error: " + data.message);
+                        btn.innerText = "📍 Start Secure Tracked Ride";
+                        btn.disabled = false;
+                    }
+                } catch(err) {
+                    alert("Network error starting ride.");
+                }
+            }
+        </script>
+
+        <div style="margin-top: 30px; font-size: 0.75rem; color: grey;">
+            🔒 This session is monitored by the RakshaRide Safety Protocol.
+        </div>
+    </div>
+</body>
+</html>

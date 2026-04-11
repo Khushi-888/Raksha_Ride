@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ type.capitalize() }} Portal Login | RakshaRide</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body class="bg-animated-parent">
+    <div class="bg-animated"></div>
+    
+    <div class="center-container">
+        <div class="card glass animate-fade-up" style="max-width: 450px; width: 100%; padding: 40px; margin: 20px;">
+        <div class="header text-center mb-4">
+            <div class="logo-container mb-3" style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                <img src="/static/img/logo.png" alt="RakshaRide" style="height: 40px; border-radius: 8px;">
+                <div class="text-left">
+                    <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.4rem; color: var(--primary); line-height: 1;">RakshaRide</div>
+                    <div style="font-size: 0.6rem; color: var(--accent); letter-spacing: 1px; text-transform: uppercase;">OFFICIAL PORTAL</div>
+                </div>
+            </div>
+            <h2 id="login-title" style="font-size: 1.6rem; color: var(--primary);">{{ type.capitalize() }} Access</h2>
+            <p id="login-subtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">Secure Portal Authentication</p>
+        </div>
+
+        <div id="alert-box" class="alert hidden"></div>
+
+        <div id="password-section">
+            <div class="form-group">
+                <label class="form-label">Registered ID 👤</label>
+                <input type="email" id="email" class="form-input" placeholder="citizen@domain.com" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Access Token 🔑</label>
+                <input type="password" id="password" class="form-input" placeholder="••••••••" required>
+            </div>
+            <button class="btn btn-primary" style="width: 100%;" onclick="handleStep1()">Verify & Proceed</button>
+            <div class="footer-text mt-3 text-center">
+                New on board? 
+                {% if type == 'driver' %}
+                    <a href="/register/driver/new" style="font-weight: 700; color: var(--accent); padding: 8px 16px; border: 2px solid var(--accent); border-radius: 8px; display: inline-block; margin-left: 10px; transition: all 0.3s ease;">Driver Enrollment</a>
+                {% else %}
+                    <a href="/register/passenger" style="font-weight: 700; color: var(--accent); padding: 8px 16px; border: 2px solid var(--accent); border-radius: 8px; display: inline-block; margin-left: 10px; transition: all 0.3s ease;">Passenger Enrollment</a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div id="otp-section" class="hidden">
+            <p class="text-center" style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
+                🔐 A security code has been transmitted to your registered email.
+            </p>
+            <div class="flex justify-center gap-2 mb-4">
+                <input type="text" maxlength="1" class="form-input otp-box" style="width: 45px; text-align: center; font-weight: 800;" onkeyup="moveFocus(this, 1)">
+                <input type="text" maxlength="1" class="form-input otp-box" style="width: 45px; text-align: center; font-weight: 800;" onkeyup="moveFocus(this, 2)">
+                <input type="text" maxlength="1" class="form-input otp-box" style="width: 45px; text-align: center; font-weight: 800;" onkeyup="moveFocus(this, 3)">
+                <input type="text" maxlength="1" class="form-input otp-box" style="width: 45px; text-align: center; font-weight: 800;" onkeyup="moveFocus(this, 4)">
+                <input type="text" maxlength="1" class="form-input otp-box" style="width: 45px; text-align: center; font-weight: 800;" onkeyup="moveFocus(this, 5)">
+                <input type="text" maxlength="1" class="form-input otp-box" style="width: 45px; text-align: center; font-weight: 800;" onkeyup="moveFocus(this, 6)">
+            </div>
+            <button class="btn btn-accent" style="width: 100%; font-weight: 800;" onclick="handleStep2()">Validate Identity</button>
+            <div class="footer-text mt-3 text-center">
+                Code didn't arrive? <a href="javascript:void(0)" onclick="handleStep1()" style="color: var(--primary);">Resend Now</a>
+            </div>
+        </div>
+        </div>
+    </div>
+
+    <script src="/static/js/theme.js"></script>
+    <script>
+        const userType = "{{ type }}";
+        const otpBoxes = document.querySelectorAll('.otp-box');
+
+        function moveFocus(el, index) {
+            if (el.value.length === 1 && index < 6) otpBoxes[index].focus();
+        }
+
+        function showAlert(msg, type = 'error') {
+            const box = document.getElementById('alert-box');
+            box.innerText = msg;
+            box.className = `alert alert-${type}`;
+            box.classList.remove('hidden');
+            setTimeout(() => box.classList.add('hidden'), 5000);
+        }
+
+        async function handleStep1() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            if (!email || !password) { showAlert("Credential input required."); return; }
+
+            const endpoint = userType === 'driver' ? '/api/login_driver' : '/api/login_passenger';
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ credential: email, email, password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    if (data.requires_otp) {
+                        document.getElementById('password-section').classList.add('hidden');
+                        document.getElementById('otp-section').classList.remove('hidden');
+                        document.getElementById('login-title').innerText = "OTP Validation";
+                        showAlert("Identity verified. Enter OTP from email.", "success");
+                        otpBoxes[0].focus();
+                    } else {
+                        // Success without OTP - Show the redirection button
+                        const alertBox = document.getElementById('alert-box');
+                        alertBox.innerHTML = `
+                            <div class="flex flex-col items-center gap-3">
+                                <p style="font-weight: 600; color: #2E7D32;">✅ ${data.message || "Login Successful"}</p>
+                                <button class="btn btn-secondary" style="width: 100%; font-weight: 800;" 
+                                    onclick="window.location.href='${data.redirect_url}'">
+                                    Continue to Portal ➔
+                                </button>
+                            </div>
+                        `;
+                        alertBox.className = "alert alert-success block";
+                        alertBox.classList.remove('hidden');
+                        document.getElementById('password-section').classList.add('hidden');
+                        
+                        // Store token if returned
+                        if (data.token) {
+                            localStorage.setItem('rr_token', data.token);
+                            localStorage.setItem('rr_user_type', userType);
+                        }
+                        
+                        // Also automatically redirect after a short delay if they don't click
+                        setTimeout(() => {
+                            if (window.location.pathname === '/login/driver' || window.location.pathname === '/login/passenger') {
+                                window.location.href = data.redirect_url;
+                            }
+                        }, 2000);
+                    }
+                } else {
+                    showAlert(data.message || "Invalid credentials.");
+                }
+            } catch (err) { 
+                console.error(err);
+                showAlert("Handshake Failed."); 
+            }
+        }
+
+        async function handleStep2() {
+            const email = document.getElementById('email').value;
+            let otp = "";
+            otpBoxes.forEach(b => otp += b.value);
+            if (otp.length < 6) { showAlert("6-digit token required."); return; }
+
+            const endpoint = userType === 'driver' ? '/api/verify_login_otp_driver' : '/api/verify_login_otp_passenger';
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, otp })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const alertBox = document.getElementById('alert-box');
+                    alertBox.innerHTML = `
+                        <div class="flex flex-col items-center gap-3">
+                            <p style="font-weight: 600; color: #2E7D32;">✅ Access Granted</p>
+                            <button class="btn btn-secondary" style="width: 100%; font-weight: 800;" 
+                                onclick="window.location.href='/dashboard/${userType}'">
+                                Open Dashboard ➔
+                            </button>
+                        </div>
+                    `;
+                    alertBox.className = "alert alert-success block";
+                    alertBox.classList.remove('hidden');
+                    document.getElementById('otp-section').classList.add('hidden');
+                    
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    // Store JWT token for API authentication
+                    if (data.token) {
+                        localStorage.setItem('rr_token', data.token);
+                        localStorage.setItem('rr_user_type', userType);
+                        localStorage.setItem('rr_user_id', data.user ? data.user.id : '');
+                    }
+                    setTimeout(() => window.location.href = `/dashboard/${userType}`, 1500);
+                } else {
+                    showAlert(data.message || "Invalid token.");
+                }
+            } catch (err) { showAlert("Handshake Failed."); }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.lucide) lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

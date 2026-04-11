@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Driver - RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary: #003366;
+            --accent: #ff9933;
+            --bg-dark: #0a0e17;
+            --card-glass: rgba(255, 255, 255, 0.05);
+            --border-glass: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .card {
+            max-width: 500px;
+            width: 100%;
+            background: var(--card-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 32px;
+            padding: 40px;
+            backdrop-filter: blur(20px);
+            text-align: center;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.6);
+        }
+
+        .avatar {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 30px;
+            margin: 0 auto 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            color: #fff;
+            box-shadow: 0 15px 35px rgba(255,153,51,0.2);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 24px;
+        }
+        .status-approved { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .status-pending { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        .driver-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 28px;
+            margin: 0 0 5px 0;
+        }
+
+        .driver-phone {
+            color: #94a3b8;
+            font-size: 15px;
+            margin: 0 0 30px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+
+        .info-box {
+            background: rgba(0,0,0,0.2);
+            padding: 16px;
+            border-radius: 16px;
+            border: 1px solid var(--border-glass);
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        .info-val {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            color: var(--accent);
+        }
+
+        .stats-container {
+            display: flex;
+            justify-content: space-around;
+            padding: 24px 0;
+            border-top: 1px solid var(--border-glass);
+            border-bottom: 1px solid var(--border-glass);
+            margin-bottom: 30px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .btn-start {
+            background: #10b981;
+            color: white;
+            text-decoration: none;
+            padding: 18px;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 16px;
+            display: block;
+            transition: 0.3s;
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+            margin-bottom: 15px;
+        }
+
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-back {
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            text-decoration: none;
+            padding: 18px;
+            border-radius: 16px;
+            font-weight: 600;
+            display: block;
+            border: 1px solid var(--border-glass);
+            transition: 0.3s;
+        }
+
+        .btn-back:hover {
+            background: rgba(255,255,255,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="avatar">
+            <i class="fas fa-user-shield"></i>
+        </div>
+        
+        <div class="status-badge status-{{ driver['verification_status'] }}">
+            <i class="fas fa-{% if driver['verification_status'] == 'approved' %}check-circle{% else %}times-circle{% endif %}"></i>
+            {% if driver['verification_status'] == 'approved' %}Official Partner{% else %}Verification Pending{% endif %}
+        </div>
+
+        <h1 class="driver-name">{{ driver['name'] }}</h1>
+        <div class="driver-phone">
+            <i class="fas fa-mobile-alt"></i> +91 {{ driver['mobile'] }}
+            {% if driver['verification_status'] == 'approved' %}
+            <i class="fas fa-badge-check" style="color: #10b981;" title="Verified Number"></i>
+            {% endif %}
+        </div>
+
+        <div class="info-grid">
+            <div class="info-box">
+                <div class="info-label">Vehicle No.</div>
+                <div class="info-val">{{ driver['vehicle_number'] }}</div>
+            </div>
+            <div class="info-box">
+                <div class="info-label">Driver Type</div>
+                <div class="info-val">{{ (driver['driver_type'] or 'Owner').capitalize() }}</div>
+            </div>
+            <div class="info-box" style="grid-column: span 2;">
+                <div class="info-label">Current Owner</div>
+                <div class="info-val" style="color: #fff; font-size: 16px;">{% if driver['driver_type'] == 'renter' %}{{ driver['owner_email'] }}{% else %}{{ driver['name'] }} (Self){% endif %}</div>
+            </div>
+        </div>
+
+        <div class="stats-container">
+            <div class="stat-item">
+                <span class="stat-value">⭐ {{ driver['rating'] }}</span>
+                <span class="stat-label">Safety Rating</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">{{ driver['total_rides'] }}</span>
+                <span class="stat-label">Secure Trips</span>
+            </div>
+        </div>
+
+        {% if driver['verification_status'] == 'approved' %}
+            <button onclick="startSecureRide('{{ driver.id }}')" class="btn-start" style="border: none; cursor: pointer; text-align: center;">📍 Start Tracked Journey</button>
+        {% else %}
+            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 12px; border-radius: 12px; color: #ef4444; font-size: 14px; margin-bottom: 24px;">
+                ⚠️ Driver document verification pending.
+            </div>
+        {% endif %}
+
+        <a href="/" class="btn-back">Cancel Verification</a>
+    </div>
+
+    <script>
+        async function startSecureRide(driverId) {
+            const btn = document.querySelector('.btn-start');
+            btn.innerText = "Initializing GPS Tracker...";
+            btn.disabled = true;
+            
+            try {
+                const res = await fetch('/api/start_ride', {
+                    method: 'POST',
+                    body: JSON.stringify({driver_id: driverId}),
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await res.json();
+                if(data.success) {
+                    window.location.href = `/ride/${data.ride_id}/track`;
+                } else {
+                    alert("Error: " + data.message);
+                    btn.innerText = "📍 Start Tracked Journey";
+                    btn.disabled = false;
+                }
+            } catch(err) {
+                alert("Network error starting ride.");
+            }
+        }
+    </script>
+</body>
+</html>

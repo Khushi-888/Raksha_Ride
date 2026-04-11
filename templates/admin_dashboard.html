@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RakshaRide — Admin KYC Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0d0d1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        /* ── Top Nav ── */
+        nav {
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 0 32px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .nav-brand .dot {
+            width: 10px;
+            height: 10px;
+            background: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #22c55e;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .4;
+            }
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .badge-admin {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .btn-logout {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: 'Inter', sans-serif;
+            transition: background .2s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        /* ── Main ── */
+        .main {
+            padding: 32px;
+        }
+
+        .page-header {
+            margin-bottom: 28px;
+        }
+
+        .page-header h1 {
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .page-header p {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14px;
+        }
+
+        /* ── Stats Row ── */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 20px;
+        }
+
+        .stat .num {
+            font-size: 28px;
+            font-weight: 700;
+            margin: 4px 0;
+        }
+
+        .stat .label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 13px;
+        }
+
+        .stat.pending .num {
+            color: #f59e0b;
+        }
+
+        .stat.approved .num {
+            color: #22c55e;
+        }
+
+        .stat.rejected .num {
+            color: #ef4444;
+        }
+
+        .stat.total .num {
+            color: #818cf8;
+        }
+
+        /* ── Filter Tabs ── */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 8px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.5);
+            transition: .2s;
+        }
+
+        .tab.active,
+        .tab:hover {
+            background: rgba(129, 140, 248, 0.15);
+            border-color: #818cf8;
+            color: #818cf8;
+        }
+
+        /* ── Table ── */
+        .table-wrap {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 14px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.4);
+            text-transform: uppercase;
+            letter-spacing: .6px;
+        }
+
+        td {
+            padding: 14px 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 14px;
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+
+        .status-pending {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .status-approved {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-rejected {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* ── Action Buttons ── */
+        .actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-view {
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #818cf8;
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: 'Inter', sans-serif;
+            transition: .2s;
+            white-space: nowrap;
+        }
+
+        .btn-view:hover {
+            background: rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-approve {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: 'Inter', sans-serif;
+            transition: .2s;
+        }
+
+        .btn-approve:hover {
+            background: rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-reject {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: 'Inter', sans-serif;
+            transition: .2s;
+        }
+
+        .btn-reject:hover {
+            background: rgba(239, 68, 68, 0.25);
+        }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .7);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal {
+            background: #1a1a2e;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            padding: 32px;
+            width: 520px;
+            max-width: 95vw;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, .8);
+        }
+
+        .modal h2 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .doc-img {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 16px;
+        }
+
+        .modal-field {
+            margin-bottom: 12px;
+        }
+
+        .modal-field label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, .4);
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .modal-field span {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        textarea.notes-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 10px;
+            color: #fff;
+            font-size: 13px;
+            height: 80px;
+            resize: none;
+            outline: none;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-close {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .doc-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .doc-tab {
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .doc-tab.active {
+            background: rgba(129, 140, 248, 0.2);
+            border-color: #818cf8;
+            color: #818cf8;
+        }
+
+        .no-doc {
+            text-align: center;
+            padding: 24px;
+            color: rgba(255, 255, 255, 0.3);
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            background: #1e1e3a;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 14px 20px;
+            font-size: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+            display: none;
+            animation: slideUp .3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1
+            }
+        }
+
+        .empty {
+            text-align: center;
+            padding: 48px;
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        @media(max-width:900px) {
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .main {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Nav -->
+    <nav>
+        <div class="nav-brand">
+            <span>🛡️</span>
+            <span>RakshaRide Admin</span>
+            <div class="dot"></div>
+        </div>
+        <div class="nav-right">
+            <span class="badge-admin">KYC Dashboard</span>
+            <button class="btn-logout" onclick="doLogout()">Logout</button>
+        </div>
+    </nav>
+
+    <!-- Main -->
+    <div class="main">
+        <div class="page-header">
+            <h1>Driver Verification Panel</h1>
+            <p>Review, approve, or reject driver KYC documents before they can go online.</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+            <div class="stat pending">
+                <div class="label">⏳ Pending</div>
+                <div class="num" id="statPending">—</div>
+            </div>
+            <div class="stat approved">
+                <div class="label">✅ Approved</div>
+                <div class="num" id="statApproved">—</div>
+            </div>
+            <div class="stat rejected">
+                <div class="label">❌ Rejected</div>
+                <div class="num" id="statRejected">—</div>
+            </div>
+            <div class="stat total">
+                <div class="label">📋 Total Drivers</div>
+                <div class="num" id="statTotal">—</div>
+            </div>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="tabs">
+            <div class="tab active" id="tab-all" onclick="setFilter('all')">All</div>
+            <div class="tab" id="tab-pending" onclick="setFilter('pending')">⏳ Pending</div>
+            <div class="tab" id="tab-approved" onclick="setFilter('approved')">✅ Approved</div>
+            <div class="tab" id="tab-rejected" onclick="setFilter('rejected')">❌ Rejected</div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Driver</th>
+                        <th>Unique ID</th>
+                        <th>Vehicle</th>
+                        <th>Aadhaar (masked)</th>
+                        <th>Registered</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="driversTable">
+                    <tr>
+                        <td colspan="7" class="empty">Loading…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Review Modal -->
+    <div class="modal-overlay" id="reviewModal">
+        <div class="modal">
+            <h2>👤 Driver Review — <span id="modalDriverName"></span></h2>
+
+            <!-- Doc Tabs -->
+            <div class="doc-tabs">
+                <div class="doc-tab active" id="docTab-aadhaar" onclick="loadDoc('aadhaar')">Aadhaar Card</div>
+                <div class="doc-tab" id="docTab-rc" onclick="loadDoc('rc')">RC Book</div>
+            </div>
+            <div id="docContainer">
+                <div class="no-doc">Loading document…</div>
+            </div>
+
+            <!-- Driver Info Grid -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0;">
+                <div class="modal-field"><label>Mobile</label><span id="mMobile">—</span></div>
+                <div class="modal-field"><label>Email</label><span id="mEmail">—</span></div>
+                <div class="modal-field"><label>Vehicle</label><span id="mVehicle">—</span></div>
+                <div class="modal-field"><label>RC Number</label><span id="mRC">—</span></div>
+                <div class="modal-field"><label>Aadhaar</label><span id="mAadhaar">—</span></div>
+                <div class="modal-field"><label>Unique ID</label><span id="mUID">—</span></div>
+            </div>
+
+            <div class="modal-field">
+                <label>Admin Notes (optional)</label>
+                <textarea class="notes-input" id="adminNotes"
+                    placeholder="e.g. Documents clear, RC verified..."></textarea>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-approve" onclick="approveDriver()" id="btnApprove">✅ Approve</button>
+                <button class="btn-approve" onclick="finalVerify()" id="btnFinalVerify" style="background: rgba(129, 140, 248, 0.2); border-color: #818cf8; color: #818cf8;">🛡️ Verify & Notify</button>
+                <button class="btn-reject" onclick="rejectDriver()" id="btnReject">❌ Reject</button>
+                <button class="modal-close" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let allDrivers = [];
+        let currentFilter = 'all';
+        let currentDriverId = null;
+
+        // ── Load Drivers ──────────────────────────────────────────────
+        async function loadDrivers() {
+            try {
+                const res = await fetch('/api/admin/pending_drivers');
+                const d = await res.json();
+                if (!d.success) { showToast('Failed to load: ' + d.message, 'error'); return; }
+                allDrivers = d.drivers;
+                updateStats();
+                renderTable();
+            } catch (e) { showToast('Network error loading drivers', 'error'); }
+        }
+
+        function updateStats() {
+            const counts = { pending: 0, approved: 0, rejected: 0 };
+            allDrivers.forEach(dr => { if (counts[dr.verification_status] !== undefined) counts[dr.verification_status]++; });
+            document.getElementById('statPending').textContent = counts.pending;
+            document.getElementById('statApproved').textContent = counts.approved;
+            document.getElementById('statRejected').textContent = counts.rejected;
+            document.getElementById('statTotal').textContent = allDrivers.length;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('driversTable');
+            const filtered = currentFilter === 'all' ? allDrivers : allDrivers.filter(d => d.verification_status === currentFilter);
+            if (!filtered.length) { tbody.innerHTML = `<tr><td colspan="7" class="empty">No drivers in this category.</td></tr>`; return; }
+
+            tbody.innerHTML = filtered.map(dr => `
+    <tr>
+      <td><strong>${dr.name}</strong><br/><span style="color:rgba(255,255,255,0.4);font-size:12px;">${dr.email}</span></td>
+      <td><code style="color:#818cf8;font-size:12px;">${dr.unique_id || '—'}</code></td>
+      <td>${dr.vehicle_type} · ${dr.vehicle_number}</td>
+      <td><code style="font-size:12px;color:#f59e0b">${dr.aadhaar_masked}</code></td>
+      <td style="font-size:12px;color:rgba(255,255,255,0.5);">${dr.registered_at ? dr.registered_at.slice(0, 10) : '—'}</td>
+      <td><span class="status-badge status-${dr.verification_status}">${dr.verification_status}</span></td>
+      <td>
+        <div class="actions">
+          <button class="btn-view" onclick="openReview(${dr.id})">🔍 Review</button>
+          ${dr.verification_status !== 'approved' ? `<button class="btn-approve" onclick="quickApprove(${dr.id})">✅</button>` : ''}
+          ${dr.verification_status !== 'rejected' ? `<button class="btn-reject"  onclick="quickReject(${dr.id})">❌</button>` : ''}
+        </div>
+      </td>
+    </tr>`).join('');
+        }
+
+        function setFilter(f) {
+            currentFilter = f;
+            ['all', 'pending', 'approved', 'rejected'].forEach(t => {
+                document.getElementById('tab-' + t).classList.toggle('active', t === f);
+            });
+            renderTable();
+        }
+
+        // ── Review Modal ──────────────────────────────────────────────
+        function openReview(driverId) {
+            const dr = allDrivers.find(d => d.id === driverId);
+            if (!dr) return;
+            currentDriverId = driverId;
+
+            document.getElementById('modalDriverName').textContent = dr.name;
+            document.getElementById('mMobile').textContent = dr.mobile;
+            document.getElementById('mEmail').textContent = dr.email;
+            document.getElementById('mVehicle').textContent = `${dr.vehicle_type} · ${dr.vehicle_number}`;
+            document.getElementById('mRC').textContent = dr.rc_number;
+            document.getElementById('mAadhaar').textContent = dr.aadhaar_masked;
+            document.getElementById('mUID').textContent = dr.unique_id || 'Not assigned';
+            document.getElementById('adminNotes').value = dr.admin_notes || '';
+            document.getElementById('reviewModal').classList.add('open');
+
+            // Reset doc tabs
+            ['aadhaar', 'rc'].forEach(t => document.getElementById('docTab-' + t).classList.remove('active'));
+            document.getElementById('docTab-aadhaar').classList.add('active');
+            loadDoc('aadhaar');
+        }
+
+        function closeModal() {
+            document.getElementById('reviewModal').classList.remove('open');
+            currentDriverId = null;
+        }
+
+        async function loadDoc(type) {
+            if (!currentDriverId) return;
+            ['aadhaar', 'rc'].forEach(t => document.getElementById('docTab-' + t).classList.remove('active'));
+            document.getElementById('docTab-' + type).classList.add('active');
+            document.getElementById('docContainer').innerHTML = '<div class="no-doc">⏳ Decrypting document…</div>';
+            try {
+                const res = await fetch(`/api/admin/view_doc?driver_id=${currentDriverId}&doc_type=${type}`);
+                const d = await res.json();
+                if (!d.success || !d.doc) {
+                    document.getElementById('docContainer').innerHTML = '<div class="no-doc">No document uploaded.</div>';
+                    return;
+                }
+                document.getElementById('docContainer').innerHTML = `<img src="${d.doc}" class="doc-img" alt="${type} document"/>`;
+            } catch (e) {
+                document.getElementById('docContainer').innerHTML = '<div class="no-doc">Failed to load document.</div>';
+            }
+        }
+
+        // ── Approve / Reject ──────────────────────────────────────────
+        async function approveDriver() {
+            if (!currentDriverId) return;
+            const notes = document.getElementById('adminNotes').value.trim();
+            await doVerdict('/api/admin/approve_driver', { driver_id: currentDriverId, notes }, 'approved');
+            closeModal();
+        }
+
+        async function rejectDriver() {
+            if (!currentDriverId) return;
+            const notes = document.getElementById('adminNotes').value.trim() || 'Documents could not be verified.';
+            await doVerdict('/api/admin/reject_driver', { driver_id: currentDriverId, notes }, 'rejected');
+            closeModal();
+        }
+
+        async function finalVerify() {
+            if (!currentDriverId) return;
+            try {
+                const res = await fetch('/api/admin/final_verification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ driver_id: currentDriverId })
+                });
+                const d = await res.json();
+                if (d.success) {
+                    showToast(d.message, 'success');
+                    const dr = allDrivers.find(dr => dr.id === currentDriverId);
+                    if (dr) { dr.verification_status = 'approved'; }
+                    updateStats(); renderTable();
+                    closeModal();
+                } else { showToast('Error: ' + d.message, 'error'); }
+            } catch (e) { showToast('Network error', 'error'); }
+        }
+
+        async function quickApprove(id) {
+            await doVerdict('/api/admin/approve_driver', { driver_id: id, notes: 'Verified by admin' }, 'approved');
+        }
+        async function quickReject(id) {
+            await doVerdict('/api/admin/reject_driver', { driver_id: id, notes: 'Documents insufficient' }, 'rejected');
+        }
+
+        async function doVerdict(url, body, status) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                });
+                const d = await res.json();
+                if (d.success) {
+                    showToast(d.message, 'success');
+                    // Update local state
+                    const dr = allDrivers.find(dr => dr.id === body.driver_id);
+                    if (dr) { dr.verification_status = status; dr.admin_notes = body.notes; }
+                    updateStats(); renderTable();
+                } else { showToast('Error: ' + d.message, 'error'); }
+            } catch (e) { showToast('Network error', 'error'); }
+        }
+
+        // ── Toast ─────────────────────────────────────────────────────
+        function showToast(msg, type = 'info') {
+            const t = document.getElementById('toast');
+            t.textContent = (type === 'success' ? '✅ ' : type === 'error' ? '❌ ' : 'ℹ️ ') + msg;
+            t.style.borderColor = type === 'success' ? 'rgba(34,197,94,0.4)' : type === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.12)';
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 3500);
+        }
+
+        // ── Logout ────────────────────────────────────────────────────
+        async function doLogout() {
+            await fetch('/api/admin/logout', { method: 'POST' });
+            window.location.href = '/admin';
+        }
+
+        // ── Close modal on overlay click ──────────────────────────────
+        document.getElementById('reviewModal').addEventListener('click', function (e) {
+            if (e.target === this) closeModal();
+        });
+
+        // ── Init ──────────────────────────────────────────────────────
+        loadDrivers();
+        setInterval(loadDrivers, 30000); // Auto-refresh every 30s
+    </script>
+</body>
+
+</html>

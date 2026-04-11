@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Official Document Vault - RakshaRide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <style>
+        .doc-preview {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 12px;
+            margin-top: 15px;
+            display: none;
+            border: 2px solid var(--border-color);
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-top: 10px;
+        }
+        .status-pending { background: rgba(255, 193, 7, 0.1); color: #FFA000; }
+        .status-ready { background: rgba(76, 175, 80, 0.1); color: #4CAF50; }
+        .doc-card.ready { border-color: #4CAF50; background: rgba(76, 175, 80, 0.02); }
+    </style>
+</head>
+<body class="bg-animated-parent">
+    <div class="bg-animated"></div>
+    
+    <div class="center-container">
+        <div class="card glass animate-fade-up" style="max-width: 900px; width: 100%; padding: 40px; margin: 20px;">
+            <div class="card-header text-center mb-4">
+                <img src="/static/img/logo.png" alt="RakshaRide" style="height: 50px; margin-bottom: 15px;">
+                <h1 class="card-title" style="font-size: 2.2rem; color: var(--primary);">Official Verification Vault</h1>
+                <p class="card-subtitle">Securely transmit your identity and vehicle credentials</p>
+            </div>
+
+            <div class="alert alert-info mb-4" style="background: rgba(33, 150, 243, 0.05); border: 1px solid var(--primary-blue); border-radius: 15px;">
+                <p style="font-size: 0.9rem; color: var(--text-primary);">
+                    <strong>ℹ️ Verification Protocol:</strong> All uploads are processed via AES-256 encryption. Ensure images are high-resolution and no text is obstructed. Profile photo will be used for your Digital ID and QR Profile.
+                </p>
+            </div>
+
+            <div class="doc-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                <!-- Profile Image -->
+                <div class="doc-card" id="card-profile" style="background: var(--bg-secondary); border: 2px dashed var(--border-color); padding: 25px; border-radius: 20px; text-align: center; transition: all 0.3s ease;">
+                    <span style="font-size: 40px; display: block; margin-bottom: 10px;">👤</span>
+                    <h3 style="font-size: 1.1rem; margin-bottom: 5px;">Profile Photo</h3>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Official front-face identification</p>
+                    <label for="profile-image" class="btn btn-primary" style="padding: 10px 20px; font-size: 0.85rem; cursor: pointer;">Select Photo</label>
+                    <input type="file" id="profile-image" accept="image/*" style="display: none;" onchange="handleFile(this, 'profile')">
+                    <div id="status-profile" class="status-badge status-pending">Required</div>
+                    <img id="preview-profile" class="doc-preview">
+                </div>
+
+                <!-- Aadhaar -->
+                <div class="doc-card" id="card-aadhar" style="background: var(--bg-secondary); border: 2px dashed var(--border-color); padding: 25px; border-radius: 20px; text-align: center; transition: all 0.3s ease;">
+                    <span style="font-size: 40px; display: block; margin-bottom: 10px;">🪪</span>
+                    <h3 style="font-size: 1.1rem; margin-bottom: 5px;">Aadhaar Card</h3>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Identity confirmation (Front/Back)</p>
+                    <label for="aadhar-doc" class="btn btn-primary" style="padding: 10px 20px; font-size: 0.85rem; cursor: pointer;">Select File</label>
+                    <input type="file" id="aadhar-doc" accept="image/*,application/pdf" style="display: none;" onchange="handleFile(this, 'aadhar')">
+                    <div id="status-aadhar" class="status-badge status-pending">Required</div>
+                    <img id="preview-aadhar" class="doc-preview">
+                </div>
+
+                <!-- Driving License -->
+                <div class="doc-card" id="card-license" style="background: var(--bg-secondary); border: 2px dashed var(--border-color); padding: 25px; border-radius: 20px; text-align: center; transition: all 0.3s ease;">
+                    <span style="font-size: 40px; display: block; margin-bottom: 10px;">🚗</span>
+                    <h3 style="font-size: 1.1rem; margin-bottom: 5px;">Driving License</h3>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Valid operator's permit</p>
+                    <label for="license-doc" class="btn btn-primary" style="padding: 10px 20px; font-size: 0.85rem; cursor: pointer;">Select File</label>
+                    <input type="file" id="license-doc" accept="image/*,application/pdf" style="display: none;" onchange="handleFile(this, 'license')">
+                    <div id="status-license" class="status-badge status-pending">Required</div>
+                    <img id="preview-license" class="doc-preview">
+                </div>
+
+                <!-- RC Book -->
+                <div class="doc-card" id="card-rc" style="background: var(--bg-secondary); border: 2px dashed var(--border-color); padding: 25px; border-radius: 20px; text-align: center; transition: all 0.3s ease;">
+                    <span style="font-size: 40px; display: block; margin-bottom: 10px;">📋</span>
+                    <h3 style="font-size: 1.1rem; margin-bottom: 5px;">Vehicle RC Book</h3>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Official registration permit</p>
+                    <label for="rc-doc" class="btn btn-primary" style="padding: 10px 20px; font-size: 0.85rem; cursor: pointer;">Select File</label>
+                    <input type="file" id="rc-doc" accept="image/*,application/pdf" style="display: none;" onchange="handleFile(this, 'rc')">
+                    <div id="status-rc" class="status-badge status-pending">Required</div>
+                    <img id="preview-rc" class="doc-preview">
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <button class="btn btn-primary" style="width: 100%; padding: 20px; font-weight: 800; font-size: 1.1rem;" onclick="submitDocs()">
+                    <span id="submit-text">✓ Finalize Identity Transmission</span>
+                    <span id="submit-loading" class="loading hidden"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const driverId = urlParams.get('driver_id') || "{{ driver_id }}";
+        const token = urlParams.get('token') || "{{ token }}";
+        const filesToUpload = {};
+
+        function handleFile(input, key) {
+            const file = input.files[0];
+            if (!file) return;
+
+            if (file.size > 10 * 1024 * 1024) {
+                alert('File exceeds 10MB limit.');
+                input.value = '';
+                return;
+            }
+
+            filesToUpload[key] = file;
+            
+            // UI Update
+            const card = document.getElementById(`card-${key}`);
+            card.classList.add('ready');
+            const status = document.getElementById(`status-${key}`);
+            status.textContent = "Ready ✓";
+            status.className = "status-badge status-ready";
+
+            // Preview
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const preview = document.getElementById(`preview-${key}`);
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function submitDocs() {
+            if (Object.keys(filesToUpload).length < 4) {
+                alert("❌ Verification cannot proceed. All 4 documents are mandatory.");
+                return;
+            }
+
+            document.getElementById('submit-text').classList.add('hidden');
+            document.getElementById('submit-loading').classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('driver_id', driverId);
+            formData.append('token', token);
+            formData.append('profile_image', filesToUpload['profile']);
+            formData.append('aadhar_doc', filesToUpload['aadhar']);
+            formData.append('license_doc', filesToUpload['license']);
+            formData.append('rc_doc', filesToUpload['rc']);
+
+            try {
+                const res = await fetch('/api/upload_driver_docs', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await res.json();
+                
+                if (result.success) {
+                    alert('✅ Identity transmission successful. Your official credentials have been dispatched to your email.');
+                    window.location.href = "/login/driver?status=activated";
+                } else {
+                    alert('❌ TRANSMISSION ERROR: ' + result.message);
+                }
+            } catch (err) {
+                alert('❌ SECURITY PROTOCOL ERROR: Connection failed.');
+            } finally {
+                document.getElementById('submit-text').classList.remove('hidden');
+                document.getElementById('submit-loading').classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

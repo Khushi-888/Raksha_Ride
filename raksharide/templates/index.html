@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero fade-in">
+    <div style="background: rgba(255, 179, 0, 0.1); padding: 8px 16px; border-radius: 40px; border: 1px solid var(--primary); font-size: 13px; font-weight: 800; color: var(--primary); margin-bottom: 25px; letter-spacing: 2px;">
+        NEXT-GEN SAFETY PROTOCOL
+    </div>
+    <h1>The Gold Standard <br> <span>For Ride Verification</span></h1>
+    <p>
+        Experience the first minor project that combines deep SMTP encryption with real-time QR synchronization. 
+        Because your safety deserves the highest level of engineering.
+    </p>
+
+    <div style="display: flex; gap: 20px;">
+        {% if session.get('user_id') %}
+            <a href="{{ url_for('index') }}" class="btn btn-primary">Go to Workspace <i class="ph ph-arrow-right"></i></a>
+        {% else %}
+            <a href="{{ url_for('register') }}" class="btn btn-primary">Start Verification <i class="ph ph-shield-check"></i></a>
+            <a href="{{ url_for('login') }}" class="btn btn-outline">Enter Secure Portal</a>
+        {% endif %}
+    </div>
+
+    <!-- Live Status Strip -->
+    <div style="margin-top: 80px; display: flex; gap: 40px; color: var(--text-muted); font-size: 14px; font-weight: 700;">
+        <span style="display: flex; align-items: center; gap: 8px;"><i class="ph-fill ph-check-circle" style="color: var(--success);"></i> EMAIL OTP SECURED</span>
+        <span style="display: flex; align-items: center; gap: 8px;"><i class="ph-fill ph-check-circle" style="color: var(--success);"></i> QR TRIP SYNC</span>
+        <span style="display: flex; align-items: center; gap: 8px;"><i class="ph-fill ph-check-circle" style="color: var(--success);"></i> GPAY INTEGRATION</span>
+    </div>
+</section>
+
+<section class="features">
+    <div class="feature-card fade-in">
+        <i class="ph-duotone ph-qr-code feature-icon" style="color: var(--primary);"></i>
+        <h3>QR Verification</h3>
+        <p style="color: var(--text-gray);">Dynamic QR strings ensure that the driver and vehicle you book are the ones you enter. No shadow drivers, ever.</p>
+    </div>
+    <div class="feature-card fade-in" style="animation-delay: 0.1s;">
+        <i class="ph-duotone ph-envelope-open feature-icon" style="color: var(--accent);"></i>
+        <h3>Deep SMTP Auth</h3>
+        <p style="color: var(--text-gray);">Military-grade email authentication for every user. Verification is not an option; it's the foundation.</p>
+    </div>
+    <div class="feature-card fade-in" style="animation-delay: 0.2s;">
+        <i class="ph-duotone ph-map-trifold feature-icon" style="color: var(--success);"></i>
+        <h3>Route Analytics</h3>
+        <p style="color: var(--text-gray);">Every meter is recorded. Fares are calculated by distance, not by words. 100% transparency on every ride.</p>
+    </div>
+</section>
+
+<section style="padding: 100px 5%; text-align: center; background: rgba(255,179,0,0.02);">
+    <h2 style="font-size: 40px; margin-bottom: 20px;">Ready to Ride?</h2>
+    <p style="color: var(--text-gray); max-width: 600px; margin: 0 auto 40px;">Join thousands of users who prioritize safety over convenience. Register your account in under 60 seconds.</p>
+    <a href="{{ url_for('register') }}" class="btn btn-primary" style="padding: 20px 60px; font-size: 18px;">Get Started Now</a>
+</section>
+{% endblock %}
