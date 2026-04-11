@@ -120,17 +120,33 @@ for d in [PROFILE_DIR, DOC_DIR, QR_DIR]:
     os.makedirs(d, exist_ok=True)
 
 def save_uploaded_file(file, target_dir, prefix=""):
-    """Helper to save file with unique name and return relative path"""
+    """
+    Save uploaded file. On Render (read-only FS), stores as base64 data URI.
+    Locally, saves to disk and returns path.
+    """
     if not file or file.filename == '':
         return None
-    
-    filename = secure_filename(file.filename)
-    unique_name = f"{prefix}_{uuid.uuid4().hex}_{filename}"
-    file_path = os.path.join(target_dir, unique_name)
-    file.save(file_path)
-    
-    # Return path relative to static/
-    return file_path.replace("\\", "/").replace("static/", "")
+    try:
+        # Try to save to disk first (works locally)
+        os.makedirs(target_dir, exist_ok=True)
+        filename = secure_filename(file.filename)
+        unique_name = f"{prefix}_{uuid.uuid4().hex}_{filename}"
+        file_path = os.path.join(target_dir, unique_name)
+        file.save(file_path)
+        return file_path.replace("\\", "/").replace("static/", "")
+    except (OSError, PermissionError):
+        # Render read-only filesystem — store as base64 data URI instead
+        try:
+            file.seek(0)
+            data = file.read()
+            ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+            mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png',
+                    'pdf':'application/pdf','gif':'image/gif'}.get(ext, 'image/jpeg')
+            b64 = base64.b64encode(data).decode()
+            return f"data:{mime};base64,{b64}"
+        except Exception as e2:
+            print(f"[WARN] File save fallback failed: {e2}")
+            return None
 
 
 # â”€â”€ CORE UTILITY FUNCTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -450,38 +466,29 @@ def generate_otp():
     return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
 
 def generate_driver_qr_code(driver_id, driver_name, vehicle_number, mobile):
-    """Generate official QR code for driver profile verification"""
+    """Generate QR code — fully in-memory, no filesystem writes (works on Render)"""
     try:
-        # User requested public URL format
-        profile_url = f"http://raksharide.com/driver/{driver_id}"
-        
-        # We still sign it for security if the scanner needs it
+        # QR payload with driver info
         qr_data = sign_qr_payload(driver_id, driver_name, vehicle_number, mobile)
-        qr_data['url'] = profile_url
+        qr_data['driver_id'] = str(driver_id)
         qr_json = json.dumps(qr_data)
 
-        # Generate QR code image
-        qr = qrcode.QRCode(version=1, box_size=10, border=4)
+        # Generate QR code entirely in memory
+        qr = qrcode.QRCode(version=1, box_size=8, border=3)
         qr.add_data(qr_json)
         qr.make(fit=True)
+        img = qr.make_image(fill_color="#1565C0", back_color="white")
 
-        img = qr.make_image(fill_color="#1a1a2e", back_color="white")
-        
-        # Save to file system
-        filename = f"qr_driver_{driver_id}_{secrets.token_hex(4)}.png"
-        file_path = os.path.join(QR_DIR, filename)
-        img.save(file_path)
-        
-        # Return base64 for immediate UI feedback and relative path for DB
         buffered = io.BytesIO()
         img.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode()
-        
-        rel_path = f"uploads/qr/{filename}"
-        return f"data:image/png;base64,{img_str}", rel_path
+        b64_data_uri = f"data:image/png;base64,{img_str}"
+
+        # Store base64 in DB (no file path needed)
+        return b64_data_uri, b64_data_uri
 
     except Exception as e:
-        print(f"QR Gen Error: {e}")
+        print(f"[WARN] QR Gen Error: {e}")
         return None, None
 
 def generate_payment_qr_code(ride_id, amount, driver_name, upi_id=None):
