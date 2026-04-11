@@ -17,3 +17,5 @@ services:
         value: evsztunveoqilawu
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: APP_URL
+        value: https://raksharide.onrender.com

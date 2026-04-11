@@ -303,27 +303,39 @@
             try {
                 const res = await fetch('/api/register_driver_v2', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    credentials: 'include'
                 });
-                const result = await res.json();
+
+                // Safe JSON parsing — handles HTML error pages from server
+                let result;
+                const rawText = await res.text();
+                try {
+                    result = JSON.parse(rawText);
+                } catch (parseErr) {
+                    console.error('Server returned non-JSON:', rawText.substring(0, 300));
+                    result = { success: false, message: 'Server error (status ' + res.status + '). Please try again.' };
+                }
                 
                 document.getElementById('submit-text').classList.remove('hidden');
                 document.getElementById('submit-loading').classList.add('hidden');
                 
                 if (result.success) {
                     alert('✅ ' + result.message);
-                    if (selectedRole === 'OWNER') {
+                    if (result.redirect_url) {
+                        window.location.href = result.redirect_url;
+                    } else if (selectedRole === 'OWNER') {
                         window.location.href = '/upload_docs?driver_id=' + result.driver_id;
                     } else {
                         window.location.href = '/';
                     }
                 } else {
-                    alert('❌ Error: ' + result.message);
+                    alert('❌ ' + (result.message || 'Registration failed. Please try again.'));
                 }
             } catch (error) {
                 document.getElementById('submit-text').classList.remove('hidden');
                 document.getElementById('submit-loading').classList.add('hidden');
-                alert('❌ Registration failed: ' + error.message);
+                alert('❌ Network error: ' + error.message);
             }
         }
     </script>

@@ -71,7 +71,12 @@ app.secret_key = os.environ.get('SECRET_KEY', 'raksha-ride-enhanced-secret-key-2
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+# Performance: compress responses
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # 1 year cache for static files
 CORS(app, supports_credentials=True, origins="*")
+
+# Base URL
+BASE_URL = os.environ.get('APP_URL', 'http://localhost:5000')
 
 # Gmail Configuration — reads from env vars in production
 GMAIL_EMAIL = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
@@ -190,13 +195,20 @@ def sign_qr_payload(id, name, vehicle, mobile):
 
 # -- DATABASE HELPER ----------------------------------------------------------
 DB_PATH = 'database_enhanced.db'
+import threading
+_db_local = threading.local()
 
 def get_db_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    """Return a fast, optimized SQLite connection."""
+    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    # Performance PRAGMAs — set once per connection
     conn.execute('PRAGMA journal_mode=WAL;')
-    conn.execute('PRAGMA busy_timeout=30000;')
     conn.execute('PRAGMA synchronous=NORMAL;')
+    conn.execute('PRAGMA cache_size=-32000;')   # 32 MB page cache
+    conn.execute('PRAGMA temp_store=MEMORY;')
+    conn.execute('PRAGMA mmap_size=268435456;') # 256 MB memory-mapped I/O
+    conn.execute('PRAGMA busy_timeout=10000;')
     return conn
 # Database initialization
 def init_db():
@@ -395,6 +407,26 @@ def init_db():
                   ('admin', default_pw))
         print("[OK] Default admin created -> username: admin | password: admin@RakshaRide2024")
 
+    # ── Performance indexes (safe to run every startup) ──────────────────────
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_drivers_email ON drivers(email)",
+        "CREATE INDEX IF NOT EXISTS idx_drivers_mobile ON drivers(mobile)",
+        "CREATE INDEX IF NOT EXISTS idx_drivers_available ON drivers(is_available)",
+        "CREATE INDEX IF NOT EXISTS idx_drivers_status ON drivers(verification_status)",
+        "CREATE INDEX IF NOT EXISTS idx_passengers_email ON passengers(email)",
+        "CREATE INDEX IF NOT EXISTS idx_passengers_phone ON passengers(phone)",
+        "CREATE INDEX IF NOT EXISTS idx_rides_passenger ON rides(passenger_id)",
+        "CREATE INDEX IF NOT EXISTS idx_rides_driver ON rides(driver_id)",
+        "CREATE INDEX IF NOT EXISTS idx_rides_status ON rides(status)",
+        "CREATE INDEX IF NOT EXISTS idx_otp_email ON otp_verification(email)",
+        "CREATE INDEX IF NOT EXISTS idx_docs_driver ON driver_documents(driver_id)",
+        "CREATE INDEX IF NOT EXISTS idx_renter_token ON renter_requests(approval_token)",
+    ]
+    for idx in indexes:
+        try:
+            c.execute(idx)
+        except Exception:
+            pass
     conn.commit()
     conn.close()
     print("[OK] Enhanced database initialized successfully!")
@@ -563,7 +595,7 @@ def _deliver_email(msg):
 
 def send_owner_approval_email(owner_email, renter_name, vehicle_details, token):
     """Send approval request to the vehicle owner using Flask-Mail"""
-    approval_url = f"http://localhost:5000/owner/approve/{token}"
+    approval_url = f"{BASE_URL}/owner_confirm?token={token}"
     
     subject = "RakshaRide - Vehicle Owner Approval Required"
     body = f"""
@@ -1152,10 +1184,14 @@ def register_driver_v2():
             # TRIGGER EMAIL TO OWNER
             send_owner_approval_email(owner_email, name, f"{vehicle_type} - {vehicle_number}", approval_token)
 
-        # Finalize QR
-        qr_image, qr_data = generate_driver_qr_code(driver_id, name, vehicle_number, mobile)
-        c.execute("UPDATE drivers SET qr_code = ? WHERE id = ?", (qr_data, driver_id))
-        conn.commit()
+        # Finalize QR — wrap in try/except so QR failure doesn't break registration
+        try:
+            qr_image, qr_data = generate_driver_qr_code(driver_id, name, vehicle_number, mobile)
+            if qr_data:
+                c.execute("UPDATE drivers SET qr_code = ? WHERE id = ?", (qr_data, driver_id))
+                conn.commit()
+        except Exception as qr_err:
+            print(f"[WARN] QR generation failed (non-fatal): {qr_err}")
         conn.close()
 
         # Success Response
@@ -2817,7 +2853,7 @@ Please use the following official credentials to log in:
 User ID: {unique_id}
 Temporary Password: {password}
 
-Portal: http://localhost:5000/login/driver
+Portal: {BASE_URL}/login/driver
 
 âš ï¸ IMPORTANT: For your security, you will be required to change this password during your first login.
 
@@ -3233,7 +3269,7 @@ def generate_share_token():
         conn.commit()
         conn.close()
 
-        share_url = f"http://localhost:5000/track/{token}"
+        share_url = f"{BASE_URL}/track/{token}"
         return jsonify({"success": True, "share_token": token, "share_url": share_url,
                         "message": "Share this link with anyone to let them track your ride live."})
     except Exception as e:
