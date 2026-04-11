@@ -8,6 +8,7 @@ from flask_cors import CORS
 import sqlite3
 import uuid
 import hashlib
+import hmac
 import secrets
 import smtplib
 from email.mime.text import MIMEText
@@ -1186,8 +1187,11 @@ def register_driver_v2():
                       (driver_id, owner_email, owner_id, approval_token))
             conn.commit()
             
-            # TRIGGER EMAIL TO OWNER
-            send_owner_approval_email(owner_email, name, f"{vehicle_type} - {vehicle_number}", approval_token)
+            # Send email to owner — non-blocking, failure won't crash registration
+            try:
+                send_owner_approval_email(owner_email, name, f"{vehicle_type} - {vehicle_number}", approval_token)
+            except Exception as email_err:
+                print(f"[WARN] Owner email failed (non-fatal): {email_err}")
 
         # Finalize QR — wrap in try/except so QR failure doesn't break registration
         try:
