@@ -104,8 +104,10 @@
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
-        const driverId = urlParams.get('driver_id') || "{{ driver_id }}";
-        const token = urlParams.get('token') || "{{ token }}";
+        const driverId = urlParams.get('driver_id') || "{{ driver_id or '' }}";
+        const rawToken = urlParams.get('token') || "{{ token or '' }}";
+        // Only use token if it's a real non-empty value
+        const token = (rawToken && rawToken !== 'None' && rawToken !== 'null' && rawToken.length > 5) ? rawToken : '';
         const filesToUpload = {};
 
         function handleFile(input, key) {
@@ -141,7 +143,11 @@
 
         async function submitDocs() {
             if (Object.keys(filesToUpload).length < 4) {
-                alert("❌ Verification cannot proceed. All 4 documents are mandatory.");
+                alert("❌ Please upload all 4 required documents before submitting.");
+                return;
+            }
+            if (!driverId && !token) {
+                alert("❌ Session error: missing driver ID. Please go back and register again.");
                 return;
             }
 
@@ -149,8 +155,8 @@
             document.getElementById('submit-loading').classList.remove('hidden');
 
             const formData = new FormData();
-            formData.append('driver_id', driverId);
-            formData.append('token', token);
+            if (driverId) formData.append('driver_id', driverId);
+            if (token) formData.append('token', token);
             formData.append('profile_image', filesToUpload['profile']);
             formData.append('aadhar_doc', filesToUpload['aadhar']);
             formData.append('license_doc', filesToUpload['license']);
@@ -159,15 +165,16 @@
             try {
                 const res = await fetch('/api/upload_driver_docs', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    credentials: 'include'
                 });
                 const result = await res.json();
                 
                 if (result.success) {
-                    alert('✅ Identity transmission successful. Your official credentials have been dispatched to your email.');
-                    window.location.href = "/login/driver?status=activated";
+                    alert('✅ Documents uploaded successfully! Your login credentials have been sent to your email.');
+                    window.location.href = "/login/driver";
                 } else {
-                    alert('❌ TRANSMISSION ERROR: ' + result.message);
+                    alert('❌ Upload failed: ' + result.message);
                 }
             } catch (err) {
                 alert('❌ SECURITY PROTOCOL ERROR: Connection failed.');

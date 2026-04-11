@@ -1303,15 +1303,20 @@ def upload_driver_docs():
         c = conn.cursor()
 
         # Resolve driver_id from token
-        if token:
+        # Clean up token — treat "None", "null", empty as no token
+        if token and token not in ('None', 'null', '', 'undefined'):
             c.execute("SELECT renter_id, owner_id FROM renter_requests WHERE approval_token = ?", (token,))
             req = c.fetchone()
             if not req:
                 conn.close()
-                return jsonify({"success": False, "message": "Invalid approval session"}), 400
+                return jsonify({"success": False, "message": "Invalid or expired approval link. Please ask the owner to resend the confirmation email."}), 400
             driver_id = req['renter_id']
-            uploader_id = req['owner_id'] or 'OWNER_DIRECT'
+            uploader_id = req['owner_id'] or driver_id
         else:
+            # Owner uploading their own documents directly (no token needed)
+            if not driver_id:
+                conn.close()
+                return jsonify({"success": False, "message": "Missing driver ID. Please register again."}), 400
             uploader_id = driver_id
 
         # Profile Image Upload
@@ -3937,7 +3942,11 @@ def api_debug_docs():
 
 @app.route('/dbview')
 def db_viewer_page():
-    """Live database viewer — admin only"""
+    """Live database viewer — admin only, requires admin session"""
+    if not session.get('is_admin'):
+        return render_template('admin_login.html',
+                               next='/dbview',
+                               message='Login as admin to access the database viewer')
     return render_template('db_viewer.html')
 
 @app.route('/api/db/tables')
@@ -4027,7 +4036,6 @@ def api_db_stats():
                 stats[t] = c.fetchone()[0]
             except Exception:
                 stats[t] = 0
-        # Extra stats
         c.execute("SELECT COUNT(*) FROM rides WHERE status='active'")
         stats['active_rides'] = c.fetchone()[0]
         c.execute("SELECT COUNT(*) FROM drivers WHERE is_available=1")
@@ -4038,6 +4046,77 @@ def api_db_stats():
         stats['total_revenue'] = round(c.fetchone()[0], 2)
         conn.close()
         return jsonify({"success": True, "stats": stats, "timestamp": datetime.now().isoformat()})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ── DB ADMIN: EDIT ROW ────────────────────────────────────────────────────────
+@app.route('/api/db/edit/<table_name>/<int:row_id>', methods=['POST'])
+def api_db_edit_row(table_name, row_id):
+    """Edit a single row — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Admin access required"}), 403
+    allowed = ['passengers','drivers','rides','payments','driver_documents',
+               'renter_requests','ratings','otp_verification','admins','sos_alerts']
+    if table_name not in allowed:
+        return jsonify({"success": False, "message": "Table not allowed"}), 403
+    # Never allow editing passwords directly
+    protected = {'password'}
+    try:
+        data = request.get_json()
+        updates = {k: v for k, v in data.items() if k not in protected and k != 'id'}
+        if not updates:
+            return jsonify({"success": False, "message": "No fields to update"}), 400
+        set_clause = ', '.join([f"[{k}] = ?" for k in updates])
+        values = list(updates.values()) + [row_id]
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute(f"UPDATE [{table_name}] SET {set_clause} WHERE id = ?", values)
+        conn.commit()
+        rows_affected = c.rowcount
+        conn.close()
+        if rows_affected == 0:
+            return jsonify({"success": False, "message": "Row not found"}), 404
+        return jsonify({"success": True, "message": f"Row {row_id} updated in {table_name}"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ── DB ADMIN: DELETE ROW ──────────────────────────────────────────────────────
+@app.route('/api/db/delete/<table_name>/<int:row_id>', methods=['DELETE'])
+def api_db_delete_row(table_name, row_id):
+    """Delete a single row — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Admin access required"}), 403
+    allowed = ['passengers','drivers','rides','payments','driver_documents',
+               'renter_requests','ratings','otp_verification','sos_alerts']
+    # Never allow deleting admins via this endpoint
+    if table_name not in allowed:
+        return jsonify({"success": False, "message": "Table not allowed"}), 403
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute(f"DELETE FROM [{table_name}] WHERE id = ?", (row_id,))
+        conn.commit()
+        rows_affected = c.rowcount
+        conn.close()
+        if rows_affected == 0:
+            return jsonify({"success": False, "message": "Row not found"}), 404
+        return jsonify({"success": True, "message": f"Row {row_id} deleted from {table_name}"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ── DB ADMIN: VERIFY DRIVER ───────────────────────────────────────────────────
+@app.route('/api/db/verify_driver/<int:driver_id>', methods=['POST'])
+def api_db_verify_driver(driver_id):
+    """Mark driver as verified — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Admin access required"}), 403
+    try:
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("UPDATE drivers SET verification_status='verified' WHERE id=?", (driver_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": f"Driver {driver_id} verified"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
