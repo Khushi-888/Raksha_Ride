@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RakshaRide - Complete Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #FFC107 0%, #2196F3 100%);
+            padding: 40px;
+            text-align: center;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: float 15s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(-50%, -50%) rotate(0deg); }
+            50% { transform: translate(-30%, -30%) rotate(180deg); }
+        }
+
+        .logo {
+            width: 200px;
+            height: 60px;
+            margin: 0 auto 20px;
+            animation: slideDown 1s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            animation: fadeIn 1s ease-out 0.3s both;
+        }
+
+        .subtitle {
+            font-size: 20px;
+            opacity: 0.9;
+            animation: fadeIn 1s ease-out 0.6s both;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+            animation: slideIn 0.8s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .section-title {
+            font-size: 32px;
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .icon {
+            font-size: 40px;
+            animation: bounce 2s ease-in-out infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border-left: 5px solid #FFC107;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateX(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .card-title {
+            font-size: 24px;
+            color: #2196F3;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .card-content {
+            color: #555;
+            font-size: 16px;
+        }
+
+        .step-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .step-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .step-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,193,7,0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .step-card:hover::before {
+            left: 100%;
+        }
+
+        .step-card:hover {
+            border-color: #FFC107;
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+
+        .step-number {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #FFC107, #2196F3);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: bold;
+            margin: 0 auto 20px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .step-title {
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .step-description {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .feature-item {
+            background: linear-gradient(135deg, rgba(255,193,7,0.1), rgba(33,150,243,0.1));
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .feature-item:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .feature-title {
+            font-size: 18px;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .feature-desc {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .cta-section {
+            background: linear-gradient(135deg, #FFC107 0%, #2196F3 100%);
+            padding: 50px;
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            border-radius: 15px;
+        }
+
+        .cta-title {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .cta-button {
+            display: inline-block;
+            padding: 18px 50px;
+            background: white;
+            color: #2196F3;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 20px;
+            font-weight: 600;
+            margin: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .color-demo {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .color-box {
+            flex: 1;
+            min-width: 200px;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .color-box:hover {
+            transform: scale(1.05);
+        }
+
+        .yellow-box {
+            background: #FFC107;
+        }
+
+        .blue-box {
+            background: #2196F3;
+        }
+
+        .gradient-box {
+            background: linear-gradient(135deg, #FFC107, #2196F3);
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 50px;
+            margin-top: 30px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(180deg, #FFC107, #2196F3);
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            animation: slideIn 0.8s ease-out;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -38px;
+            top: 20px;
+            width: 20px;
+            height: 20px;
+            background: #FFC107;
+            border: 4px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 0 4px #2196F3;
+        }
+
+        .loading-demo {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,193,7,0.3);
+            border-top-color: #FFC107;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 5px;
+        }
+
+        .badge-yellow {
+            background: rgba(255,193,7,0.2);
+            color: #FFA000;
+        }
+
+        .badge-blue {
+            background: rgba(33,150,243,0.2);
+            color: #1976D2;
+        }
+
+        .badge-success {
+            background: rgba(76,175,80,0.2);
+            color: #388E3C;
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 32px; }
+            .section-title { font-size: 24px; }
+            .step-container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <img src="/static/images/logo.svg" alt="RakshaRide Logo" class="logo">
+            <h1>🎨 Beautiful System Ready!</h1>
+            <p class="subtitle">Complete Guide with Animations & Easy Instructions</p>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <!-- What's New Section -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">✨</span>
+                    What's New & Beautiful
+                </h2>
+                
+                <div class="card">
+                    <div class="card-title">🎨 New Design System</div>
+                    <div class="card-content">
+                        <p>We've completely redesigned RakshaRide with a stunning yellow and blue color scheme, smooth animations, and modern UI elements.</p>
+                        <div class="color-demo">
+                            <div class="color-box yellow-box">
+                                Yellow #FFC107<br>
+                                Primary Color
+                            </div>
+                            <div class="color-box blue-box">
+                                Blue #2196F3<br>
+                                Secondary Color
+                            </div>
+                            <div class="color-box gradient-box">
+                                Gradient<br>
+                                Yellow → Blue
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">🌓 Light/Dark Mode</div>
+                    <div class="card-content">
+                        <p>Toggle between light and dark themes with a single click. The button is located in the top-right corner of every page.</p>
+                        <p style="margin-top: 10px;">
+                            <span class="badge badge-yellow">🌙 Dark Mode</span>
+                            <span class="badge badge-blue">☀️ Light Mode</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">💫 Smooth Animations</div>
+                    <div class="card-content">
+                        <p>Every interaction is smooth and delightful:</p>
+                        <ul style="margin-top: 10px; margin-left: 20px;">
+                            <li>Floating background gradients</li>
+                            <li>Hover effects on cards and buttons</li>
+                            <li>Loading spinners: <span class="loading-demo"></span></li>
+                            <li>Smooth page transitions</li>
+                            <li>Bounce animations on icons</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Features Section -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🚀</span>
+                    Key Features
+                </h2>
+                
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <span class="feature-icon">👤</span>
+                        <div class="feature-title">Owner Registration</div>
+                        <div class="feature-desc">Register as a vehicle owner with complete document verification</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">🤝</span>
+                        <div class="feature-title">Rent Driver</div>
+                        <div class="feature-desc">Register as a rent driver with owner confirmation</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">📄</span>
+                        <div class="feature-title">Document Upload</div>
+                        <div class="feature-desc">Upload 5 documents with instant preview</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">📧</span>
+                        <div class="feature-title">Email Notifications</div>
+                        <div class="feature-desc">Automatic emails at every step</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">🎨</span>
+                        <div class="feature-title">Beautiful Design</div>
+                        <div class="feature-desc">Modern UI with yellow + blue theme</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">📱</span>
+                        <div class="feature-title">Responsive</div>
+                        <div class="feature-desc">Works perfectly on all devices</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- How to Use Section -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">📋</span>
+                    How to Use - Simple Steps
+                </h2>
+                
+                <div class="step-container">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <div class="step-title">Open Browser</div>
+                        <div class="step-description">
+                            Go to:<br>
+                            <strong>http://localhost:5000</strong>
+                        </div>
+                    </div>
+                    
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <div class="step-title">Click "Enroll as Driver"</div>
+                        <div class="step-description">
+                            You'll see a beautiful registration page with 3 steps
+                        </div>
+                    </div>
+                    
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <div class="step-title">Select Your Role</div>
+                        <div class="step-description">
+                            Choose "Vehicle Owner" or "Rent Driver"
+                        </div>
+                    </div>
+                    
+                    <div class="step-card">
+                        <div class="step-number">4</div>
+                        <div class="step-title">Fill Details</div>
+                        <div class="step-description">
+                            Enter your information in beautiful form fields
+                        </div>
+                    </div>
+                    
+                    <div class="step-card">
+                        <div class="step-number">5</div>
+                        <div class="step-title">Upload Documents</div>
+                        <div class="step-description">
+                            Upload 5 documents with instant preview
+                        </div>
+                    </div>
+                    
+                    <div class="step-card">
+                        <div class="step-number">6</div>
+                        <div class="step-title">Done!</div>
+                        <div class="step-description">
+                            Receive email confirmation and wait for approval
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Registration Flows -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🔄</span>
+                    Registration Flows
+                </h2>
+                
+                <div class="card">
+                    <div class="card-title">👤 Owner Driver Flow</div>
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <strong>Step 1:</strong> Select "Vehicle Owner" role
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 2:</strong> Fill all your details (name, age, mobile, email, etc.)
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 3:</strong> Confirm your information
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 4:</strong> Upload 5 documents (Aadhaar front/back, License, RC, Selfie)
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 5:</strong> Receive email confirmation
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 6:</strong> Admin verifies your documents
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 7:</strong> Get login credentials via email
+                            <span class="badge badge-success">✓ Complete!</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">🤝 Rent Driver Flow</div>
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <strong>Step 1:</strong> Select "Rent Driver" role
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 2:</strong> Fill your details + owner's email and password
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 3:</strong> Submit registration
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 4:</strong> Owner receives email with confirmation link
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 5:</strong> Owner clicks link and sees your details
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 6:</strong> Owner approves your request
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 7:</strong> Owner uploads vehicle documents
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 8:</strong> Both receive email confirmation
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 9:</strong> Admin verifies documents
+                        </div>
+                        <div class="timeline-item">
+                            <strong>Step 10:</strong> Both get login credentials
+                            <span class="badge badge-success">✓ Complete!</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Design Elements -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🎨</span>
+                    Design Elements You'll See
+                </h2>
+                
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <span class="feature-icon">📊</span>
+                        <div class="feature-title">Progress Bar</div>
+                        <div class="feature-desc">Gradient progress indicator showing your current step</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">💳</span>
+                        <div class="feature-title">Role Cards</div>
+                        <div class="feature-desc">Animated cards with bounce effect for role selection</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">📝</span>
+                        <div class="feature-title">Form Inputs</div>
+                        <div class="feature-desc">Beautiful inputs with focus effects and validation</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">🖼️</span>
+                        <div class="feature-title">Image Preview</div>
+                        <div class="feature-desc">Instant preview of uploaded documents</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">🔄</span>
+                        <div class="feature-title">Loading States</div>
+                        <div class="feature-desc">Smooth loading spinners during operations</div>
+                    </div>
+                    
+                    <div class="feature-item">
+                        <span class="feature-icon">✅</span>
+                        <div class="feature-title">Status Badges</div>
+                        <div class="feature-desc">Color-coded badges showing upload status</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CTA Section -->
+            <div class="cta-section">
+                <h2 class="cta-title">🚀 Ready to Start?</h2>
+                <p style="font-size: 18px; margin-bottom: 30px;">
+                    The system is running and ready to use!
+                </p>
+                <a href="http://localhost:5000" class="cta-button">
+                    🌐 Open RakshaRide
+                </a>
+                <a href="http://localhost:5000/register/driver/new" class="cta-button">
+                    📝 Start Registration
+                </a>
+                <p style="margin-top: 30px; font-size: 14px; opacity: 0.9;">
+                    All changes applied automatically • No setup needed • Just click and use!
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Add scroll animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.section, .card, .step-card, .feature-item').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'all 0.6s ease-out';
+            observer.observe(el);
+        });
+
+        // Auto-scroll to top on load
+        window.scrollTo(0, 0);
+    </script>
+</body>
+</html>

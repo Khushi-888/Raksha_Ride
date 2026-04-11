@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RakshaRide - System Ready!</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            max-width: 600px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #FFC107, #2196F3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .status {
+            font-size: 24px;
+            color: #4CAF50;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+        .info {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        .info-item:last-child {
+            border-bottom: none;
+        }
+        .label {
+            font-weight: 600;
+            color: #666;
+        }
+        .value {
+            color: #333;
+            font-weight: 500;
+        }
+        .btn {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #FFC107, #2196F3);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 10px;
+            transition: transform 0.3s;
+        }
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .features {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 30px 0;
+        }
+        .feature {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        .checkmark {
+            color: #4CAF50;
+            font-size: 20px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 RakshaRide is Ready!</h1>
+        <div class="status">✅ Server Running Successfully</div>
+        
+        <div class="info">
+            <div class="info-item">
+                <span class="label">Server URL:</span>
+                <span class="value">http://localhost:5000</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Status:</span>
+                <span class="value" style="color: #4CAF50;">ACTIVE</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Design:</span>
+                <span class="value">Yellow + Blue Theme</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Mode:</span>
+                <span class="value">Light/Dark Toggle</span>
+            </div>
+        </div>
+
+        <div class="features">
+            <div class="feature">
+                <span class="checkmark">✓</span> Owner Registration
+            </div>
+            <div class="feature">
+                <span class="checkmark">✓</span> Rent Registration
+            </div>
+            <div class="feature">
+                <span class="checkmark">✓</span> Document Upload
+            </div>
+            <div class="feature">
+                <span class="checkmark">✓</span> Email Notifications
+            </div>
+            <div class="feature">
+                <span class="checkmark">✓</span> Beautiful Design
+            </div>
+            <div class="feature">
+                <span class="checkmark">✓</span> Animations
+            </div>
+        </div>
+
+        <a href="http://localhost:5000" class="btn">🚀 Open RakshaRide</a>
+        <a href="http://localhost:5000/register/driver/new" class="btn">📝 Test Registration</a>
+
+        <p style="margin-top: 30px; color: #666; font-size: 14px;">
+            All changes applied automatically. No permission needed!
+        </p>
+    </div>
+
+    <script>
+        // Auto-redirect after 3 seconds
+        setTimeout(() => {
+            if (confirm('Open RakshaRide now?')) {
+                window.location.href = 'http://localhost:5000';
+            }
+        }, 3000);
+    </script>
+</body>
+</html>

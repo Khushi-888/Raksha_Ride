@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open RakshaRide Homepage</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 30px;
+            padding: 60px;
+            max-width: 700px;
+            text-align: center;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.3);
+            animation: slideUp 0.8s ease-out;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(50px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #FFC107, #2196F3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .status {
+            font-size: 24px;
+            color: #4CAF50;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+        .features {
+            background: #f5f5f5;
+            padding: 30px;
+            border-radius: 20px;
+            margin: 30px 0;
+            text-align: left;
+        }
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        .feature-item:last-child {
+            border-bottom: none;
+        }
+        .icon {
+            font-size: 32px;
+        }
+        .feature-text {
+            flex: 1;
+        }
+        .feature-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .feature-desc {
+            font-size: 14px;
+            color: #666;
+        }
+        .btn {
+            display: inline-block;
+            padding: 20px 50px;
+            background: linear-gradient(135deg, #FFC107, #2196F3);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 20px;
+            font-weight: 600;
+            margin: 20px 10px;
+            transition: all 0.3s;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .btn:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        .countdown {
+            font-size: 18px;
+            color: #666;
+            margin-top: 30px;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,193,7,0.3);
+            border-top-color: #FFC107;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 Homepage Ready!</h1>
+        <div class="status">✅ Server Running Successfully</div>
+        
+        <div class="features">
+            <div class="feature-item">
+                <span class="icon">🏠</span>
+                <div class="feature-text">
+                    <div class="feature-title">Beautiful Homepage</div>
+                    <div class="feature-desc">Logo, wave animations, and clean design</div>
+                </div>
+            </div>
+            
+            <div class="feature-item">
+                <span class="icon">🚗</span>
+                <div class="feature-text">
+                    <div class="feature-title">Driver Box</div>
+                    <div class="feature-desc">Login and Register buttons with hover effects</div>
+                </div>
+            </div>
+            
+            <div class="feature-item">
+                <span class="icon">👤</span>
+                <div class="feature-text">
+                    <div class="feature-title">Passenger Box</div>
+                    <div class="feature-desc">Login and Register buttons with animations</div>
+                </div>
+            </div>
+            
+            <div class="feature-item">
+                <span class="icon">🌊</span>
+                <div class="feature-text">
+                    <div class="feature-title">Wave Animations</div>
+                    <div class="feature-desc">Continuous animated waves in background</div>
+                </div>
+            </div>
+            
+            <div class="feature-item">
+                <span class="icon">🌓</span>
+                <div class="feature-text">
+                    <div class="feature-title">Light/Dark Mode</div>
+                    <div class="feature-desc">Toggle button in top-right corner</div>
+                </div>
+            </div>
+            
+            <div class="feature-item">
+                <span class="icon">📱</span>
+                <div class="feature-text">
+                    <div class="feature-title">Responsive Design</div>
+                    <div class="feature-desc">Works perfectly on all devices</div>
+                </div>
+            </div>
+        </div>
+
+        <a href="http://localhost:5000" class="btn">
+            🚀 Open Homepage Now
+        </a>
+
+        <div class="countdown">
+            Auto-opening in <span id="timer">5</span> seconds
+            <span class="loading"></span>
+        </div>
+    </div>
+
+    <script>
+        let seconds = 5;
+        const timerElement = document.getElementById('timer');
+        
+        const countdown = setInterval(() => {
+            seconds--;
+            timerElement.textContent = seconds;
+            
+            if (seconds <= 0) {
+                clearInterval(countdown);
+                window.location.href = 'http://localhost:5000';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

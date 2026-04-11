@@ -95,13 +95,18 @@ app.config['MAIL_DEFAULT_SENDER'] = GMAIL_EMAIL # Simplified for Flask-Mail
 mail = Mail(app)
 
 def send_email_async(to_email, subject, body):
-    try:
-        msg = Message(subject=subject, recipients=[to_email])
-        msg.html = body
-        mail.send(msg)
-        print(f"âœ… Email sent to {to_email}")
-    except Exception as e:
-        print(f"âŒ Email sending failed: {e}")
+    """Send email in background thread — never blocks the request."""
+    import threading as _t
+    def _send():
+        try:
+            with app.app_context():
+                msg = Message(subject=subject, recipients=[to_email])
+                msg.html = body
+                mail.send(msg)
+                print(f"[OK] Email sent to {to_email}")
+        except Exception as e:
+            print(f"[WARN] Email failed to {to_email}: {e}")
+    _t.Thread(target=_send, daemon=True).start()
 
 
 # â”€â”€ UPLOAD CONFIGURATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
