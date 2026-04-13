@@ -140,18 +140,11 @@ def _smtp_send(to_email, subject, html_body, plain_body=None):
 
 
 
-def send_email_async(to_email, subject, body):
-    """Send email in background thread — never blocks the request."""
+def send_email_async(to_email, subject, html_body, plain_body=None):
+    """Send email in background thread — uses direct SMTP, never blocks."""
     import threading as _t
     def _send():
-        try:
-            with app.app_context():
-                msg = Message(subject=subject, recipients=[to_email])
-                msg.html = body
-                _smtp_send(to_email, subject, body)
-                print(f"[OK] Email sent to {to_email}")
-        except Exception as e:
-            print(f"[WARN] Email failed to {to_email}: {e}")
+        _smtp_send(to_email, subject, html_body, plain_body)
     _t.Thread(target=_send, daemon=True).start()
 
 
@@ -880,12 +873,20 @@ def send_otp():
                 'email_sent': True
             })
         else:
-            print(f'[FALLBACK] Email failed. OTP for {email}: {otp}')
+            # Email failed on Render — log OTP to server console only, NEVER show on screen
+            print(f'[OTP CONSOLE] Email failed for {email}. OTP: {otp}')
+            # Retry once with a small delay
+            import time as _t; _t.sleep(1)
+            retry_ok = _smtp_send(email, "RakshaRide — Your OTP",
+                f"<h2>Your OTP: <strong>{otp}</strong></h2><p>Valid 5 minutes.</p>",
+                f"Your RakshaRide OTP is: {otp}")
+            if retry_ok:
+                return jsonify({'success': True, 'message': f'Verification code sent to {email}.', 'email_sent': True})
+            # Final fallback — tell user to check spam or try again
             return jsonify({
-                'success': True,
-                'message': 'Email delivery issue. Check server console for OTP.',
-                'email_sent': False,
-                'dev_otp': otp
+                'success': False,
+                'message': 'Email delivery failed. Please check your spam folder or try again in 1 minute.',
+                'email_sent': False
             })
         
     except Exception as e:
@@ -1583,12 +1584,10 @@ def login_passenger():
             else:
                 print(f"âŒ LOGIN OTP FAILURE for {email}: {email_message}")
                 return jsonify({
-                    "success": True,
-                    "message": "Email delivery issue. Check server console for OTP.",
-                    "email_sent": False,
-                    "dev_otp": otp
+                    "success": False,
+                    "message": "Email delivery failed. Please check your spam folder or try again.",
+                    "email_sent": False
                 })
-        else:
             conn.close()
             return jsonify({"success": False, "message": "Invalid email/phone or password"}), 401
             

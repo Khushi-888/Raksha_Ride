@@ -115,24 +115,10 @@
 
                 if (data.success) {
                     document.getElementById('otp-verify-section').classList.remove('hidden');
-                    showAlert("Verification code sent! Check your email.", "success");
-                    if (data.dev_otp) {
-                        showAlert(`OTP: ${data.dev_otp}`, "success");
-                        document.getElementById('otp').value = data.dev_otp;
-                    }
-                    // Start 30s cooldown before allowing resend
-                    let countdown = 30;
-                    const timer = setInterval(() => {
-                        countdown--;
-                        btn.innerText = `Resend in ${countdown}s`;
-                        if (countdown <= 0) {
-                            clearInterval(timer);
-                            btn.disabled = false;
-                            btn.innerText = "Resend OTP";
-                        }
-                    }, 1000);
+                    showAlert("Verification code sent! Check your email inbox.", "success");
+                    // Never show OTP on screen in production
                 } else {
-                    showAlert(data.message || "Failed to send OTP.");
+                    showAlert(data.message || "Failed to send OTP. Please try again.");
                     btn.disabled = false;
                     btn.innerText = "Get OTP";
                 }
