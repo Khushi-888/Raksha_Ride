@@ -116,69 +116,83 @@ mail = Mail(app)
 
 def _smtp_send(to_email, subject, html_body, plain_body=None):
     """
-    Send email via SMTP. Tries Brevo first (works on Render), then Gmail.
-    Set BREVO_SMTP_KEY env var in Render to enable Brevo.
+    Send email via HTTP API (Brevo) — works on Render free tier.
+    SMTP is blocked on Render, so we use Brevo's REST API instead.
+    Falls back to Gmail SMTP if Brevo key not set (for local dev).
     """
+    import urllib.request
+    import urllib.error
+
+    gmail_email = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
+    brevo_key   = os.environ.get('BREVO_API_KEY', '')
+
+    # ── Brevo HTTP API (works on Render — uses HTTPS port 443) ───────────────
+    if brevo_key:
+        try:
+            payload = json.dumps({
+                "sender": {"name": "RakshaRide", "email": gmail_email},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "htmlContent": html_body,
+                "textContent": plain_body or ""
+            }).encode('utf-8')
+
+            req = urllib.request.Request(
+                "https://api.brevo.com/v3/smtp/email",
+                data=payload,
+                headers={
+                    "accept": "application/json",
+                    "api-key": brevo_key,
+                    "content-type": "application/json"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                result = json.loads(resp.read().decode())
+                print(f"[EMAIL OK via Brevo] {to_email} — messageId: {result.get('messageId','?')}")
+                return True
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            print(f"[EMAIL Brevo HTTP Error] {e.code}: {body}")
+        except Exception as e:
+            print(f"[EMAIL Brevo FAIL] {type(e).__name__}: {e}")
+
+    # ── Gmail SMTP fallback (works locally, blocked on Render free tier) ──────
+    gmail_pw = os.environ.get('GMAIL_APP_PASSWORD', 'lpuqabvhriyqajqg').replace(' ', '').replace('-', '')
     from email.mime.multipart import MIMEMultipart as _MM
     from email.mime.text import MIMEText as _MT
     import smtplib as _smtp
 
-    gmail_email = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
-    gmail_pw    = os.environ.get('GMAIL_APP_PASSWORD', 'lpuqabvhriyqajqg').replace(' ', '').replace('-', '')
-    brevo_key   = os.environ.get('BREVO_SMTP_KEY', '')  # Set this in Render env vars
-
-    def _build_msg(from_addr):
+    def _build_msg():
         msg = _MM('alternative')
-        msg['From']    = f"RakshaRide <{from_addr}>"
-        msg['To']      = to_email
+        msg['From'] = f"RakshaRide <{gmail_email}>"
+        msg['To'] = to_email
         msg['Subject'] = subject
         msg.attach(_MT(plain_body or "View in HTML client.", 'plain'))
         msg.attach(_MT(html_body, 'html'))
         return msg
 
-    # ── Try Brevo SMTP (works on Render free tier) ────────────────────────────
-    if brevo_key:
+    for port, use_ssl in [(587, False), (465, True)]:
         try:
-            msg = _build_msg(gmail_email)
-            s = _smtp.SMTP("smtp-relay.brevo.com", 587, timeout=30)
-            s.ehlo(); s.starttls(); s.ehlo()
-            s.login(gmail_email, brevo_key)
-            s.sendmail(gmail_email, to_email, msg.as_string())
-            s.quit()
-            print(f"[EMAIL OK via Brevo] {to_email}")
+            msg = _build_msg()
+            if use_ssl:
+                import ssl as _ssl
+                ctx = _ssl.create_default_context()
+                with _smtp.SMTP_SSL("smtp.gmail.com", port, context=ctx, timeout=20) as s:
+                    s.login(gmail_email, gmail_pw)
+                    s.sendmail(gmail_email, to_email, msg.as_string())
+            else:
+                s = _smtp.SMTP("smtp.gmail.com", port, timeout=20)
+                s.ehlo(); s.starttls(); s.ehlo()
+                s.login(gmail_email, gmail_pw)
+                s.sendmail(gmail_email, to_email, msg.as_string())
+                s.quit()
+            print(f"[EMAIL OK via Gmail {port}] {to_email}")
             return True
         except Exception as e:
-            print(f"[EMAIL Brevo FAIL] {e}")
+            print(f"[EMAIL Gmail {port} FAIL] {type(e).__name__}: {e}")
 
-    # ── Try Gmail SMTP port 587 ───────────────────────────────────────────────
-    try:
-        msg = _build_msg(gmail_email)
-        s = _smtp.SMTP("smtp.gmail.com", 587, timeout=30)
-        s.ehlo(); s.starttls(); s.ehlo()
-        s.login(gmail_email, gmail_pw)
-        s.sendmail(gmail_email, to_email, msg.as_string())
-        s.quit()
-        print(f"[EMAIL OK via Gmail 587] {to_email}")
-        return True
-    except _smtp.SMTPAuthenticationError as e:
-        print(f"[EMAIL AUTH FAIL] Check GMAIL_APP_PASSWORD: {e}")
-    except Exception as e:
-        print(f"[EMAIL Gmail 587 FAIL] {type(e).__name__}: {e}")
-
-    # ── Try Gmail SMTP port 465 (SSL) ─────────────────────────────────────────
-    try:
-        import ssl as _ssl
-        msg = _build_msg(gmail_email)
-        ctx = _ssl.create_default_context()
-        with _smtp.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=30) as s:
-            s.login(gmail_email, gmail_pw)
-            s.sendmail(gmail_email, to_email, msg.as_string())
-        print(f"[EMAIL OK via Gmail 465] {to_email}")
-        return True
-    except Exception as e:
-        print(f"[EMAIL Gmail 465 FAIL] {type(e).__name__}: {e}")
-
-    print(f"[EMAIL ALL FAILED] Could not send to {to_email}")
+    print(f"[EMAIL ALL FAILED] {to_email} — Set BREVO_API_KEY in Render env vars")
     return False
 
 
