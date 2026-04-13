@@ -556,6 +556,8 @@ async function confirmDriver(){
       if(sosPanelEl)sosPanelEl.classList.remove('hidden');
       showSection('tracking');
       startPassengerTracking();
+      // Start live driver tracking (polls every 5s)
+      if(selectedDriver && selectedDriver.id) startDriverTracking(selectedDriver.id);
     }else showToast(d.message,'error');
   }catch(e){showToast('Failed to start ride','error');}
 }
@@ -677,6 +679,7 @@ function calcDistance(lat1,lon1,lat2,lon2){
 async function endRide(){
   if(!confirm('End this ride?'))return;
   clearInterval(trackingInterval);
+  stopDriverTracking(); // Stop live driver tracking
   try{
     const r=await authFetch('/api/complete_ride',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({distance_km:totalDistance,ride_id:activeRideId})});
@@ -797,6 +800,60 @@ async function logout(){await authFetch('/api/logout',{method:'POST'});window.lo
   }catch(e){}
   loadPassengerData();
 })();
+
+// ── PASSENGER GPS (sends own location every 5s) ──────────────────────────────
+let _paxLastGps = 0;
+let _paxGpsId = null;
+
+function startPassengerGPS() {
+  if (!navigator.geolocation || _paxGpsId) return;
+  _paxGpsId = navigator.geolocation.watchPosition(
+    function(pos) {
+      const now = Date.now();
+      if (now - _paxLastGps < 5000) return;
+      _paxLastGps = now;
+      const token = localStorage.getItem('rr_token') || '';
+      fetch('/api/update_location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, type: 'passenger' }),
+        credentials: 'include'
+      }).catch(e => console.log('[GPS] pax error:', e));
+    },
+    function(err) { console.log('[GPS] pax error:', err.message); },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 4000 }
+  );
+}
+startPassengerGPS();
+
+// ── LIVE DRIVER TRACKING (polls every 5s when ride is active) ────────────────
+let _driverTrackInterval = null;
+let _trackedDriverId = null;
+
+function startDriverTracking(driverId) {
+  if (_driverTrackInterval) clearInterval(_driverTrackInterval);
+  _trackedDriverId = driverId;
+  _driverTrackInterval = setInterval(async () => {
+    if (!_trackedDriverId) return;
+    try {
+      const token = localStorage.getItem('rr_token') || '';
+      const r = await fetch(`/api/get_driver_location?driver_id=${_trackedDriverId}`, {
+        headers: { 'Authorization': 'Bearer ' + token },
+        credentials: 'include'
+      });
+      const d = await r.json();
+      if (d.success && d.lat && passengerMap && driverMarker) {
+        driverMarker.setLatLng([d.lat, d.lng]);
+        console.log('[GPS] Driver at', d.lat, d.lng);
+      }
+    } catch(e) { /* silent */ }
+  }, 5000); // poll every 5 seconds — safe for Render
+}
+
+function stopDriverTracking() {
+  if (_driverTrackInterval) { clearInterval(_driverTrackInterval); _driverTrackInterval = null; }
+  _trackedDriverId = null;
+}
 </script>
 </body>
 </html>

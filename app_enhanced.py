@@ -475,6 +475,15 @@ def init_db():
         print("[OK] Admin created — use ADMIN_PASSWORD env var to set password")
 
     # ── Performance indexes (safe to run every startup) ──────────────────────
+    # ── live_locations table (upsert GPS — one row per user) ─────────────────
+    c.execute("""CREATE TABLE IF NOT EXISTS live_locations (
+        user_id INTEGER PRIMARY KEY,
+        role TEXT NOT NULL DEFAULT 'driver',
+        latitude REAL,
+        longitude REAL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.commit()
     indexes = [
         "CREATE INDEX IF NOT EXISTS idx_drivers_email ON drivers(email)",
         "CREATE INDEX IF NOT EXISTS idx_drivers_mobile ON drivers(mobile)",
@@ -3856,23 +3865,36 @@ def api_get_payment_qr():
 
 @app.route('/api/update_location', methods=['POST'])
 def api_update_location():
+    """Update live GPS location — upsert pattern, no DB spam."""
     current_user = get_current_user()
     if not current_user:
         return jsonify({"success": False}), 401
     try:
         data = request.get_json()
-        lat, lng = data.get('lat'), data.get('lng')
-        loc_type = data.get('type', 'driver')
-        uid = current_user['user_id']
+        lat  = data.get('lat') or data.get('latitude')
+        lng  = data.get('lng') or data.get('longitude')
+        role = data.get('type') or data.get('role', 'driver')
+        uid  = current_user['user_id']
+
+        if not lat or not lng:
+            return jsonify({"success": False, "message": "lat/lng required"}), 400
+
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
-        if loc_type == 'driver':
+
+        # Upsert into live_locations (single row per user — no duplicates)
+        c.execute("""INSERT INTO live_locations (user_id, role, latitude, longitude, updated_at)
+                     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                     ON CONFLICT(user_id) DO UPDATE SET
+                         latitude=excluded.latitude,
+                         longitude=excluded.longitude,
+                         updated_at=CURRENT_TIMESTAMP""",
+                  (uid, role, lat, lng))
+
+        # Also update drivers table for backward compatibility
+        if role == 'driver':
             c.execute("UPDATE drivers SET latitude=?, longitude=? WHERE id=?", (lat, lng, uid))
-        else:
-            ride_id = data.get('ride_id')
-            if ride_id:
-                c.execute("UPDATE rides SET end_lat=?, end_lng=? WHERE id=? AND passenger_id=?",
-                          (lat, lng, ride_id, uid))
+
         conn.commit()
         conn.close()
         return jsonify({"success": True})
@@ -3881,24 +3903,44 @@ def api_update_location():
 
 @app.route('/api/get_driver_location')
 def api_get_driver_location():
+    """Get driver's live location — used by passenger every 5s."""
     current_user = get_current_user()
     if not current_user:
         return jsonify({"success": False}), 401
     try:
-        ride_id = request.args.get('ride_id')
+        # Accept driver_id directly or via ride_id
+        driver_id = request.args.get('driver_id', type=int)
+        ride_id   = request.args.get('ride_id')
+
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
-        c.execute("SELECT driver_id FROM rides WHERE id = ?", (ride_id,))
-        row = c.fetchone()
-        if not row:
+
+        if not driver_id and ride_id:
+            c.execute("SELECT driver_id FROM rides WHERE id=?", (ride_id,))
+            row = c.fetchone()
+            if row:
+                driver_id = row[0]
+
+        if not driver_id:
             conn.close()
-            return jsonify({"success": False})
-        c.execute("SELECT latitude, longitude FROM drivers WHERE id = ?", (row[0],))
+            return jsonify({"success": False, "message": "driver_id required"})
+
+        # Try live_locations first (most recent), fall back to drivers table
+        c.execute("SELECT latitude, longitude, updated_at FROM live_locations WHERE user_id=? AND role='driver'",
+                  (driver_id,))
         loc = c.fetchone()
+        if not loc or not loc[0]:
+            c.execute("SELECT latitude, longitude FROM drivers WHERE id=?", (driver_id,))
+            loc = c.fetchone()
+            if loc and loc[0]:
+                conn.close()
+                return jsonify({"success": True, "lat": loc[0], "lng": loc[1]})
+            conn.close()
+            return jsonify({"success": False, "message": "Location not available"})
+
         conn.close()
-        if loc and loc[0]:
-            return jsonify({"success": True, "lat": loc[0], "lng": loc[1]})
-        return jsonify({"success": False})
+        return jsonify({"success": True, "lat": loc[0], "lng": loc[1],
+                        "updated_at": loc[2] if len(loc) > 2 else None})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 

@@ -793,6 +793,44 @@ async function logout(){
 
 // ── INIT ──
 loadDriverData();
+
+// ── AUTO GPS TRACKING (throttled — sends every 5s max) ──────────────────────
+let _lastGpsSent = 0;
+let _gpsWatchId = null;
+
+function startAutoGPS() {
+  if (!navigator.geolocation) return;
+  if (_gpsWatchId) return; // already watching
+
+  _gpsWatchId = navigator.geolocation.watchPosition(
+    function(pos) {
+      const now = Date.now();
+      if (now - _lastGpsSent < 5000) return; // throttle: max 1 send per 5s
+      _lastGpsSent = now;
+
+      const token = localStorage.getItem('rr_token') || '';
+      fetch('/api/update_location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          type: 'driver'
+        }),
+        credentials: 'include'
+      }).catch(e => console.log('[GPS] send error:', e));
+    },
+    function(err) { console.log('[GPS] error:', err.message); },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 4000 }
+  );
+  console.log('[GPS] Driver tracking started');
+}
+
+// Start GPS automatically when page loads
+startAutoGPS();
 </script>
 </body>
 </html>
