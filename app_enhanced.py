@@ -4059,6 +4059,23 @@ def api_session_check():
         "name": None
     })
 
+@app.route('/api/test_email')
+def api_test_email():
+    """Test email delivery — admin only. Usage: /api/test_email?to=your@email.com"""
+    if not session.get('is_admin'):
+        return jsonify({"error": "Login at /admin first, then visit this URL"}), 403
+    to = request.args.get('to', GMAIL_EMAIL)
+    ok = _smtp_send(to,
+        "RakshaRide Email Test ✅",
+        "<h2>Email is working!</h2><p>Your RakshaRide email system is configured correctly on Render.</p>",
+        "Email test successful from RakshaRide.")
+    return jsonify({
+        "success": ok,
+        "sent_to": to,
+        "gmail_account": GMAIL_EMAIL,
+        "message": "✅ Email sent! Check inbox." if ok else "❌ Email failed — check Render logs for [EMAIL lines"
+    })
+
 @app.route('/api/debug_docs')
 def api_debug_docs():
     """Debug: check what documents exist for current driver"""
