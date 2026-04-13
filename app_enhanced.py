@@ -870,71 +870,64 @@ def register_driver_new():
 
 @app.route('/api/send_otp', methods=['POST'])
 def send_otp():
-    """Send OTP to email - Production Mode (Email Only)"""
+    """Send OTP — saves to DB immediately, sends email in background (non-blocking)."""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         email = data.get('email', '').strip()
-        
+
         if not email or not is_valid_email(email):
             return jsonify({"success": False, "message": "Invalid email address"}), 400
 
-        # Rate limit: max 3 OTP requests per email per 60 seconds
+        # Rate limit: max 3 per 60s per email
         if not rate_limit(f"otp_{email}", limit=3, window=60):
-            return jsonify({"success": False, "message": "Too many OTP requests. Please wait 60 seconds before trying again."}), 429
-        
-        otp = generate_otp()
-        expiry_time = datetime.now() + timedelta(minutes=5)
-        
+            return jsonify({"success": False, "message": "Too many requests. Wait 60 seconds."}), 429
+
+        # Check already registered
         conn = get_db_conn()
         c = conn.cursor()
-        
-        # Check if already registered
         c.execute("SELECT id FROM passengers WHERE email = ?", (email,))
         if c.fetchone():
             conn.close()
-            return jsonify({"success": False, "message": "Email is already registered as a passenger. Please login."}), 400
-            
+            return jsonify({"success": False, "message": "Email already registered. Please login."}), 400
         c.execute("SELECT id FROM drivers WHERE email = ?", (email,))
         if c.fetchone():
             conn.close()
-            return jsonify({"success": False, "message": "Email is already registered as a driver. Please login."}), 400
-            
+            return jsonify({"success": False, "message": "Email already registered as driver. Please login."}), 400
+
+        # Generate OTP and save to DB immediately
+        otp = generate_otp()
+        expiry_time = datetime.now() + timedelta(minutes=5)
         c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
-        c.execute("""INSERT INTO otp_verification (email, otp, expiry_time, attempts) 
-                     VALUES (?, ?, ?, 0)""", (email, otp, expiry_time))
+        c.execute("INSERT INTO otp_verification (email, otp, expiry_time, attempts) VALUES (?, ?, ?, 0)",
+                  (email, otp, expiry_time))
         conn.commit()
         conn.close()
-        
-        # Send email
-        email_success, email_message = send_email_otp(email, otp)
-        
-        if email_success:
-            print(f'[OK] OTP sent to: {email}')
-            return jsonify({
-                'success': True,
-                'message': f'Verification code sent to {email}. Check your inbox.',
-                'email_sent': True
-            })
-        else:
-            # Email failed on Render — log OTP to server console only, NEVER show on screen
-            print(f'[OTP CONSOLE] Email failed for {email}. OTP: {otp}')
-            # Retry once with a small delay
-            import time as _t; _t.sleep(1)
-            retry_ok = _smtp_send(email, "RakshaRide — Your OTP",
-                f"<h2>Your OTP: <strong>{otp}</strong></h2><p>Valid 5 minutes.</p>",
-                f"Your RakshaRide OTP is: {otp}")
-            if retry_ok:
-                return jsonify({'success': True, 'message': f'Verification code sent to {email}.', 'email_sent': True})
-            # Final fallback — tell user to check spam or try again
-            return jsonify({
-                'success': False,
-                'message': 'Email delivery failed. Please check your spam folder or try again in 1 minute.',
-                'email_sent': False
-            })
-        
+
+        # Send email in background thread — response returns immediately
+        html = (
+            "<div style='font-family:Arial;padding:20px;max-width:500px'>"
+            "<h2 style='color:#1565C0'>RakshaRide OTP</h2>"
+            "<p>Your verification code is:</p>"
+            "<div style='font-size:36px;font-weight:900;letter-spacing:10px;color:#FFC107;"
+            "padding:20px;background:#f5f5f5;border-radius:10px;text-align:center'>"
+            + otp +
+            "</div>"
+            "<p style='color:#666;margin-top:16px'>Valid for <strong>5 minutes</strong>. Do not share.</p>"
+            "</div>"
+        )
+        send_email_async(email, "RakshaRide — Your OTP", html, f"Your OTP: {otp} (valid 5 min)")
+
+        print(f"[OTP] Generated for {email}: {otp}")
+        return jsonify({
+            "success": True,
+            "message": f"Verification code sent to {email}. Check your inbox and spam folder.",
+            "email_sent": True
+        })
+
     except Exception as e:
-        print(f"âŒ Error in send_otp: {str(e)}")
-        return jsonify({"success": False, "message": str(e)}), 500
+        print(f"[send_otp ERROR] {e}")
+        return jsonify({"success": False, "message": "Server error. Please try again."}), 500
+
 
 @app.route('/api/verify_otp', methods=['POST'])
 def verify_otp():
