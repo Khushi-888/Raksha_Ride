@@ -93,12 +93,14 @@
         }
 
         async function handleSendOTP() {
-            const email = document.getElementById('email').value;
+            const email = document.getElementById('email').value.trim();
             if (!email) { showAlert("Email identification required."); return; }
             
             const btn = document.getElementById('send-otp-btn');
+            // Prevent double-click spam
+            if (btn.disabled) return;
             btn.disabled = true;
-            btn.innerText = "Transmitting...";
+            btn.innerText = "Sending...";
 
             try {
                 const res = await fetch('/api/send_otp', {
@@ -106,22 +108,36 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email })
                 });
-                const data = await res.json();
+                // Safe JSON parse
+                let data;
+                try { data = await res.json(); }
+                catch(e) { data = { success: false, message: 'Server error' }; }
+
                 if (data.success) {
                     document.getElementById('otp-verify-section').classList.remove('hidden');
                     showAlert("Verification code sent! Check your email.", "success");
-                    // Dev fallback: if email failed, show OTP on screen
                     if (data.dev_otp) {
-                        showAlert(`Email failed. Your OTP is: ${data.dev_otp} (dev mode)`, "success");
+                        showAlert(`OTP: ${data.dev_otp}`, "success");
                         document.getElementById('otp').value = data.dev_otp;
                     }
+                    // Start 30s cooldown before allowing resend
+                    let countdown = 30;
+                    const timer = setInterval(() => {
+                        countdown--;
+                        btn.innerText = `Resend in ${countdown}s`;
+                        if (countdown <= 0) {
+                            clearInterval(timer);
+                            btn.disabled = false;
+                            btn.innerText = "Resend OTP";
+                        }
+                    }, 1000);
                 } else {
-                    showAlert(data.message || "Failed to process request.");
+                    showAlert(data.message || "Failed to send OTP.");
                     btn.disabled = false;
                     btn.innerText = "Get OTP";
                 }
             } catch (err) {
-                showAlert("Network Handshake Error.");
+                showAlert("Connection error. Please check your internet.");
                 btn.disabled = false;
                 btn.innerText = "Get OTP";
             }

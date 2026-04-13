@@ -437,6 +437,9 @@ async function loadRideHistory(){
 }
 
 // ── SCANNER ──
+// ── SCANNER — runs ONCE per lookup, no loops/intervals ──
+let _lookupInProgress = false;  // Prevent duplicate calls
+
 async function startScanner(){
   try{
     scannerStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
@@ -444,7 +447,6 @@ async function startScanner(){
     document.getElementById('startScanBtn').classList.add('hidden');
     document.getElementById('stopScanBtn').classList.remove('hidden');
     showToast('Camera started. Point at driver QR code','info');
-    // Poll for QR (simplified - in production use jsQR library)
     setTimeout(()=>showToast('Tip: Use manual ID entry if camera QR detection is slow','info'),3000);
   }catch(e){showToast('Camera access denied: '+e.message,'error');}
 }
@@ -456,14 +458,26 @@ function stopScanner(){
 }
 
 async function lookupDriver(){
+  // Prevent duplicate API calls
+  if(_lookupInProgress) return;
   const id=document.getElementById('manualDriverId').value.trim();
   if(!id){showToast('Please enter a Driver ID','warn');return;}
+
+  _lookupInProgress = true;
+  const btn = document.querySelector('[onclick="lookupDriver()"]');
+  if(btn){ btn.disabled=true; btn.textContent='🔍 Searching...'; }
+
   try{
     const r=await authFetch('/api/lookup_driver?id='+encodeURIComponent(id));
+    if(!r) return;
     const d=await r.json();
     if(d.success){showDriverDetails(d.driver);}
     else showToast(d.message||'Driver not found','error');
-  }catch(e){showToast('Lookup failed','error');}
+  }catch(e){showToast('Lookup failed: '+e.message,'error');}
+  finally{
+    _lookupInProgress = false;
+    if(btn){ btn.disabled=false; btn.textContent='🔍 Find'; }
+  }
 }
 
 function showDriverDetails(driver){

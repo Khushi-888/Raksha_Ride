@@ -79,6 +79,25 @@ CORS(app, supports_credentials=True, origins="*")
 # Base URL
 BASE_URL = os.environ.get('APP_URL', 'http://localhost:5000')
 
+# ── RATE LIMITER (in-memory, prevents OTP spam) ───────────────────────────────
+from time import time as _time
+_rate_cache = {}
+
+def rate_limit(key, limit=3, window=60):
+    """
+    Returns True if request is allowed, False if rate limit exceeded.
+    limit: max requests per window (default 3 per 60 seconds)
+    """
+    now = _time()
+    if key not in _rate_cache:
+        _rate_cache[key] = []
+    # Remove expired timestamps
+    _rate_cache[key] = [t for t in _rate_cache[key] if now - t < window]
+    if len(_rate_cache[key]) >= limit:
+        return False
+    _rate_cache[key].append(now)
+    return True
+
 # Gmail Configuration — reads from env vars in production
 GMAIL_EMAIL = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
 GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD', 'evsz tunv eoqi lawu')
@@ -813,6 +832,10 @@ def send_otp():
         
         if not email or not is_valid_email(email):
             return jsonify({"success": False, "message": "Invalid email address"}), 400
+
+        # Rate limit: max 3 OTP requests per email per 60 seconds
+        if not rate_limit(f"otp_{email}", limit=3, window=60):
+            return jsonify({"success": False, "message": "Too many OTP requests. Please wait 60 seconds before trying again."}), 429
         
         otp = generate_otp()
         expiry_time = datetime.now() + timedelta(minutes=5)
@@ -870,6 +893,10 @@ def verify_otp():
         
         if not email or not otp:
             return jsonify({"success": False, "message": "Email and OTP required"}), 400
+
+        # Rate limit: max 5 verify attempts per email per 60 seconds
+        if not rate_limit(f"verify_{email}", limit=5, window=60):
+            return jsonify({"success": False, "message": "Too many verification attempts. Please wait."}), 429
         
         conn = get_db_conn()
         c = conn.cursor()
