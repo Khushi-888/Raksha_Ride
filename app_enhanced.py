@@ -120,22 +120,34 @@ def _smtp_send(to_email, subject, html_body, plain_body=None):
         from email.mime.multipart import MIMEMultipart as _MM
         from email.mime.text import MIMEText as _MT
         import smtplib as _smtp
-        clean_pw = GMAIL_APP_PASSWORD.replace(' ', '').replace('-', '')
+        # Get password fresh from env each time (in case env var updated)
+        gmail_email = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
+        gmail_pw = os.environ.get('GMAIL_APP_PASSWORD', 'evsz tunv eoqi lawu').replace(' ', '').replace('-', '')
+        
         msg = _MM('alternative')
-        msg['From'] = f"RakshaRide <{GMAIL_EMAIL}>"
+        msg['From'] = f"RakshaRide <{gmail_email}>"
         msg['To'] = to_email
         msg['Subject'] = subject
         msg.attach(_MT(plain_body or "View in HTML client.", 'plain'))
         msg.attach(_MT(html_body, 'html'))
-        s = _smtp.SMTP("smtp.gmail.com", 587, timeout=25)
-        s.ehlo(); s.starttls(); s.ehlo()
-        s.login(GMAIL_EMAIL, clean_pw)
-        s.sendmail(GMAIL_EMAIL, to_email, msg.as_string())
+        
+        s = _smtp.SMTP("smtp.gmail.com", 587, timeout=30)
+        s.ehlo()
+        s.starttls()
+        s.ehlo()
+        s.login(gmail_email, gmail_pw)
+        s.sendmail(gmail_email, to_email, msg.as_string())
         s.quit()
-        print(f"[EMAIL OK] {to_email}: {subject}")
+        print(f"[EMAIL OK] Sent to {to_email}: {subject}")
         return True
+    except _smtp.SMTPAuthenticationError as e:
+        print(f"[EMAIL AUTH FAIL] Check GMAIL_APP_PASSWORD env var: {e}")
+        return False
+    except _smtp.SMTPException as e:
+        print(f"[EMAIL SMTP FAIL] {to_email}: {e}")
+        return False
     except Exception as e:
-        print(f"[EMAIL FAIL] {to_email}: {e}")
+        print(f"[EMAIL FAIL] {to_email}: {type(e).__name__}: {e}")
         return False
 
 
