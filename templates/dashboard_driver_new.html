@@ -552,7 +552,11 @@ async function loadDocuments(){
           ${statusBadge}
           ${hasDoc ? `<button class="btn btn-sm btn-yellow" onclick="event.stopPropagation();openDocViewer('${dt.key}','${dt.label}')">👁 View</button>` : ''}
         </div>
-        ${hasDoc && canUpload ? `<button class="btn btn-sm btn-outline" style="width:100%;margin-top:10px" onclick="event.stopPropagation();uploadSingleDoc('${dt.key}','${dt.label}')">🔄 Update</button>` : ''}
+        ${hasDoc && canUpload ? `
+          <div style="display:flex;gap:6px;margin-top:10px">
+            <button class="btn btn-sm btn-outline" style="flex:1" onclick="event.stopPropagation();uploadSingleDoc('${dt.key}','${dt.label}')">🔄 Update</button>
+            <button class="btn btn-sm" style="flex:1;background:#FFEBEE;color:#C62828;border:1px solid #FFCDD2" onclick="event.stopPropagation();deleteDoc('${dt.key}','${dt.label}')">🗑️ Delete</button>
+          </div>` : ''}
         ${!hasDoc && canUpload ? `<button class="btn btn-sm btn-blue" style="width:100%;margin-top:10px;color:white;background:var(--blue)" onclick="event.stopPropagation();uploadSingleDoc('${dt.key}','${dt.label}')">📤 Upload</button>` : ''}
       </div>`;
     }).join('');
@@ -627,9 +631,10 @@ function uploadSingleDoc(key, label){
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try{
-        const r = await authFetch('/api/upload_driver_docs', {
+        // Use owner-specific upload API (only owners can upload/update)
+        const r = await authFetch('/api/owner/upload_doc', {
           method:'POST',
-          body: JSON.stringify({ driver_id: driverData.id, documents: { [key]: ev.target.result } })
+          body: JSON.stringify({ doc_type: key, file_data: ev.target.result })
         });
         const d = await r.json();
         if(d.success){ showToast(label+' uploaded!','success'); loadDocuments(); }
@@ -639,6 +644,19 @@ function uploadSingleDoc(key, label){
     reader.readAsDataURL(file);
   };
   input.click();
+}
+
+async function deleteDoc(key, label){
+  if(!confirm(`Delete ${label}? This cannot be undone.`)) return;
+  try{
+    const r = await authFetch('/api/owner/delete_doc', {
+      method:'POST',
+      body: JSON.stringify({ doc_type: key })
+    });
+    const d = await r.json();
+    if(d.success){ showToast(label+' deleted','success'); loadDocuments(); }
+    else showToast(d.message,'error');
+  }catch(err){ showToast('Delete failed','error'); }
 }
 
 function reuploadDoc(key){ uploadSingleDoc(key, key); }

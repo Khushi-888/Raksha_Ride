@@ -1167,6 +1167,12 @@ def owner_approve_view(token):
     """Secure link for owner to review and approve renter"""
     return render_template('owner_confirm.html', token=token)
 
+@app.route('/owner_confirm')
+def owner_confirm_view():
+    """Alternative route — supports ?token= query param from email links"""
+    token = request.args.get('token', '')
+    return render_template('owner_confirm.html', token=token)
+
 @app.route('/upload_docs')
 def upload_docs_page():
     """Document upload page - accessed via token for owners"""
@@ -4089,6 +4095,72 @@ def api_nearby_drivers():
 def api_logout():
     session.clear()
     return jsonify({"success": True})
+
+# ── OWNER DOCUMENT MANAGEMENT ─────────────────────────────────────────────────
+@app.route('/api/owner/upload_doc', methods=['POST'])
+def api_owner_upload_doc():
+    """Owner uploads/updates a document — only owner can do this."""
+    current_user = get_current_user()
+    if not current_user or current_user.get('user_type') != 'driver':
+        return jsonify({"success": False, "message": "Driver authentication required"}), 401
+    try:
+        owner_id = current_user['user_id']
+        # Verify this user is an OWNER
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("SELECT role FROM drivers WHERE id=?", (owner_id,))
+        row = c.fetchone()
+        if not row or row[0] != 'OWNER':
+            conn.close()
+            return jsonify({"success": False, "message": "Only vehicle owners can upload documents"}), 403
+
+        data = request.get_json() or {}
+        doc_type = data.get('doc_type', '').strip()
+        file_data = data.get('file_data', '')
+
+        if not doc_type or not file_data:
+            conn.close()
+            return jsonify({"success": False, "message": "doc_type and file_data required"}), 400
+
+        encrypted = encrypt_document(file_data)
+        # Delete old doc of same type, insert new
+        c.execute("DELETE FROM driver_documents WHERE driver_id=? AND doc_type=?", (owner_id, doc_type))
+        c.execute("""INSERT INTO driver_documents (driver_id, uploaded_by, doc_type, file_data, ai_status)
+                     VALUES (?, ?, ?, ?, 'PENDING')""", (owner_id, owner_id, doc_type, encrypted))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": f"{doc_type} uploaded successfully"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/owner/delete_doc', methods=['POST'])
+def api_owner_delete_doc():
+    """Owner deletes a document — only owner can do this."""
+    current_user = get_current_user()
+    if not current_user or current_user.get('user_type') != 'driver':
+        return jsonify({"success": False, "message": "Driver authentication required"}), 401
+    try:
+        owner_id = current_user['user_id']
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("SELECT role FROM drivers WHERE id=?", (owner_id,))
+        row = c.fetchone()
+        if not row or row[0] != 'OWNER':
+            conn.close()
+            return jsonify({"success": False, "message": "Only vehicle owners can delete documents"}), 403
+
+        data = request.get_json() or {}
+        doc_type = data.get('doc_type', '').strip()
+        if not doc_type:
+            conn.close()
+            return jsonify({"success": False, "message": "doc_type required"}), 400
+
+        c.execute("DELETE FROM driver_documents WHERE driver_id=? AND doc_type=?", (owner_id, doc_type))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": f"{doc_type} deleted"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/session_check')
 def api_session_check():

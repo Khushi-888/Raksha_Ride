@@ -1,194 +1,220 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Owner Confirmation - RakshaRide</title>
-    <link rel="stylesheet" href="/static/css/theme.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Owner Confirmation — RakshaRide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#E3F2FD 0%,#FFF8E1 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#fff;border-radius:24px;padding:40px;max-width:680px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.12)}
+.logo{text-align:center;margin-bottom:28px}
+.logo-icon{width:56px;height:56px;background:linear-gradient(135deg,#FFC107,#1565C0);border-radius:14px;display:inline-flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:10px}
+.logo-title{font-size:1.6rem;font-weight:800;color:#1565C0}
+.logo-sub{font-size:0.75rem;color:#888;text-transform:uppercase;letter-spacing:1px}
+.page-title{text-align:center;margin-bottom:28px}
+.page-title h1{font-size:1.5rem;font-weight:700;color:#1A1A2E;margin-bottom:6px}
+.page-title p{color:#666;font-size:0.9rem}
+.loading-box{text-align:center;padding:40px;color:#888}
+.spinner{width:40px;height:40px;border:4px solid #E3F2FD;border-top-color:#1565C0;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.detail-grid{display:grid;gap:12px;margin-bottom:24px}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:#F8FAFF;border-radius:12px;border:1px solid #E3F2FD}
+.detail-label{font-weight:600;color:#555;font-size:0.88rem}
+.detail-value{font-weight:700;color:#1A1A2E;font-size:0.95rem}
+.warn-box{background:#FFF8E1;border:1px solid #FFC107;border-radius:12px;padding:16px 20px;margin-bottom:24px}
+.warn-box h4{color:#7B5800;margin-bottom:8px;font-size:0.95rem}
+.warn-box ul{color:#7B5800;font-size:0.85rem;margin-left:18px}
+.warn-box li{margin-bottom:4px}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.btn{padding:16px;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn:hover{transform:translateY(-2px)}
+.btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+.btn-approve{background:linear-gradient(135deg,#2E7D32,#4CAF50);color:white;box-shadow:0 4px 15px rgba(46,125,50,0.3)}
+.btn-reject{background:linear-gradient(135deg,#C62828,#EF5350);color:white;box-shadow:0 4px 15px rgba(198,40,40,0.3)}
+.success-box{text-align:center;padding:32px}
+.success-icon{font-size:72px;margin-bottom:16px}
+.success-title{font-size:1.4rem;font-weight:800;margin-bottom:8px}
+.success-desc{color:#666;margin-bottom:24px;line-height:1.6}
+.doc-list{background:#E8F5E9;border-radius:12px;padding:16px 20px;margin-bottom:24px;text-align:left}
+.doc-list h4{color:#2E7D32;margin-bottom:10px}
+.doc-list li{color:#555;font-size:0.88rem;margin-bottom:4px}
+.btn-upload{display:inline-block;background:linear-gradient(135deg,#1565C0,#FFC107);color:white;padding:16px 40px;border-radius:12px;text-decoration:none;font-weight:700;font-size:1rem}
+.error-box{text-align:center;padding:32px;color:#C62828}
+</style>
 </head>
 <body>
-    <div class="animated-bg"></div>
-    
-    <!-- Theme Toggle -->
-    <div class="theme-toggle" onclick="toggleTheme()">
-        <span class="theme-toggle-icon" id="theme-icon">🌙</span>
-        <span id="theme-text">Dark Mode</span>
+<div class="card" id="mainCard">
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <div class="logo-title">RakshaRide</div>
+    <div class="logo-sub">Owner Confirmation Portal</div>
+  </div>
+
+  <div class="page-title">
+    <h1>🔐 Driver Authorization Request</h1>
+    <p>A rent driver has requested to use your vehicle on RakshaRide</p>
+  </div>
+
+  <div id="content">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      <p>Loading driver details...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// Get token from URL — supports both /owner/approve/TOKEN and /owner_confirm?token=TOKEN
+const pathParts = window.location.pathname.split('/');
+const token = pathParts[pathParts.length - 1] !== 'owner_confirm'
+  ? pathParts[pathParts.length - 1]
+  : new URLSearchParams(window.location.search).get('token') || '';
+
+async function loadDetails() {
+  if (!token) {
+    showError('Invalid confirmation link. Please check your email and try again.');
+    return;
+  }
+  try {
+    const res = await fetch(`/api/owner_confirm_load?token=${encodeURIComponent(token)}`);
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'This link is invalid or has already been used.');
+      return;
+    }
+    renderDetails(data.driver);
+  } catch(e) {
+    showError('Failed to load details. Please check your internet connection.');
+  }
+}
+
+function renderDetails(d) {
+  document.getElementById('content').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-row"><span class="detail-label">👤 Full Name</span><span class="detail-value">${d.name}</span></div>
+      <div class="detail-row"><span class="detail-label">📧 Email</span><span class="detail-value">${d.email}</span></div>
+      <div class="detail-row"><span class="detail-label">📱 Mobile</span><span class="detail-value">${d.mobile}</span></div>
+      <div class="detail-row"><span class="detail-label">🎂 Age</span><span class="detail-value">${d.age} years</span></div>
+      <div class="detail-row"><span class="detail-label">🚗 Vehicle Number</span><span class="detail-value">${d.vehicle_number}</span></div>
+      <div class="detail-row"><span class="detail-label">🚘 Vehicle Type</span><span class="detail-value">${d.vehicle_type}</span></div>
+      <div class="detail-row"><span class="detail-label">📋 License Number</span><span class="detail-value">${d.license_number}</span></div>
+      <div class="detail-row"><span class="detail-label">📅 Request Date</span><span class="detail-value">${new Date(d.created_at).toLocaleString()}</span></div>
     </div>
 
-    <div class="center-container">
-        <div class="card" style="max-width: 800px; width: 100%;">
-            <div class="card-header">
-                <img src="/static/images/logo.svg" alt="RakshaRide" style="width: 200px; height: 60px; margin: 0 auto 20px; display: block;">
-                <h1 class="card-title">🔐 Owner Confirmation Required</h1>
-                <p class="card-subtitle">A driver has requested to register using your vehicle</p>
-            </div>
-
-            <div id="driver-info" class="alert alert-info">
-                <h3>📋 Driver Details</h3>
-                <div class="loading" style="margin: 20px auto;"></div>
-                <p class="text-center">Loading driver information...</p>
-            </div>
-
-            <div class="alert alert-warning">
-                <h4>⚠️ Important Information</h4>
-                <ul style="margin-left: 20px; margin-top: 10px;">
-                    <li>By approving, you confirm this person is authorized to drive your vehicle</li>
-                    <li>You will be responsible for uploading vehicle documents</li>
-                    <li>Both you and the driver will receive login credentials after admin verification</li>
-                    <li>The driver will be able to VIEW your documents but NOT edit them</li>
-                </ul>
-            </div>
-
-            <div class="flex gap-2 mt-3">
-                <button class="btn btn-secondary" style="flex: 1;" onclick="confirmAction('APPROVE')">
-                    <span id="approve-text">✓ Approve Request</span>
-                    <span id="approve-loading" class="loading hidden"></span>
-                </button>
-                <button class="btn btn-outline" style="flex: 1;" onclick="confirmAction('REJECT')">
-                    <span id="reject-text">✗ Reject Request</span>
-                    <span id="reject-loading" class="loading hidden"></span>
-                </button>
-            </div>
-        </div>
+    <div class="warn-box">
+      <h4>⚠️ Before you approve, please note:</h4>
+      <ul>
+        <li>You confirm this person is authorized to drive your vehicle</li>
+        <li>After approval, you must upload vehicle documents (Aadhaar, License, RC)</li>
+        <li>Only you (the owner) can upload, update, or delete documents</li>
+        <li>The rent driver can VIEW documents but cannot edit or delete them</li>
+        <li>Both of you will receive login credentials after document verification</li>
+      </ul>
     </div>
 
-    <script>
-        const token = "{{ token }}";
+    <div class="btn-row">
+      <button class="btn btn-approve" id="approveBtn" onclick="doAction('APPROVE')">
+        ✅ Approve Request
+      </button>
+      <button class="btn btn-reject" id="rejectBtn" onclick="doAction('REJECT')">
+        ❌ Reject Request
+      </button>
+    </div>`;
+}
 
-        // Theme Toggle
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', newTheme);
-            
-            document.getElementById('theme-icon').textContent = newTheme === 'dark' ? '☀️' : '🌙';
-            document.getElementById('theme-text').textContent = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
-            
-            localStorage.setItem('theme', newTheme);
-        }
+async function doAction(action) {
+  if (!confirm(action === 'APPROVE'
+    ? 'Approve this driver? You will need to upload documents next.'
+    : 'Reject this request? The driver will be notified.')) return;
 
-        // Load saved theme
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            document.getElementById('theme-icon').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-            document.getElementById('theme-text').textContent = savedTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
-            
-            loadDetails();
-        });
+  document.getElementById('approveBtn').disabled = true;
+  document.getElementById('rejectBtn').disabled = true;
+  document.getElementById('approveBtn').textContent = action === 'APPROVE' ? '⏳ Processing...' : '✅ Approve';
+  document.getElementById('rejectBtn').textContent = action === 'REJECT' ? '⏳ Processing...' : '❌ Reject';
 
-        async function loadDetails() {
-            try {
-                const res = await fetch(`/api/owner_confirm_load?token=${token}`);
-                const result = await res.json();
-                
-                if (result.success) {
-                    const d = result.driver;
-                    document.getElementById('driver-info').innerHTML = `
-                        <h3 style="margin-bottom: 20px;">📋 Driver Details</h3>
-                        <div style="display: grid; gap: 15px;">
-                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
-                                <span style="font-weight: 600;">Name:</span>
-                                <span>${d.name}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
-                                <span style="font-weight: 600;">Email:</span>
-                                <span>${d.email}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
-                                <span style="font-weight: 600;">Mobile:</span>
-                                <span>${d.mobile}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
-                                <span style="font-weight: 600;">Age:</span>
-                                <span>${d.age} years</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
-                                <span style="font-weight: 600;">Vehicle:</span>
-                                <span>${d.vehicle_number} (${d.vehicle_type})</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
-                                <span style="font-weight: 600;">License:</span>
-                                <span>${d.license_number}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
-                                <span style="font-weight: 600;">Request Date:</span>
-                                <span>${new Date(d.created_at).toLocaleString()}</span>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    alert('❌ Error: ' + result.message);
-                    window.location.href = '/';
-                }
-            } catch (error) {
-                alert('❌ Failed to load details: ' + error.message);
-                window.location.href = '/';
-            }
-        }
+  try {
+    const res = await fetch('/api/owner_confirm_action', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ token, action })
+    });
+    const data = await res.json();
 
-        async function confirmAction(action) {
-            if (!confirm(`Are you sure you want to ${action.toLowerCase()} this request?`)) return;
+    if (data.success) {
+      if (action === 'APPROVE') {
+        showApproveSuccess(data.redirect_url);
+      } else {
+        showRejectSuccess();
+      }
+    } else {
+      alert('Error: ' + (data.message || 'Something went wrong'));
+      document.getElementById('approveBtn').disabled = false;
+      document.getElementById('rejectBtn').disabled = false;
+    }
+  } catch(e) {
+    alert('Network error. Please try again.');
+    document.getElementById('approveBtn').disabled = false;
+    document.getElementById('rejectBtn').disabled = false;
+  }
+}
 
-            const textId = action === 'APPROVE' ? 'approve-text' : 'reject-text';
-            const loadingId = action === 'APPROVE' ? 'approve-loading' : 'reject-loading';
-            
-            document.getElementById(textId).classList.add('hidden');
-            document.getElementById(loadingId).classList.remove('hidden');
+function showApproveSuccess(uploadUrl) {
+  document.getElementById('content').innerHTML = `
+    <div class="success-box">
+      <div class="success-icon">✅</div>
+      <div class="success-title" style="color:#2E7D32">Request Approved!</div>
+      <div class="success-desc">
+        You have approved the rent driver request.<br>
+        <strong>Next step:</strong> Upload the required vehicle documents below.
+      </div>
+      <div class="doc-list">
+        <h4>📄 Documents you need to upload:</h4>
+        <ul>
+          <li>Profile Photo</li>
+          <li>Aadhaar Card (Front & Back)</li>
+          <li>Driving License</li>
+          <li>RC Book (Vehicle Registration Certificate)</li>
+        </ul>
+      </div>
+      <p style="color:#888;font-size:0.85rem;margin-bottom:16px">
+        Redirecting to document upload in <span id="countdown">5</span> seconds...
+      </p>
+      <a href="${uploadUrl}" class="btn-upload">📤 Upload Documents Now</a>
+    </div>`;
 
-            try {
-                const res = await fetch('/api/owner_confirm_action', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ token, action })
-                });
-                const result = await res.json();
-                
-                document.getElementById(textId).classList.remove('hidden');
-                document.getElementById(loadingId).classList.add('hidden');
-                
-                if (result.success) {
-                    if (action === 'APPROVE') {
-                        // Show success message then redirect to upload docs
-                        document.querySelector('.card').innerHTML = `
-                            <div style="text-align:center;padding:40px">
-                                <div style="font-size:72px;margin-bottom:20px">✅</div>
-                                <h2 style="color:#2E7D32;margin-bottom:12px">Request Approved!</h2>
-                                <p style="color:#555;margin-bottom:24px">You have approved the rent driver request.<br>Now please upload the required vehicle documents.</p>
-                                <div style="background:#E8F5E9;border-radius:12px;padding:20px;margin-bottom:24px;text-align:left">
-                                    <h4 style="color:#2E7D32;margin-bottom:12px">📄 Documents Required:</h4>
-                                    <ul style="color:#555;margin-left:20px">
-                                        <li>Profile Photo</li>
-                                        <li>Aadhaar Card</li>
-                                        <li>Driving License</li>
-                                        <li>RC Book (Vehicle Registration)</li>
-                                    </ul>
-                                </div>
-                                <p style="color:#888;font-size:0.9rem;margin-bottom:20px">Redirecting to document upload in 3 seconds...</p>
-                                <a href="${result.redirect_url}" style="display:inline-block;background:linear-gradient(135deg,#1565C0,#FFC107);color:white;padding:16px 40px;border-radius:12px;text-decoration:none;font-weight:700;font-size:1.1rem">
-                                    📤 Upload Documents Now
-                                </a>
-                            </div>`;
-                        setTimeout(() => { window.location.href = result.redirect_url; }, 3000);
-                    } else {
-                        document.querySelector('.card').innerHTML = `
-                            <div style="text-align:center;padding:40px">
-                                <div style="font-size:72px;margin-bottom:20px">❌</div>
-                                <h2 style="color:#C62828;margin-bottom:12px">Request Rejected</h2>
-                                <p style="color:#555">You have rejected the rent driver request.</p>
-                                <a href="/" style="display:inline-block;margin-top:20px;background:#1565C0;color:white;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:600">Go Home</a>
-                            </div>`;
-                    }
-                } else {
-                    alert('❌ Error: ' + result.message);
-                }
-            } catch (error) {
-                document.getElementById(textId).classList.remove('hidden');
-                document.getElementById(loadingId).classList.add('hidden');
-                alert('❌ Action failed: ' + error.message);
-            }
-        }
-    </script>
+  let n = 5;
+  const t = setInterval(() => {
+    n--;
+    const el = document.getElementById('countdown');
+    if(el) el.textContent = n;
+    if(n <= 0) { clearInterval(t); window.location.href = uploadUrl; }
+  }, 1000);
+}
+
+function showRejectSuccess() {
+  document.getElementById('content').innerHTML = `
+    <div class="success-box">
+      <div class="success-icon">❌</div>
+      <div class="success-title" style="color:#C62828">Request Rejected</div>
+      <div class="success-desc">You have rejected the rent driver request.<br>The driver has been notified.</div>
+      <a href="/" style="display:inline-block;background:#1565C0;color:white;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:600">Go to Homepage</a>
+    </div>`;
+}
+
+function showError(msg) {
+  document.getElementById('content').innerHTML = `
+    <div class="error-box">
+      <div style="font-size:48px;margin-bottom:12px">⚠️</div>
+      <h3 style="margin-bottom:8px">Link Error</h3>
+      <p style="color:#666">${msg}</p>
+      <a href="/" style="display:inline-block;margin-top:20px;background:#1565C0;color:white;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:600">Go to Homepage</a>
+    </div>`;
+}
+
+loadDetails();
+</script>
 </body>
 </html>
