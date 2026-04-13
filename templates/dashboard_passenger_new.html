@@ -235,6 +235,11 @@
           <option value="Bike">Bike</option>
           <option value="Auto">Auto</option>
         </select>
+        <select class="form-select" style="width:auto" id="filterGender" onchange="filterDrivers()">
+          <option value="">Any Driver</option>
+          <option value="Female">Female Drivers Only</option>
+          <option value="Male">Male Drivers Only</option>
+        </select>
         <select class="form-select" style="width:auto" id="filterDist" onchange="filterDrivers()">
           <option value="5">Within 5 km</option>
           <option value="10">Within 10 km</option>
@@ -587,8 +592,10 @@ function initPassengerMap(){
 
 async function loadNearbyDrivers(lat,lng){
   try{
-    const url=lat?`/api/nearby_drivers?lat=${lat}&lng=${lng}&radius=10`:`/api/nearby_drivers?radius=10`;
-    const r=await fetch(url);const d=await r.json();
+    const dist=document.getElementById('filterDist')?.value||'10';
+    const gender=document.getElementById('filterGender')?.value||'';
+    const url=lat?`/api/nearby_drivers?lat=${lat}&lng=${lng}&radius=${dist}&gender=${gender}`:`/api/nearby_drivers?radius=${dist}&gender=${gender}`;
+    const r=await authFetch(url);if(!r)return;const d=await r.json();
     const el=document.getElementById('nearbyDriversList');
     if(!d.success||!d.drivers||d.drivers.length===0){
       el.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3)">No drivers nearby</div>';return;

@@ -98,6 +98,18 @@
                 </div>
 
                 <div class="form-group">
+                    <label class="form-label">Driver Gender *</label>
+                    <select class="form-select" id="gender" required>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Any">Prefer not to say</option>
+                    </select>
+                </div>
+                        <option value="Auto">Auto</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">Full Residential Address *</label>
                     <textarea class="form-input" id="address" placeholder="Enter complete address for verification" required></textarea>
                 </div>
@@ -291,6 +303,7 @@
             formData.append('email', document.getElementById('email').value.trim());
             formData.append('vehicle_number', document.getElementById('vehicle_number').value.trim());
             formData.append('vehicle_type', document.getElementById('vehicle_type').value);
+            formData.append('gender', document.getElementById('gender') ? document.getElementById('gender').value : 'Any');
             formData.append('rc_number', document.getElementById('rc_number').value.trim());
             formData.append('license_number', document.getElementById('license_number').value.trim());
             formData.append('aadhaar_number', document.getElementById('aadhaar_number').value.trim());

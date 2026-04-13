@@ -449,6 +449,7 @@ def init_db():
         ('drivers', 'ai_ocr_data',          'TEXT'),
         ('drivers', 'live_selfie',          'TEXT'),
         ('drivers', 'license_number',       'TEXT'),
+        ('drivers', 'gender',               'TEXT DEFAULT "Any"'),
         ('passengers', 'unique_id',         'TEXT'),
         ('passengers', 'aadhaar_number',    'TEXT'),
         ('passengers', 'aadhaar_doc',       'TEXT'),
@@ -1192,6 +1193,7 @@ def register_driver_v2():
         license_number = request.form.get('license_number', '').strip()
         aadhaar_number = request.form.get('aadhaar_number', '').strip()
         address = request.form.get('address', '').strip()
+        gender = request.form.get('gender', 'Any').strip()
 
         # 3. Individual Field Validation (No more 'if not all')
         if not name: return jsonify({"success": False, "message": "Full Name is required"}), 400
@@ -1275,10 +1277,10 @@ def register_driver_v2():
         if not existing_driver_id:
             c.execute("""INSERT INTO drivers
                          (name, age, mobile, email, vehicle_number, vehicle_type, rc_number,
-                          password, unique_id, verification_status, role, owner_id, license_number, aadhaar_number, address)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                          password, unique_id, verification_status, role, owner_id, license_number, aadhaar_number, address, gender)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                       (name, age, mobile, email, vehicle_number, vehicle_type, rc_number,
-                       placeholder_pw, unique_id, verification_status, role, owner_id, license_number, aadhaar_number, address))
+                       placeholder_pw, unique_id, verification_status, role, owner_id, license_number, aadhaar_number, address, gender))
             conn.commit()
             driver_id = c.lastrowid
         else:
@@ -1587,62 +1589,63 @@ def get_driver_docs():
 
 @app.route('/api/login_passenger', methods=['POST'])
 def login_passenger():
-    """Passenger login Step 1: Password Check -> Send OTP"""
+    """Passenger login — non-blocking OTP send."""
     try:
-        data = request.get_json()
-        credential = data.get('credential', '').strip()
-        password = data.get('password', '').strip()
-        
+        data = request.get_json() or {}
+        credential = (data.get('credential') or data.get('email') or '').strip()
+        password   = (data.get('password') or '').strip()
+
         if not credential or not password:
-            return jsonify({"success": False, "message": "Credentials required"}), 400
-        
+            return jsonify({"success": False, "message": "Email and password required"}), 400
+
         hashed_password = hash_password(password)
-        
         conn = get_db_conn()
         c = conn.cursor()
-        
-        c.execute("""SELECT id, name, email, phone FROM passengers 
-                     WHERE (email = ? OR phone = ?) AND password = ?""", 
-                   (credential, credential, hashed_password))
+        c.execute("""SELECT id, name, email, phone FROM passengers
+                     WHERE (email = ? OR phone = ?) AND password = ?""",
+                  (credential, credential, hashed_password))
         result = c.fetchone()
-        
-        if result:
-            user_id, name, email, phone = result
-            
-            # Generate and Send OTP
-            otp = generate_otp()
-            expiry_time = datetime.now() + timedelta(minutes=5)
-            
-            c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
-            c.execute("""INSERT INTO otp_verification (email, otp, expiry_time, attempts) 
-                         VALUES (?, ?, ?, 0)""", (email, otp, expiry_time))
-            conn.commit()
-            conn.close()
-            
-            # Send email
-            email_success, email_message = send_email_otp(email, otp)
-            
-            if email_success:
-                print(f"âœ… SECURITY LOG: Login OTP sent to ACTUAL email: {email}")
-                return jsonify({
-                    "success": True,
-                    "requires_otp": True,
-                    "email": email,
-                    "message": f"Security verification code sent to {email}. Please check your inbox.",
-                    "email_sent": True
-                })
-            else:
-                print(f"âŒ LOGIN OTP FAILURE for {email}: {email_message}")
-                return jsonify({
-                    "success": False,
-                    "message": "Email delivery failed. Please check your spam folder or try again.",
-                    "email_sent": False
-                })
+
+        if not result:
             conn.close()
             return jsonify({"success": False, "message": "Invalid email/phone or password"}), 401
-            
+
+        user_id, name, email, phone = result
+
+        otp = generate_otp()
+        expiry_time = datetime.now() + timedelta(minutes=5)
+        c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+        c.execute("INSERT INTO otp_verification (email, otp, expiry_time, attempts) VALUES (?, ?, ?, 0)",
+                  (email, otp, expiry_time))
+        conn.commit()
+        conn.close()
+
+        html = (
+            "<div style='font-family:Arial;padding:20px'>"
+            "<h2 style='color:#1565C0'>RakshaRide Login OTP</h2>"
+            "<p>Your login verification code:</p>"
+            "<div style='font-size:36px;font-weight:900;letter-spacing:10px;color:#FFC107;"
+            "padding:20px;background:#f5f5f5;border-radius:10px;text-align:center'>"
+            + otp +
+            "</div>"
+            "<p style='color:#666;margin-top:16px'>Valid for <strong>5 minutes</strong>.</p>"
+            "</div>"
+        )
+        send_email_async(email, "RakshaRide Login OTP", html, f"Login OTP: {otp}")
+        print(f"[LOGIN OTP] {email}: {otp}")
+
+        return jsonify({
+            "success": True,
+            "requires_otp": True,
+            "email": email,
+            "message": f"Verification code sent to {email}. Check your inbox.",
+            "email_sent": True
+        })
+
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        print(f"[login_passenger ERROR] {e}")
+        return jsonify({"success": False, "message": "An internal error occurred. Please try again."}), 500
+
 
 @app.route('/api/verify_login_otp_passenger', methods=['POST'])
 def verify_login_otp_passenger():
@@ -4031,27 +4034,36 @@ def api_lookup_driver():
 @app.route('/api/nearby_drivers')
 def api_nearby_drivers():
     try:
-        lat = request.args.get('lat', type=float)
-        lng = request.args.get('lng', type=float)
+        lat    = request.args.get('lat', type=float)
+        lng    = request.args.get('lng', type=float)
         radius = request.args.get('radius', 10, type=float)
+        gender_filter = request.args.get('gender', '').strip()  # 'Male', 'Female', or ''
+
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
-        c.execute("""SELECT id, name, vehicle_number, vehicle_type, rating, total_rides,
-                     unique_id, latitude, longitude, is_available
-                     FROM drivers WHERE is_available = 1 AND verification_status = 'verified'""")
+        query = """SELECT id, name, vehicle_number, vehicle_type, rating, total_rides,
+                   unique_id, latitude, longitude, is_available, gender
+                   FROM drivers WHERE is_available = 1 AND verification_status = 'verified'"""
+        params = []
+        if gender_filter and gender_filter in ('Male', 'Female'):
+            query += " AND (gender = ? OR gender = 'Any' OR gender IS NULL)"
+            params.append(gender_filter)
+        c.execute(query, params)
         rows = c.fetchall()
         conn.close()
+
         cols = ['id','name','vehicle_number','vehicle_type','rating','total_rides',
-                'unique_id','latitude','longitude','is_available']
+                'unique_id','latitude','longitude','is_available','gender']
         drivers = []
         for row in rows:
             d = dict(zip(cols, row))
             if lat and lng and d['latitude'] and d['longitude']:
-                import math
                 R = 6371
                 dLat = math.radians(d['latitude'] - lat)
                 dLon = math.radians(d['longitude'] - lng)
-                a = math.sin(dLat/2)**2 + math.cos(math.radians(lat)) * math.cos(math.radians(d['latitude'])) * math.sin(dLon/2)**2
+                a = (math.sin(dLat/2)**2 +
+                     math.cos(math.radians(lat)) * math.cos(math.radians(d['latitude'])) *
+                     math.sin(dLon/2)**2)
                 dist = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
                 if dist <= radius:
                     d['distance_km'] = round(dist, 2)
