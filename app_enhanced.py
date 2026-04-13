@@ -696,33 +696,36 @@ def _deliver_email(msg):
         return False
 
 def send_owner_approval_email(owner_email, renter_name, vehicle_details, token):
-    """Send approval request to the vehicle owner using Flask-Mail"""
+    """Send approval request to owner — uses Brevo via send_email_async (non-blocking)."""
     approval_url = f"{BASE_URL}/owner_confirm?token={token}"
-    
-    subject = "RakshaRide - Vehicle Owner Approval Required"
-    body = f"""
-    <h2>Action Required: Driver Authorization Request</h2>
-    <p>Dear Vehicle Owner,</p>
-    <p>A driver, <b>{renter_name}</b>, has requested authorization to operate your vehicle (<b>{vehicle_details}</b>) on the RakshaRide platform.</p>
-    
-    <p>As per our safety protocols, please review and approve this request by clicking the link below:</p>
-    
-    <div style="margin: 20px 0;">
-        <a href="{approval_url}" style="background-color: #003366; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px;">Review & Approve Request</a>
-    </div>
-    
-    <p>If you did not authorize this, please ignore this email or report it to our security team.</p>
-    
-    <p>Best regards,<br>RakshaRide Governance Team</p>
-    """
-    
-    try:
-        ok = _smtp_send(owner_email, subject, body)
-        print(f"âœ… Owner approval email sent to {owner_email}")
-        return True
-    except Exception as e:
-        print(f"âŒ Critical Email System Failure: {str(e)}")
-        return False
+    subject = "RakshaRide — Driver Authorization Request"
+    html = (
+        "<div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto'>"
+        "<div style='background:linear-gradient(135deg,#1565C0,#FFC107);padding:24px;border-radius:12px 12px 0 0;text-align:center'>"
+        "<h1 style='color:white;margin:0'>RakshaRide</h1>"
+        "<p style='color:rgba(255,255,255,0.9);margin:6px 0 0'>Vehicle Owner Action Required</p>"
+        "</div>"
+        "<div style='background:#fff;border:1px solid #e0e0e0;padding:28px;border-radius:0 0 12px 12px'>"
+        "<h2 style='color:#1565C0'>Driver Authorization Request</h2>"
+        "<p>Dear Vehicle Owner,</p>"
+        f"<p>Driver <strong>{renter_name}</strong> wants to operate your vehicle <strong>{vehicle_details}</strong> on RakshaRide.</p>"
+        "<div style='background:#f5f5f5;border-radius:10px;padding:16px;margin:20px 0'>"
+        f"<p style='margin:0'><strong>Driver:</strong> {renter_name}</p>"
+        f"<p style='margin:8px 0 0'><strong>Vehicle:</strong> {vehicle_details}</p>"
+        "</div>"
+        "<div style='text-align:center;margin:24px 0'>"
+        f"<a href='{approval_url}' style='background:#1565C0;color:white;padding:14px 32px;"
+        "text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;display:inline-block'>"
+        "Review &amp; Approve Request</a>"
+        "</div>"
+        "<p style='color:#666;font-size:13px'>If you did not expect this, please ignore this email.</p>"
+        "</div></div>"
+    )
+    plain = f"Driver {renter_name} wants to use your vehicle ({vehicle_details}). Approve: {approval_url}"
+    send_email_async(owner_email, subject, html, plain)
+    print(f"[OWNER EMAIL] Queued for {owner_email}")
+    return True
+
 
 def is_valid_email(email):
     """Validate email format"""
@@ -2955,52 +2958,59 @@ def admin_final_verification():
         return jsonify({"success": False, "message": str(e)}), 500
 
 def _send_credentials_email(email, name, unique_id, password):
-    """Notify driver of their official login credentials via Flask-Mail"""
-    subject = "RakshaRide Account Approved - Official Credentials"
-    body = f"""Dear {name},
-    
-Your RakshaRide driver account has been successfully verified!
+    """Send driver login credentials via Brevo (non-blocking)."""
+    subject = "RakshaRide — Your Account is Approved!"
+    html = (
+        "<div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto'>"
+        "<div style='background:linear-gradient(135deg,#2E7D32,#FFC107);padding:24px;border-radius:12px 12px 0 0;text-align:center'>"
+        "<h1 style='color:white;margin:0'>RakshaRide</h1>"
+        "<p style='color:rgba(255,255,255,0.9);margin:6px 0 0'>Account Approved!</p>"
+        "</div>"
+        "<div style='background:#fff;border:1px solid #e0e0e0;padding:28px;border-radius:0 0 12px 12px'>"
+        f"<h2 style='color:#2E7D32'>Welcome, {name}!</h2>"
+        "<p>Your RakshaRide driver account has been verified and approved.</p>"
+        "<div style='background:#f5f5f5;border-radius:10px;padding:20px;margin:20px 0'>"
+        "<h3 style='margin:0 0 12px;color:#1565C0'>Your Login Credentials</h3>"
+        f"<p style='margin:6px 0'><strong>User ID:</strong> <code style='background:#e3f2fd;padding:4px 8px;border-radius:4px'>{unique_id}</code></p>"
+        f"<p style='margin:6px 0'><strong>Password:</strong> <code style='background:#e3f2fd;padding:4px 8px;border-radius:4px'>{password}</code></p>"
+        "</div>"
+        f"<div style='text-align:center;margin:24px 0'>"
+        f"<a href='{BASE_URL}/login/driver' style='background:#1565C0;color:white;padding:14px 32px;"
+        "text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;display:inline-block'>"
+        "Login to Dashboard</a>"
+        "</div>"
+        "<p style='color:#C62828;font-size:13px'><strong>Important:</strong> Change your password after first login.</p>"
+        "</div></div>"
+    )
+    plain = f"Your RakshaRide credentials — User ID: {unique_id} | Password: {password} | Login: {BASE_URL}/login/driver"
+    send_email_async(email, subject, html, plain)
+    print(f"[CREDENTIALS EMAIL] Queued for {email}")
+    return True
 
-Please use the following official credentials to log in:
-
-User ID: {unique_id}
-Temporary Password: {password}
-
-Portal: {BASE_URL}/login/driver
-
-âš ï¸ IMPORTANT: For your security, you will be required to change this password during your first login.
-
-Safe Riding!
-RakshaRide Team
-"""
-    try:
-        msg = Message(subject=subject, recipients=[email], body=body)
-        _smtp_send(str(msg.recipients[0]) if hasattr(msg, "recipients") else "", msg.subject, getattr(msg, "html", None) or getattr(msg, "body", ""), getattr(msg, "body", ""))
-        print(f"âœ… Credentials email sent to {email}")
-        return True
-    except Exception as e:
-        print(f"âŒ Critical Email System Failure: {str(e)}")
-        return False
 
 def _send_owner_creds_notification(owner_email, owner_name, renter_name, unique_id):
-    """Notify owner that their renter's account is verified and active"""
-    subject = f"RakshaRide: Renter ({renter_name}) Account Activated"
-    body = f"""Dear {owner_name},
-    
-This is to inform you that the driver account for your renter, {renter_name}, has been verified and activated on RakshaRide.
+    """Notify owner that their renter is verified — uses Brevo."""
+    subject = f"RakshaRide — Renter {renter_name} Account Activated"
+    html = (
+        "<div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto'>"
+        "<div style='background:linear-gradient(135deg,#1565C0,#FFC107);padding:24px;border-radius:12px 12px 0 0;text-align:center'>"
+        "<h1 style='color:white;margin:0'>RakshaRide</h1>"
+        "</div>"
+        "<div style='background:#fff;border:1px solid #e0e0e0;padding:28px;border-radius:0 0 12px 12px'>"
+        f"<h2 style='color:#1565C0'>Renter Account Activated</h2>"
+        f"<p>Dear {owner_name},</p>"
+        f"<p>Your renter <strong>{renter_name}</strong> has been verified and is now active on RakshaRide.</p>"
+        "<div style='background:#f5f5f5;border-radius:10px;padding:16px;margin:20px 0'>"
+        f"<p style='margin:0'><strong>Renter:</strong> {renter_name}</p>"
+        f"<p style='margin:8px 0 0'><strong>Renter ID:</strong> {unique_id}</p>"
+        "</div>"
+        "<p>They are now authorized to provide rides using your vehicle.</p>"
+        "</div></div>"
+    )
+    plain = f"Your renter {renter_name} (ID: {unique_id}) is now verified on RakshaRide."
+    send_email_async(owner_email, subject, html, plain)
+    print(f"[OWNER CREDS EMAIL] Queued for {owner_email}")
 
-Renter ID: {unique_id}
-
-They are now authorized to provide rides using your vehicle.
-
-Thank you,
-RakshaRide Team
-"""
-    try:
-        msg = Message(subject=subject, recipients=[owner_email], body=body)
-        send_email_async(owner_email, subject, body)
-    except Exception as e:
-        print(f"âŒ Error sending owner creds notification: {str(e)}")
 
 def _deliver_email(msg):
     """Internal helper to deliver SMTP message"""
