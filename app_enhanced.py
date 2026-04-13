@@ -218,30 +218,40 @@ def save_uploaded_file(file, target_dir, prefix=""):
     """
     Save uploaded file. On Render (read-only FS), stores as base64 data URI.
     Locally, saves to disk and returns path.
+    Always reads bytes FIRST before attempting disk save.
     """
-    if not file or file.filename == '':
+    if not file or not getattr(file, 'filename', None) or file.filename == '':
         return None
     try:
-        # Try to save to disk first (works locally)
-        os.makedirs(target_dir, exist_ok=True)
-        filename = secure_filename(file.filename)
-        unique_name = f"{prefix}_{uuid.uuid4().hex}_{filename}"
-        file_path = os.path.join(target_dir, unique_name)
-        file.save(file_path)
-        return file_path.replace("\\", "/").replace("static/", "")
-    except (OSError, PermissionError):
-        # Render read-only filesystem — store as base64 data URI instead
-        try:
-            file.seek(0)
-            data = file.read()
-            ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
-            mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png',
-                    'pdf':'application/pdf','gif':'image/gif'}.get(ext, 'image/jpeg')
-            b64 = base64.b64encode(data).decode()
-            return f"data:{mime};base64,{b64}"
-        except Exception as e2:
-            print(f"[WARN] File save fallback failed: {e2}")
+        # Read all bytes first — stream can only be read once
+        file.seek(0)
+        data = file.read()
+        if not data:
             return None
+
+        ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+        mime = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+                'pdf': 'application/pdf', 'gif': 'image/gif'}.get(ext, 'image/jpeg')
+
+        # Try disk save first (works locally, fails on Render read-only FS)
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+            filename = secure_filename(file.filename)
+            unique_name = f"{prefix}_{uuid.uuid4().hex[:8]}_{filename}"
+            file_path = os.path.join(target_dir, unique_name)
+            with open(file_path, 'wb') as f:
+                f.write(data)
+            return file_path.replace("\\", "/")
+        except (OSError, PermissionError):
+            pass
+
+        # Render fallback — store as base64 data URI in DB
+        b64 = base64.b64encode(data).decode()
+        return f"data:{mime};base64,{b64}"
+
+    except Exception as e:
+        print(f"[WARN] save_uploaded_file failed: {e}")
+        return None
 
 
 # â”€â”€ CORE UTILITY FUNCTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1496,72 +1506,86 @@ def upload_driver_docs():
                 return jsonify({"success": False, "message": "Missing driver ID. Please go back and register again."}), 400
             uploader_id = driver_id
 
-        # Profile Image Upload
-        if 'profile_image' in request.files:
-            profile_path = save_uploaded_file(request.files['profile_image'], PROFILE_DIR, f"p_{driver_id}")
-            if profile_path:
-                c.execute("UPDATE drivers SET profile_image = ? WHERE id = ?", (profile_path, driver_id))
+        # ── Profile Image ─────────────────────────────────────────────────────
+        if 'profile_image' in request.files and request.files['profile_image'].filename:
+            profile_data = save_uploaded_file(request.files['profile_image'], PROFILE_DIR, f"p_{driver_id}")
+            if profile_data:
+                # Store in drivers table
+                c.execute("UPDATE drivers SET profile_image = ? WHERE id = ?", (profile_data, driver_id))
+                # Also store in driver_documents as 'photo' so dashboard can show it
+                c.execute("DELETE FROM driver_documents WHERE driver_id = ? AND doc_type = 'photo'", (driver_id,))
+                c.execute("""INSERT INTO driver_documents (driver_id, uploaded_by, doc_type, file_data, ai_status)
+                             VALUES (?, ?, 'photo', ?, 'PENDING')""", (driver_id, uploader_id, profile_data))
 
-        # Document Uploads (Files)
-        doc_types = ['aadhar', 'license', 'rc']
-        for dtype in doc_types:
-            file_key = f"{dtype}_doc"
-            if file_key in request.files:
-                doc_path = save_uploaded_file(request.files[file_key], DOC_DIR, f"d_{driver_id}_{dtype}")
-                if doc_path:
-                    # Logic to clear old docs of same type if needed
-                    c.execute("DELETE FROM driver_documents WHERE driver_id = ? AND doc_type = ?", (driver_id, dtype))
-                    c.execute("""INSERT INTO driver_documents (driver_id, uploaded_by, doc_type, file_data) 
-                                 VALUES (?, ?, ?, ?)""", (driver_id, uploader_id, dtype, doc_path))
+        # ── Document Uploads ──────────────────────────────────────────────────
+        doc_map = {
+            'aadhar_doc':  'aadhaar',
+            'license_doc': 'license',
+            'rc_doc':      'rc',
+        }
+        for file_key, doc_type in doc_map.items():
+            if file_key in request.files and request.files[file_key].filename:
+                doc_data = save_uploaded_file(request.files[file_key], DOC_DIR, f"d_{driver_id}_{doc_type}")
+                if doc_data:
+                    c.execute("DELETE FROM driver_documents WHERE driver_id = ? AND doc_type = ?", (driver_id, doc_type))
+                    c.execute("""INSERT INTO driver_documents (driver_id, uploaded_by, doc_type, file_data, ai_status)
+                                 VALUES (?, ?, ?, ?, 'PENDING')""", (driver_id, uploader_id, doc_type, doc_data))
+                    print(f"[UPLOAD] Saved {doc_type} for driver {driver_id} ({len(doc_data)} chars)")
 
-        # Support JSON Base64 (Legacy Compatibility)
+        # ── JSON Base64 legacy path ───────────────────────────────────────────
         if request.is_json:
-            data = request.get_json()
-            documents = data.get('documents', {})
-            for doc_type, base64_data in documents.items():
-                encrypted_data = encrypt_document(base64_data)
-                c.execute("""INSERT INTO driver_documents (driver_id, uploaded_by, doc_type, file_data) 
-                             VALUES (?, ?, ?, ?)""", (driver_id, uploader_id, doc_type, encrypted_data))
+            json_data = request.get_json() or {}
+            for doc_type, base64_data in (json_data.get('documents') or {}).items():
+                if base64_data:
+                    enc = encrypt_document(base64_data)
+                    c.execute("DELETE FROM driver_documents WHERE driver_id = ? AND doc_type = ?", (driver_id, doc_type))
+                    c.execute("""INSERT INTO driver_documents (driver_id, uploaded_by, doc_type, file_data, ai_status)
+                                 VALUES (?, ?, ?, ?, 'PENDING')""", (driver_id, uploader_id, doc_type, enc))
 
-        # Status & Credentials
+        # ── Status & Credentials ──────────────────────────────────────────────
         c.execute("SELECT * FROM drivers WHERE id = ?", (driver_id,))
         driver = c.fetchone()
-        
+        if not driver:
+            conn.close()
+            return jsonify({"success": False, "message": "Driver record not found after upload"}), 404
+
+        # Mark verified
         c.execute("UPDATE drivers SET verification_status = 'verified' WHERE id = ?", (driver_id,))
         if token and driver['owner_id']:
             c.execute("UPDATE drivers SET verification_status = 'verified' WHERE id = ?", (driver['owner_id'],))
 
+        # Generate credentials
         raw_password = secrets.token_urlsafe(10)
         hashed_pw = hash_password(raw_password)
-        new_unique_id = f"DRV{driver['id']:04d}"
+        new_unique_id = f"DRV{int(driver_id):04d}"
 
-        # Generate Official QR Code (Pointing to public profile)
-        qr_base64, qr_path = generate_driver_qr_code(driver_id, driver['name'], driver['vehicle_number'], driver['mobile'])
+        # Generate QR — store the QR data string (unique_id), not a file path
+        try:
+            qr_image_b64, qr_data_str = generate_driver_qr_code(
+                driver_id, driver['name'], driver['vehicle_number'], driver['mobile'])
+            qr_to_store = qr_data_str or new_unique_id
+        except Exception as qr_err:
+            print(f"[WARN] QR generation failed: {qr_err}")
+            qr_to_store = new_unique_id
 
-        c.execute("""UPDATE drivers 
-                     SET unique_id = ?, 
-                         password = ?,
-                         qr_code = ?,
-                         first_login = 1 
-                     WHERE id = ?""", 
-                  (new_unique_id, hashed_pw, qr_path, driver_id))
+        c.execute("""UPDATE drivers
+                     SET unique_id = ?, password = ?, qr_code = ?, first_login = 1
+                     WHERE id = ?""",
+                  (new_unique_id, hashed_pw, qr_to_store, driver_id))
 
         conn.commit()
-        
-        # Notify Renter
-        _send_credentials_email(driver['email'], driver['name'], new_unique_id, raw_password)
-        
-        # Notify Owner if exists
-        if token and driver['owner_id']:
-            c.execute("SELECT email, name FROM drivers WHERE id = ?", (driver['owner_id'],))
-            owner_info = c.fetchone()
-            if owner_info:
-                _send_owner_creds_notification(owner_info[0], owner_info[1], driver['name'], new_unique_id)
-
         conn.close()
+
+        # Send credentials email (non-blocking — failure won't break response)
+        try:
+            _send_credentials_email(driver['email'], driver['name'], new_unique_id, raw_password)
+        except Exception as email_err:
+            print(f"[WARN] Credentials email failed (non-fatal): {email_err}")
+
+        print(f"[UPLOAD] ✅ Driver {driver_id} verified. ID={new_unique_id}")
         return jsonify({
-            "success": True, 
-            "message": "Docs verified and credentials generated",
+            "success": True,
+            "message": "Documents uploaded and credentials generated!",
             "unique_id": new_unique_id,
             "temp_password": raw_password
         })

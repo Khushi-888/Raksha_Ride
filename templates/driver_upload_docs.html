@@ -51,11 +51,11 @@
                 <!-- Profile Image -->
                 <div class="doc-card" id="card-profile" style="background: var(--bg-secondary); border: 2px dashed var(--border-color); padding: 25px; border-radius: 20px; text-align: center; transition: all 0.3s ease;">
                     <span style="font-size: 40px; display: block; margin-bottom: 10px;">👤</span>
-                    <h3 style="font-size: 1.1rem; margin-bottom: 5px;">Profile Photo</h3>
+                    <h3 style="font-size: 1.1rem; margin-bottom: 5px;">Profile Photo <span style="font-size:0.75rem;color:#4CAF50;font-weight:600">(Optional)</span></h3>
                     <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Official front-face identification</p>
                     <label for="profile-image" class="btn btn-primary" style="padding: 10px 20px; font-size: 0.85rem; cursor: pointer;">Select Photo</label>
                     <input type="file" id="profile-image" accept="image/*" style="display: none;" onchange="handleFile(this, 'profile')">
-                    <div id="status-profile" class="status-badge status-pending">Required</div>
+                    <div id="status-profile" class="status-badge status-pending">Optional</div>
                     <img id="preview-profile" class="doc-preview">
                 </div>
 
@@ -158,8 +158,12 @@
         }
 
         async function submitDocs() {
-            if (Object.keys(filesToUpload).length < 4) {
-                alert("❌ Please upload all 4 required documents before submitting.");
+            // Profile photo optional — only require the 3 core docs
+            const required = ['aadhar', 'license', 'rc'];
+            const missing = required.filter(k => !filesToUpload[k]);
+            if (missing.length > 0) {
+                const names = { aadhar: 'Aadhaar Card', license: 'Driving License', rc: 'RC Book' };
+                alert("❌ Please upload all required documents:\n• " + missing.map(k => names[k]).join('\n• '));
                 return;
             }
             if (!driverId && !token) {
@@ -173,10 +177,11 @@
             const formData = new FormData();
             if (driverId) formData.append('driver_id', driverId);
             if (token)    formData.append('token', token);
-            formData.append('profile_image', filesToUpload['profile']);
-            formData.append('aadhar_doc',    filesToUpload['aadhar']);
-            formData.append('license_doc',   filesToUpload['license']);
-            formData.append('rc_doc',        filesToUpload['rc']);
+            // Profile photo is optional
+            if (filesToUpload['profile']) formData.append('profile_image', filesToUpload['profile']);
+            formData.append('aadhar_doc',  filesToUpload['aadhar']);
+            formData.append('license_doc', filesToUpload['license']);
+            formData.append('rc_doc',      filesToUpload['rc']);
 
             try {
                 const res = await fetch('/api/upload_driver_docs', {
