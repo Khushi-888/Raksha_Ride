@@ -115,51 +115,71 @@ app.config['MAIL_DEFAULT_SENDER'] = GMAIL_EMAIL # Simplified for Flask-Mail
 mail = Mail(app)
 
 def _smtp_send(to_email, subject, html_body, plain_body=None):
-    """Direct SMTP sender — works on Render. Falls back gracefully."""
-    try:
-        from email.mime.multipart import MIMEMultipart as _MM
-        from email.mime.text import MIMEText as _MT
-        import smtplib as _smtp
-        # Get password fresh from env each time (in case env var updated)
-        gmail_email = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
-        gmail_pw = os.environ.get('GMAIL_APP_PASSWORD', 'evsz tunv eoqi lawu').replace(' ', '').replace('-', '')
-        
+    """
+    Send email via SMTP. Tries Brevo first (works on Render), then Gmail.
+    Set BREVO_SMTP_KEY env var in Render to enable Brevo.
+    """
+    from email.mime.multipart import MIMEMultipart as _MM
+    from email.mime.text import MIMEText as _MT
+    import smtplib as _smtp
+
+    gmail_email = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
+    gmail_pw    = os.environ.get('GMAIL_APP_PASSWORD', 'evsz tunv eoqi lawu').replace(' ', '').replace('-', '')
+    brevo_key   = os.environ.get('BREVO_SMTP_KEY', '')  # Set this in Render env vars
+
+    def _build_msg(from_addr):
         msg = _MM('alternative')
-        msg['From'] = f"RakshaRide <{gmail_email}>"
-        msg['To'] = to_email
+        msg['From']    = f"RakshaRide <{from_addr}>"
+        msg['To']      = to_email
         msg['Subject'] = subject
         msg.attach(_MT(plain_body or "View in HTML client.", 'plain'))
         msg.attach(_MT(html_body, 'html'))
-        
+        return msg
+
+    # ── Try Brevo SMTP (works on Render free tier) ────────────────────────────
+    if brevo_key:
+        try:
+            msg = _build_msg(gmail_email)
+            s = _smtp.SMTP("smtp-relay.brevo.com", 587, timeout=30)
+            s.ehlo(); s.starttls(); s.ehlo()
+            s.login(gmail_email, brevo_key)
+            s.sendmail(gmail_email, to_email, msg.as_string())
+            s.quit()
+            print(f"[EMAIL OK via Brevo] {to_email}")
+            return True
+        except Exception as e:
+            print(f"[EMAIL Brevo FAIL] {e}")
+
+    # ── Try Gmail SMTP port 587 ───────────────────────────────────────────────
+    try:
+        msg = _build_msg(gmail_email)
         s = _smtp.SMTP("smtp.gmail.com", 587, timeout=30)
-        s.ehlo()
-        s.starttls()
-        s.ehlo()
+        s.ehlo(); s.starttls(); s.ehlo()
         s.login(gmail_email, gmail_pw)
         s.sendmail(gmail_email, to_email, msg.as_string())
         s.quit()
-        print(f"[EMAIL OK] Sent to {to_email}: {subject}")
+        print(f"[EMAIL OK via Gmail 587] {to_email}")
         return True
     except _smtp.SMTPAuthenticationError as e:
-        print(f"[EMAIL AUTH FAIL] Check GMAIL_APP_PASSWORD env var: {e}")
-        return False
-    except _smtp.SMTPException as e:
-        print(f"[EMAIL SMTP FAIL] {to_email}: {e}")
-        # Try port 465 as fallback
-        try:
-            import ssl as _ssl
-            ctx = _ssl.create_default_context()
-            with _smtp.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=30) as s2:
-                s2.login(gmail_email, gmail_pw)
-                s2.sendmail(gmail_email, to_email, msg.as_string())
-            print(f"[EMAIL OK via 465] Sent to {to_email}")
-            return True
-        except Exception as e2:
-            print(f"[EMAIL FAIL 465] {to_email}: {e2}")
-            return False
+        print(f"[EMAIL AUTH FAIL] Check GMAIL_APP_PASSWORD: {e}")
     except Exception as e:
-        print(f"[EMAIL FAIL] {to_email}: {type(e).__name__}: {e}")
-        return False
+        print(f"[EMAIL Gmail 587 FAIL] {type(e).__name__}: {e}")
+
+    # ── Try Gmail SMTP port 465 (SSL) ─────────────────────────────────────────
+    try:
+        import ssl as _ssl
+        msg = _build_msg(gmail_email)
+        ctx = _ssl.create_default_context()
+        with _smtp.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=30) as s:
+            s.login(gmail_email, gmail_pw)
+            s.sendmail(gmail_email, to_email, msg.as_string())
+        print(f"[EMAIL OK via Gmail 465] {to_email}")
+        return True
+    except Exception as e:
+        print(f"[EMAIL Gmail 465 FAIL] {type(e).__name__}: {e}")
+
+    print(f"[EMAIL ALL FAILED] Could not send to {to_email}")
+    return False
 
 
 
