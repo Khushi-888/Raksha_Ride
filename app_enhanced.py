@@ -145,7 +145,18 @@ def _smtp_send(to_email, subject, html_body, plain_body=None):
         return False
     except _smtp.SMTPException as e:
         print(f"[EMAIL SMTP FAIL] {to_email}: {e}")
-        return False
+        # Try port 465 as fallback
+        try:
+            import ssl as _ssl
+            ctx = _ssl.create_default_context()
+            with _smtp.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=30) as s2:
+                s2.login(gmail_email, gmail_pw)
+                s2.sendmail(gmail_email, to_email, msg.as_string())
+            print(f"[EMAIL OK via 465] Sent to {to_email}")
+            return True
+        except Exception as e2:
+            print(f"[EMAIL FAIL 465] {to_email}: {e2}")
+            return False
     except Exception as e:
         print(f"[EMAIL FAIL] {to_email}: {type(e).__name__}: {e}")
         return False
