@@ -100,7 +100,7 @@ def rate_limit(key, limit=3, window=60):
 
 # Gmail Configuration — reads from env vars in production
 GMAIL_EMAIL = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
-GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD', 'evsz tunv eoqi lawu')
+GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD', 'lpuqabvhriyqajqg')
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
@@ -124,7 +124,7 @@ def _smtp_send(to_email, subject, html_body, plain_body=None):
     import smtplib as _smtp
 
     gmail_email = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
-    gmail_pw    = os.environ.get('GMAIL_APP_PASSWORD', 'evsz tunv eoqi lawu').replace(' ', '').replace('-', '')
+    gmail_pw    = os.environ.get('GMAIL_APP_PASSWORD', 'lpuqabvhriyqajqg').replace(' ', '').replace('-', '')
     brevo_key   = os.environ.get('BREVO_SMTP_KEY', '')  # Set this in Render env vars
 
     def _build_msg(from_addr):
