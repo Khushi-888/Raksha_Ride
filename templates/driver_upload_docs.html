@@ -104,10 +104,26 @@
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
-        const driverId = urlParams.get('driver_id') || "{{ driver_id or '' }}";
+        // Priority: URL param → sessionStorage → Jinja-rendered value
+        const urlDriverId = urlParams.get('driver_id') || '';
+        const sessionDriverId = sessionStorage.getItem('rr_pending_driver_id') || '';
+        const jinjaDriverId = "{{ driver_id or '' }}";
+        const rawDriverId = urlDriverId || sessionDriverId || jinjaDriverId;
+        const driverId = (rawDriverId && rawDriverId !== 'None' && rawDriverId !== 'null' && rawDriverId !== 'undefined' && rawDriverId !== '') ? rawDriverId : '';
+
         const rawToken = urlParams.get('token') || "{{ token or '' }}";
-        // Only use token if it's a real non-empty value
         const token = (rawToken && rawToken !== 'None' && rawToken !== 'null' && rawToken.length > 5) ? rawToken : '';
+
+        // Show what we resolved (helps debug)
+        console.log('[Upload] driver_id resolved:', driverId, '| token:', token ? token.slice(0,8)+'...' : 'none');
+        if (!driverId && !token) {
+            document.addEventListener('DOMContentLoaded', () => {
+                const warn = document.createElement('div');
+                warn.style.cssText = 'background:#FFEBEE;border:2px solid #C62828;border-radius:12px;padding:16px;margin-bottom:20px;color:#C62828;font-weight:700;text-align:center';
+                warn.innerHTML = '⚠️ Session error: Driver ID not found in URL.<br><small style="font-weight:400">URL: ' + window.location.href + '</small><br><a href="/register/driver/new" style="color:#1565C0">← Go back and register again</a>';
+                document.querySelector('.card.glass')?.prepend(warn);
+            });
+        }
         const filesToUpload = {};
 
         function handleFile(input, key) {
@@ -147,7 +163,7 @@
                 return;
             }
             if (!driverId && !token) {
-                alert("❌ Session error: missing driver ID. Please go back and register again.");
+                alert("❌ Session error: missing driver ID.\n\nURL: " + window.location.href + "\n\nPlease go back and register again.");
                 return;
             }
 
@@ -156,11 +172,11 @@
 
             const formData = new FormData();
             if (driverId) formData.append('driver_id', driverId);
-            if (token) formData.append('token', token);
+            if (token)    formData.append('token', token);
             formData.append('profile_image', filesToUpload['profile']);
-            formData.append('aadhar_doc', filesToUpload['aadhar']);
-            formData.append('license_doc', filesToUpload['license']);
-            formData.append('rc_doc', filesToUpload['rc']);
+            formData.append('aadhar_doc',    filesToUpload['aadhar']);
+            formData.append('license_doc',   filesToUpload['license']);
+            formData.append('rc_doc',        filesToUpload['rc']);
 
             try {
                 const res = await fetch('/api/upload_driver_docs', {
@@ -171,6 +187,8 @@
                 const result = await res.json();
                 
                 if (result.success) {
+                    // Clear the saved driver_id — no longer needed
+                    sessionStorage.removeItem('rr_pending_driver_id');
                     // Show credentials on screen
                     document.querySelector('.doc-grid').style.display = 'none';
                     document.querySelector('.text-center.mt-4').style.display = 'none';

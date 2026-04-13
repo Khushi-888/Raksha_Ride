@@ -247,12 +247,11 @@ def save_uploaded_file(file, target_dir, prefix=""):
 # â”€â”€ CORE UTILITY FUNCTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def calculate_fare(duration_mins, distance_km):
-    """Business logic for fare calculation"""
-    base_fare = 25.0
-    per_km = 12.0
-    per_min = 1.0
-    total = base_fare + (distance_km * per_km) + (duration_mins * per_min)
-    return round(total, 2)
+    """Alias — kept for backward compat. See full version below."""
+    BASE_FARE = 25.0
+    per_km    = 12.0
+    per_min   = 1.0
+    return round(BASE_FARE + (distance_km * per_km) + (duration_mins * per_min), 2)
 
 def generate_payment_qr_code(ride_id, amount, driver_name, upi_id):
     """Generates a UPI payment URL for scanning"""
@@ -639,7 +638,10 @@ def generate_payment_qr_code(ride_id, amount, driver_name, upi_id=None):
         return None
 
 def calculate_fare(duration_minutes, distance_km=0):
-    """Calculate ride fare"""
+    """Calculate ride fare — distance-based pricing (₹25 base + ₹12/km + ₹1/min)"""
+    BASE_FARE      = 25.0
+    PER_KM_RATE    = 12.0
+    PER_MINUTE_RATE = 1.0
     fare = BASE_FARE + (distance_km * PER_KM_RATE) + (duration_minutes * PER_MINUTE_RATE)
     return round(fare, 2)
 
@@ -1320,6 +1322,8 @@ def register_driver_v2():
         if role == 'OWNER':
             msg = "Registration successful! Proceed to upload documents."
             redirect_url = f"/upload_docs?driver_id={driver_id}"
+            # Store in session as backup for upload step
+            session['pending_driver_id'] = driver_id
         else:
             msg = f"Registration submitted! An approval link has been sent to the vehicle owner at {owner_email}."
             redirect_url = "/register/driver/new?status=pending_owner"
@@ -1447,34 +1451,49 @@ def owner_confirm_action():
 def upload_driver_docs():
     """Upload documents and trigger final verification / credential generation"""
     try:
-        # Check if multipart form
-        if 'token' in request.form:
-            token = request.form.get('token')
-            driver_id = request.form.get('driver_id')
+        # Always read from form first (multipart), fall back to JSON
+        if request.content_type and 'multipart' in request.content_type:
+            token = request.form.get('token', '').strip()
+            driver_id = request.form.get('driver_id', '').strip()
+        elif request.is_json:
+            data = request.get_json() or {}
+            token = str(data.get('token') or '').strip()
+            driver_id = str(data.get('driver_id') or '').strip()
         else:
-            data = request.get_json() if request.is_json else {}
-            token = data.get('token')
-            driver_id = data.get('driver_id')
+            # Fallback: try both
+            token = (request.form.get('token') or '').strip()
+            driver_id = (request.form.get('driver_id') or '').strip()
+
+        # Normalise — treat "None"/"null"/"undefined" as empty
+        if token in ('None', 'null', 'undefined', ''):
+            token = ''
+        if driver_id in ('None', 'null', 'undefined', ''):
+            driver_id = ''
+
+        # Last resort: check Flask session (set during registration)
+        if not driver_id and not token:
+            driver_id = str(session.get('pending_driver_id', ''))
+
+        print(f"[UPLOAD] driver_id={driver_id!r} token={'none' if not token else token[:8]+'...'}")
 
         conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
 
-        # Resolve driver_id from token
-        # Clean up token — treat "None", "null", empty as no token
-        if token and token not in ('None', 'null', '', 'undefined'):
+        # Resolve driver_id from token (rent driver flow via owner approval link)
+        if token:
             c.execute("SELECT renter_id, owner_id FROM renter_requests WHERE approval_token = ?", (token,))
             req = c.fetchone()
             if not req:
                 conn.close()
                 return jsonify({"success": False, "message": "Invalid or expired approval link. Please ask the owner to resend the confirmation email."}), 400
-            driver_id = req['renter_id']
+            driver_id = str(req['renter_id'])
             uploader_id = req['owner_id'] or driver_id
         else:
-            # Owner uploading their own documents directly (no token needed)
+            # Owner uploading their own documents directly
             if not driver_id:
                 conn.close()
-                return jsonify({"success": False, "message": "Missing driver ID. Please register again."}), 400
+                return jsonify({"success": False, "message": "Missing driver ID. Please go back and register again."}), 400
             uploader_id = driver_id
 
         # Profile Image Upload
@@ -4019,29 +4038,33 @@ def api_lookup_driver():
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
         c.execute("""SELECT id, name, vehicle_number, vehicle_type, rating, total_rides,
-                     unique_id, verification_status, is_available
+                     unique_id, verification_status, is_available, gender
                      FROM drivers WHERE unique_id = ? OR id = ?""", (driver_id, driver_id))
         row = c.fetchone()
         if not row:
             conn.close()
             return jsonify({"success": False, "message": "Driver not found"})
         cols = ['id','name','vehicle_number','vehicle_type','rating','total_rides',
-                'unique_id','verification_status','is_available']
+                'unique_id','verification_status','is_available','gender']
         driver = dict(zip(cols, row))
         if not driver['is_available']:
             conn.close()
             return jsonify({"success": False, "message": "Driver is currently busy"})
-        # Fetch selfie as profile photo
-        c.execute("SELECT file_data FROM driver_documents WHERE driver_id = ? AND doc_type = 'selfie'",
-                  (driver['id'],))
-        selfie_row = c.fetchone()
-        if selfie_row and selfie_row[0]:
-            try:
-                driver['profile_photo'] = decrypt_document(selfie_row[0])
-            except Exception:
-                driver['profile_photo'] = selfie_row[0]
-        else:
-            driver['profile_photo'] = None
+        # Fetch profile photo — try selfie doc first, then photo doc
+        driver['profile_photo'] = None
+        for doc_type in ('selfie', 'photo'):
+            c.execute("SELECT file_data FROM driver_documents WHERE driver_id = ? AND doc_type = ?",
+                      (driver['id'], doc_type))
+            selfie_row = c.fetchone()
+            if selfie_row and selfie_row[0]:
+                try:
+                    data = decrypt_document(selfie_row[0])
+                    if data:
+                        driver['profile_photo'] = data if data.startswith('data:') else selfie_row[0]
+                        break
+                except Exception:
+                    driver['profile_photo'] = selfie_row[0]
+                    break
         conn.close()
         return jsonify({"success": True, "driver": driver})
     except Exception as e:
@@ -4697,6 +4720,81 @@ def handle_exception(e):
     if request.path.startswith('/api/'):
         return jsonify({"success": False, "error": "Server error", "message": str(e)}), 500
     return render_template('index.html'), 500
+
+# ============================================================================
+# Missing API routes needed by dashboards
+# ============================================================================
+
+# ── FARE ESTIMATE (live preview during ride) ──────────────────────────────────
+@app.route('/api/fare_estimate')
+def api_fare_estimate():
+    """Return live fare estimate given distance_km and duration_minutes."""
+    try:
+        dist = request.args.get('distance_km', 0, type=float)
+        mins = request.args.get('duration_minutes', 0, type=float)
+        fare = calculate_fare(mins, dist)
+        breakdown = {
+            "base_fare": 25.0,
+            "distance_charge": round(dist * 12.0, 2),
+            "time_charge": round(mins * 1.0, 2),
+            "total": fare,
+            "distance_km": round(dist, 2),
+            "duration_minutes": round(mins, 1)
+        }
+        return jsonify({"success": True, "fare": fare, "breakdown": breakdown})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/update_payment_qr', methods=['POST'])
+def api_update_payment_qr():
+    current_user = get_current_user()
+    if not current_user or current_user.get('user_type') != 'driver':
+        return jsonify({"success": False, "message": "Driver auth required"}), 401
+    try:
+        data = request.get_json()
+        qr_image = data.get('qr_image', '')
+        upi_id = data.get('upi_id', '')
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        c.execute("UPDATE drivers SET payment_qr_image=?, upi_id=? WHERE id=?",
+                  (qr_image, upi_id, current_user['user_id']))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": "Payment QR updated"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/get_passenger_location')
+def api_get_passenger_location():
+    """Get passenger live location — used by driver during active ride."""
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False}), 401
+    try:
+        ride_id = request.args.get('ride_id')
+        passenger_id = request.args.get('passenger_id', type=int)
+        conn = sqlite3.connect('database_enhanced.db')
+        c = conn.cursor()
+        if not passenger_id and ride_id:
+            c.execute("SELECT passenger_id FROM rides WHERE id=?", (ride_id,))
+            row = c.fetchone()
+            if row:
+                passenger_id = row[0]
+        if not passenger_id:
+            conn.close()
+            return jsonify({"success": False, "message": "passenger_id required"})
+        c.execute("SELECT latitude, longitude, updated_at FROM live_locations WHERE user_id=? AND role='passenger'",
+                  (passenger_id,))
+        loc = c.fetchone()
+        conn.close()
+        if loc and loc[0]:
+            return jsonify({"success": True, "lat": loc[0], "lng": loc[1], "updated_at": loc[2]})
+        return jsonify({"success": False, "message": "No location data"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
 
 # ============================================================================
 # Run Application

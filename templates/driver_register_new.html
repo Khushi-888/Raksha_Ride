@@ -336,8 +336,11 @@
                 if (result.success) {
                     alert('✅ ' + result.message);
                     if (result.redirect_url) {
+                        // Save driver_id to sessionStorage as backup
+                        if (result.driver_id) sessionStorage.setItem('rr_pending_driver_id', result.driver_id);
                         window.location.href = result.redirect_url;
                     } else if (selectedRole === 'OWNER') {
+                        if (result.driver_id) sessionStorage.setItem('rr_pending_driver_id', result.driver_id);
                         window.location.href = '/upload_docs?driver_id=' + result.driver_id;
                     } else {
                         window.location.href = '/';
