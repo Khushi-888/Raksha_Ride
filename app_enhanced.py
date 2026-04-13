@@ -1797,12 +1797,20 @@ def login_driver():
         session['user_type'] = 'driver'
         session['name'] = driver['name']
         session['unique_id'] = driver['unique_id']
+        session.permanent = True
+
+        # Generate JWT token so authFetch works on Render (session cookies unreliable cross-origin)
+        token = generate_token(driver['id'], 'driver', driver['name'])
         
         conn.close()
         
         return jsonify({
-            "success": True, 
+            "success": True,
             "message": "Login successful",
+            "token": token,
+            "user_type": "driver",
+            "driver_id": driver['id'],
+            "unique_id": driver['unique_id'],
             "redirect_url": "/change_password" if requires_password_change else "/dashboard/driver"
         })
         
