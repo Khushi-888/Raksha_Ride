@@ -149,11 +149,36 @@
                 document.getElementById(loadingId).classList.add('hidden');
                 
                 if (result.success) {
-                    alert('✅ ' + result.message);
-                    if (action === 'APPROVE' && result.redirect_url) {
-                        window.location.href = result.redirect_url;
+                    if (action === 'APPROVE') {
+                        // Show success message then redirect to upload docs
+                        document.querySelector('.card').innerHTML = `
+                            <div style="text-align:center;padding:40px">
+                                <div style="font-size:72px;margin-bottom:20px">✅</div>
+                                <h2 style="color:#2E7D32;margin-bottom:12px">Request Approved!</h2>
+                                <p style="color:#555;margin-bottom:24px">You have approved the rent driver request.<br>Now please upload the required vehicle documents.</p>
+                                <div style="background:#E8F5E9;border-radius:12px;padding:20px;margin-bottom:24px;text-align:left">
+                                    <h4 style="color:#2E7D32;margin-bottom:12px">📄 Documents Required:</h4>
+                                    <ul style="color:#555;margin-left:20px">
+                                        <li>Profile Photo</li>
+                                        <li>Aadhaar Card</li>
+                                        <li>Driving License</li>
+                                        <li>RC Book (Vehicle Registration)</li>
+                                    </ul>
+                                </div>
+                                <p style="color:#888;font-size:0.9rem;margin-bottom:20px">Redirecting to document upload in 3 seconds...</p>
+                                <a href="${result.redirect_url}" style="display:inline-block;background:linear-gradient(135deg,#1565C0,#FFC107);color:white;padding:16px 40px;border-radius:12px;text-decoration:none;font-weight:700;font-size:1.1rem">
+                                    📤 Upload Documents Now
+                                </a>
+                            </div>`;
+                        setTimeout(() => { window.location.href = result.redirect_url; }, 3000);
                     } else {
-                        window.location.href = '/';
+                        document.querySelector('.card').innerHTML = `
+                            <div style="text-align:center;padding:40px">
+                                <div style="font-size:72px;margin-bottom:20px">❌</div>
+                                <h2 style="color:#C62828;margin-bottom:12px">Request Rejected</h2>
+                                <p style="color:#555">You have rejected the rent driver request.</p>
+                                <a href="/" style="display:inline-block;margin-top:20px;background:#1565C0;color:white;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:600">Go Home</a>
+                            </div>`;
                     }
                 } else {
                     alert('❌ Error: ' + result.message);
