@@ -129,7 +129,7 @@ def send_email_async(to_email, subject, body):
             with app.app_context():
                 msg = Message(subject=subject, recipients=[to_email])
                 msg.html = body
-                mail.send(msg)
+                _smtp_send(to_email, subject, body)
                 print(f"[OK] Email sent to {to_email}")
         except Exception as e:
             print(f"[WARN] Email failed to {to_email}: {e}")
@@ -638,9 +638,7 @@ def send_owner_approval_email(owner_email, renter_name, vehicle_details, token):
     """
     
     try:
-        msg = Message(subject=subject, recipients=[owner_email])
-        msg.html = body
-        mail.send(msg)
+        ok = _smtp_send(owner_email, subject, body)
         print(f"âœ… Owner approval email sent to {owner_email}")
         return True
     except Exception as e:
@@ -2889,7 +2887,7 @@ RakshaRide Team
 """
     try:
         msg = Message(subject=subject, recipients=[email], body=body)
-        mail.send(msg)
+        _smtp_send(str(msg.recipients[0]) if hasattr(msg, "recipients") else "", msg.subject, getattr(msg, "html", None) or getattr(msg, "body", ""), getattr(msg, "body", ""))
         print(f"âœ… Credentials email sent to {email}")
         return True
     except Exception as e:
@@ -2912,7 +2910,7 @@ RakshaRide Team
 """
     try:
         msg = Message(subject=subject, recipients=[owner_email], body=body)
-        mail.send(msg)
+        send_email_async(owner_email, subject, body)
     except Exception as e:
         print(f"âŒ Error sending owner creds notification: {str(e)}")
 
