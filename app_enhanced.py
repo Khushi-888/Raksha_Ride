@@ -1559,14 +1559,14 @@ def upload_driver_docs():
         hashed_pw = hash_password(raw_password)
         new_unique_id = f"DRV{int(driver_id):04d}"
 
-        # Generate QR — store the QR data string (unique_id), not a file path
+        # Generate QR — generate_driver_qr_code returns (b64_png, b64_png)
         try:
-            qr_image_b64, qr_data_str = generate_driver_qr_code(
+            qr_image_b64, _ = generate_driver_qr_code(
                 driver_id, driver['name'], driver['vehicle_number'], driver['mobile'])
-            qr_to_store = qr_data_str or new_unique_id
+            qr_to_store = qr_image_b64  # Store the base64 PNG directly
         except Exception as qr_err:
             print(f"[WARN] QR generation failed: {qr_err}")
-            qr_to_store = new_unique_id
+            qr_to_store = None  # Will be regenerated on next login
 
         c.execute("""UPDATE drivers
                      SET unique_id = ?, password = ?, qr_code = ?, first_login = 1
@@ -3693,17 +3693,39 @@ def api_driver_profile():
                 'unique_id','verification_status','rating','total_rides','total_earned',
                 'is_available','qr_code','payment_qr_image','upi_id']
         driver = dict(zip(cols, row))
-        # Generate QR image if qr_code data exists
+        # qr_code stores the base64 PNG directly (generated in-memory, no file path)
         if driver.get('qr_code'):
+            qc = driver['qr_code']
+            if qc.startswith('data:image/'):
+                # Already a rendered PNG — use directly
+                driver['qr_image'] = qc
+            else:
+                # Legacy: raw QR data string — regenerate PNG
+                try:
+                    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=4)
+                    qr.add_data(qc)
+                    qr.make(fit=True)
+                    img = qr.make_image(fill_color="#1565C0", back_color="white")
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    driver['qr_image'] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+                except Exception as qr_err:
+                    print(f"[WARN] QR regen failed: {qr_err}")
+                    driver['qr_image'] = None
+        else:
+            # No QR stored yet — generate fresh one
             try:
-                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=4)
-                qr.add_data(driver['qr_code'])
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="#1565C0", back_color="white")
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                driver['qr_image'] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
-            except:
+                qr_img, qr_data = generate_driver_qr_code(
+                    driver['id'], driver['name'], driver['vehicle_number'], driver['mobile'])
+                if qr_img:
+                    driver['qr_image'] = qr_img
+                    # Save it so we don't regenerate every time
+                    conn2 = sqlite3.connect('database_enhanced.db')
+                    conn2.execute("UPDATE drivers SET qr_code=? WHERE id=?", (qr_img, driver['id']))
+                    conn2.commit(); conn2.close()
+                else:
+                    driver['qr_image'] = None
+            except Exception:
                 driver['qr_image'] = None
         return jsonify({"success": True, "driver": driver})
     except Exception as e:
@@ -3870,21 +3892,27 @@ def _resolve_document_preview(file_data):
 
 
 @app.route('/api/get_driver_documents')
+@app.route('/api/get_driver_documents')
 def api_get_driver_documents():
-    current_user = get_current_user()
-    if not current_user or current_user.get('user_type') != 'driver':
+    # Accept both session auth (dashboard) and JWT token auth
+    uid = None
+    if 'user_id' in session and session.get('user_type') == 'driver':
+        uid = session['user_id']
+    else:
+        current_user = get_current_user()
+        if current_user and current_user.get('user_type') == 'driver':
+            uid = current_user['user_id']
+    if not uid:
         return jsonify({"success": False, "message": "Driver authentication required"}), 401
     try:
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
-        uid = current_user['user_id']
         c.execute("SELECT role, owner_id, verification_status FROM drivers WHERE id = ?", (uid,))
         row = c.fetchone()
         is_rent = row and row[0] == 'RENT'
         driver_id = uid
         if is_rent and row[1]:
             driver_id = row[1]  # Rent driver sees owner's documents
-        # If rent driver has no owner_id, show their own documents
         verification_status = row[2] if row else 'pending'
 
         c.execute("""SELECT doc_type, file_data, ai_status, created_at
@@ -3920,18 +3948,21 @@ def api_get_driver_documents():
 @app.route('/api/get_document/<doc_type>')
 def api_get_single_document(doc_type):
     """Serve a single document — ONLY for the owning driver (not passengers)"""
-    current_user = get_current_user()
-    if not current_user or current_user.get('user_type') != 'driver':
+    uid = session.get('user_id') if session.get('user_type') == 'driver' else None
+    if not uid:
+        cu = get_current_user()
+        if cu and cu.get('user_type') == 'driver':
+            uid = cu['user_id']
+    if not uid:
         return jsonify({"success": False, "message": "Driver authentication required"}), 401
     try:
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
-        uid = current_user['user_id']
         c.execute("SELECT role, owner_id FROM drivers WHERE id = ?", (uid,))
         row = c.fetchone()
         driver_id = uid
         if row and row[0] == 'RENT' and row[1]:
-            driver_id = row[1]  # Rent driver reads owner's docs
+            driver_id = row[1]
 
         c.execute("SELECT file_data, ai_status FROM driver_documents WHERE driver_id = ? AND doc_type = ?",
                   (driver_id, doc_type))
@@ -3941,31 +3972,27 @@ def api_get_single_document(doc_type):
         if not row or not row[0]:
             return jsonify({"success": False, "message": "Document not found"}), 404
 
-        file_data = row[0]
-        ai_status = row[1] or 'PENDING'
-
-        preview = _resolve_document_preview(file_data)
+        preview = _resolve_document_preview(row[0])
         if not preview:
-            return jsonify({"success": False, "message": "Could not decode document. File may be missing or corrupted."}), 500
+            return jsonify({"success": False, "message": "Could not decode document"}), 500
 
-        return jsonify({
-            "success": True,
-            "data": preview,
-            "doc_type": doc_type,
-            "ai_status": ai_status
-        })
+        return jsonify({"success": True, "data": preview, "doc_type": doc_type, "ai_status": row[1] or 'PENDING'})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/get_payment_qr')
 def api_get_payment_qr():
-    current_user = get_current_user()
-    if not current_user or current_user.get('user_type') != 'driver':
+    uid = session.get('user_id') if session.get('user_type') == 'driver' else None
+    if not uid:
+        cu = get_current_user()
+        if cu and cu.get('user_type') == 'driver':
+            uid = cu['user_id']
+    if not uid:
         return jsonify({"success": False}), 401
     try:
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
-        c.execute("SELECT payment_qr_image, upi_id FROM drivers WHERE id = ?", (current_user['user_id'],))
+        c.execute("SELECT payment_qr_image, upi_id FROM drivers WHERE id = ?", (uid,))
         row = c.fetchone()
         conn.close()
         if row and row[0]:
