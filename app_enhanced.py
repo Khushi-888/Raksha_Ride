@@ -25,6 +25,40 @@ import os
 from PIL import Image
 from auth_utils import generate_token, get_current_user, require_auth
 
+# ── DUAL AUTH HELPERS ─────────────────────────────────────────────────────────
+def _driver_id():
+    """Return driver user_id from session OR JWT token. None if not authenticated."""
+    if session.get('user_type') == 'driver' and session.get('user_id'):
+        return session['user_id']
+    u = get_current_user()
+    if u and u.get('user_type') == 'driver':
+        return u['user_id']
+    return None
+
+def _passenger_id():
+    """Return passenger user_id from session OR JWT token. None if not authenticated."""
+    if session.get('user_type') == 'passenger' and session.get('user_id'):
+        return session['user_id']
+    u = get_current_user()
+    if u and u.get('user_type') == 'passenger':
+        return u['user_id']
+    return None
+
+def _require_driver():
+    """Returns (driver_id, None) or (None, error_response)."""
+    did = _driver_id()
+    if not did:
+        return None, (jsonify({"success": False, "message": "Driver authentication required", "code": "AUTH_REQUIRED"}), 401)
+    return did, None
+
+def _require_passenger():
+    """Returns (passenger_id, None) or (None, error_response)."""
+    pid = _passenger_id()
+    if not pid:
+        return None, (jsonify({"success": False, "message": "Passenger authentication required", "code": "AUTH_REQUIRED"}), 401)
+    return pid, None
+
+
 # Optional imports with fallbacks
 try:
     from security_enhancements import (
@@ -866,13 +900,39 @@ def passenger_scan_otp_verify():
 
 @app.route('/dashboard/passenger')
 def passenger_dashboard():
-    if 'user_id' not in session or session.get('user_type') != 'passenger':
+    pid = _passenger_id()
+    if not pid:
+        token_param = request.args.get('token', '')
+        if token_param:
+            from auth_utils import decode_token
+            payload = decode_token(token_param)
+            if payload and payload.get('user_type') == 'passenger':
+                session['user_id'] = payload['user_id']
+                session['user_type'] = 'passenger'
+                session['name'] = payload.get('name', '')
+                session.permanent = True
+                pid = payload['user_id']
+    if not pid:
         return render_template('login_govt.html', type='passenger')
     return render_template('dashboard_passenger_new.html')
 
 @app.route('/dashboard/driver')
 def driver_dashboard():
-    if 'user_id' not in session or session.get('user_type') != 'driver':
+    # Accept session OR JWT (token passed as query param for redirect after login)
+    did = _driver_id()
+    if not did:
+        # Check if token passed in query string (from redirect after login)
+        token_param = request.args.get('token', '')
+        if token_param:
+            from auth_utils import decode_token
+            payload = decode_token(token_param)
+            if payload and payload.get('user_type') == 'driver':
+                session['user_id'] = payload['user_id']
+                session['user_type'] = 'driver'
+                session['name'] = payload.get('name', '')
+                session.permanent = True
+                did = payload['user_id']
+    if not did:
         return render_template('login_govt.html', type='driver')
     return render_template('dashboard_driver_new.html')
 
@@ -3682,8 +3742,8 @@ def register_driver_full_modern():
 
 @app.route('/api/driver_profile')
 def api_driver_profile():
-    if 'user_id' not in session or session.get('user_type') != 'driver':
-        return jsonify({"success": False, "message": "Not authenticated"}), 401
+    did, err = _require_driver()
+    if err: return err
     try:
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
@@ -3691,7 +3751,7 @@ def api_driver_profile():
                      rc_number, license_number, aadhaar_number, role, owner_id,
                      unique_id, verification_status, rating, total_rides, total_earned,
                      is_available, qr_code, payment_qr_image, upi_id
-                     FROM drivers WHERE id = ?""", (session['user_id'],))
+                     FROM drivers WHERE id = ?""", (did,))
         row = c.fetchone()
         conn.close()
         if not row:
@@ -3764,15 +3824,15 @@ def api_passenger_profile():
 
 @app.route('/api/toggle_availability', methods=['POST'])
 def api_toggle_availability():
-    if 'user_id' not in session or session.get('user_type') != 'driver':
-        return jsonify({"success": False}), 401
+    did, err = _require_driver()
+    if err: return err
     try:
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
-        c.execute("SELECT is_available FROM drivers WHERE id = ?", (session['user_id'],))
+        c.execute("SELECT is_available FROM drivers WHERE id = ?", (did,))
         row = c.fetchone()
         new_status = 0 if row and row[0] else 1
-        c.execute("UPDATE drivers SET is_available = ? WHERE id = ?", (new_status, session['user_id']))
+        c.execute("UPDATE drivers SET is_available = ? WHERE id = ?", (new_status, did))
         conn.commit()
         conn.close()
         return jsonify({"success": True, "is_available": bool(new_status)})
@@ -3781,14 +3841,14 @@ def api_toggle_availability():
 
 @app.route('/api/update_driver_profile', methods=['POST'])
 def api_update_driver_profile():
-    if 'user_id' not in session or session.get('user_type') != 'driver':
-        return jsonify({"success": False}), 401
+    did, err = _require_driver()
+    if err: return err
     try:
         data = request.get_json()
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
         c.execute("UPDATE drivers SET name=?, age=?, mobile=? WHERE id=?",
-                  (data.get('name'), data.get('age'), data.get('mobile'), session['user_id']))
+                  (data.get('name'), data.get('age'), data.get('mobile'), did))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
@@ -3818,8 +3878,8 @@ def api_update_passenger_profile():
 
 @app.route('/api/driver_ride_history')
 def api_driver_ride_history():
-    if 'user_id' not in session or session.get('user_type') != 'driver':
-        return jsonify({"success": False}), 401
+    did, err = _require_driver()
+    if err: return err
     try:
         limit = request.args.get('limit', 100, type=int)
         conn = sqlite3.connect('database_enhanced.db')
@@ -3827,7 +3887,7 @@ def api_driver_ride_history():
         c.execute("""SELECT id, passenger_name, status, fare, distance_km,
                      duration_minutes, payment_status, created_at
                      FROM rides WHERE driver_id = ? ORDER BY created_at DESC LIMIT ?""",
-                  (session['user_id'], limit))
+                  (did, limit))
         rows = c.fetchall()
         conn.close()
         cols = ['id','passenger_name','status','fare','distance_km','duration_minutes','payment_status','created_at']
@@ -3837,8 +3897,8 @@ def api_driver_ride_history():
 
 @app.route('/api/passenger_ride_history')
 def api_passenger_ride_history():
-    if 'user_id' not in session or session.get('user_type') != 'passenger':
-        return jsonify({"success": False}), 401
+    pid, err = _require_passenger()
+    if err: return err
     try:
         limit = request.args.get('limit', 100, type=int)
         conn = sqlite3.connect('database_enhanced.db')
@@ -3846,7 +3906,7 @@ def api_passenger_ride_history():
         c.execute("""SELECT id, driver_name, status, fare, distance_km,
                      duration_minutes, payment_status, created_at
                      FROM rides WHERE passenger_id = ? ORDER BY created_at DESC LIMIT ?""",
-                  (session['user_id'], limit))
+                  (pid, limit))
         rows = c.fetchall()
         conn.close()
         cols = ['id','driver_name','status','fare','distance_km','duration_minutes','payment_status','created_at']
@@ -3927,6 +3987,12 @@ def api_get_driver_documents():
                      FROM driver_documents WHERE driver_id = ?
                      ORDER BY created_at DESC""", (driver_id,))
         rows = c.fetchall()
+
+        # Also get profile_image from drivers table as fallback for 'photo' doc
+        c.execute("SELECT profile_image FROM drivers WHERE id = ?", (driver_id,))
+        drv_row = c.fetchone()
+        profile_image_fallback = drv_row[0] if drv_row else None
+
         conn.close()
 
         docs = {}
@@ -3942,6 +4008,19 @@ def api_get_driver_documents():
                 "verified": ai_status == 'VERIFIED',
                 "uploaded_at": created_at
             }
+
+        # If no 'photo' doc but profile_image exists, add it
+        if 'photo' not in docs and profile_image_fallback:
+            preview = _resolve_document_preview(profile_image_fallback)
+            if preview:
+                docs['photo'] = {
+                    "uploaded": True,
+                    "preview": preview,
+                    "has_preview": True,
+                    "ai_status": "PENDING",
+                    "verified": False,
+                    "uploaded_at": None
+                }
 
         return jsonify({
             "success": True,
@@ -4097,33 +4176,62 @@ def api_lookup_driver():
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
         c.execute("""SELECT id, name, vehicle_number, vehicle_type, rating, total_rides,
-                     unique_id, verification_status, is_available, gender
-                     FROM drivers WHERE unique_id = ? OR id = ?""", (driver_id, driver_id))
+                     unique_id, verification_status, is_available, gender, profile_image
+                     FROM drivers WHERE unique_id = ? OR CAST(id AS TEXT) = ?""",
+                  (driver_id, driver_id))
         row = c.fetchone()
         if not row:
             conn.close()
             return jsonify({"success": False, "message": "Driver not found"})
         cols = ['id','name','vehicle_number','vehicle_type','rating','total_rides',
-                'unique_id','verification_status','is_available','gender']
+                'unique_id','verification_status','is_available','gender','profile_image']
         driver = dict(zip(cols, row))
         if not driver['is_available']:
             conn.close()
             return jsonify({"success": False, "message": "Driver is currently busy"})
-        # Fetch profile photo — try selfie doc first, then photo doc
+
+        # Fetch profile photo — priority: photo doc → profile_image field → None
         driver['profile_photo'] = None
-        for doc_type in ('selfie', 'photo'):
-            c.execute("SELECT file_data FROM driver_documents WHERE driver_id = ? AND doc_type = ?",
+
+        # Try driver_documents table first (photo, selfie doc types)
+        for doc_type in ('photo', 'selfie'):
+            c.execute("SELECT file_data FROM driver_documents WHERE driver_id = ? AND doc_type = ? ORDER BY created_at DESC LIMIT 1",
                       (driver['id'], doc_type))
-            selfie_row = c.fetchone()
-            if selfie_row and selfie_row[0]:
+            doc_row = c.fetchone()
+            if doc_row and doc_row[0]:
+                fd = doc_row[0]
+                # If it's already a data URI, use directly
+                if fd.startswith('data:'):
+                    driver['profile_photo'] = fd
+                    break
+                # Try decrypt
                 try:
-                    data = decrypt_document(selfie_row[0])
-                    if data:
-                        driver['profile_photo'] = data if data.startswith('data:') else selfie_row[0]
+                    dec = decrypt_document(fd)
+                    if dec and dec.startswith('data:'):
+                        driver['profile_photo'] = dec
                         break
                 except Exception:
-                    driver['profile_photo'] = selfie_row[0]
+                    pass
+                # Raw base64 fallback
+                if len(fd) > 100:
+                    driver['profile_photo'] = 'data:image/jpeg;base64,' + fd
                     break
+
+        # Fallback: profile_image column on drivers table
+        if not driver['profile_photo'] and driver.get('profile_image'):
+            pi = driver['profile_image']
+            if pi.startswith('data:'):
+                driver['profile_photo'] = pi
+            elif os.path.exists(pi):
+                try:
+                    with open(pi, 'rb') as f:
+                        b64 = base64.b64encode(f.read()).decode()
+                    driver['profile_photo'] = f'data:image/jpeg;base64,{b64}'
+                except Exception:
+                    pass
+
+        # Remove raw profile_image from response (large / path)
+        driver.pop('profile_image', None)
         conn.close()
         return jsonify({"success": True, "driver": driver})
     except Exception as e:

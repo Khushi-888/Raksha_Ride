@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Passenger Dashboard — RakshaRide</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/raksharide.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -14,6 +13,10 @@
   0%,100% { box-shadow: 0 0 0 0 rgba(198,40,40,0.6); transform: scale(1); }
   50%      { box-shadow: 0 0 0 16px rgba(198,40,40,0); transform: scale(1.03); }
 }
+.scanner-box { width:100%; aspect-ratio:1; background:#000; border-radius:16px; overflow:hidden; position:relative; }
+.scanner-frame { position:absolute; inset:20%; border:3px solid var(--yellow); border-radius:8px; }
+.scanner-line { position:absolute; left:20%; right:20%; height:2px; background:var(--yellow); animation:scanLine 2s linear infinite; }
+@keyframes scanLine { 0%{top:20%} 100%{top:80%} }
 </style>
 </head>
 <body>
@@ -23,11 +26,8 @@
   <div class="container">
     <a href="/" class="nav-logo"><div class="logo-icon">🛡️</div><div class="logo-text"><span>Raksha</span><span>Ride</span></div></a>
     <div class="nav-links" style="gap:12px">
-      <div id="rideStatusBadge" class="hidden"><span class="badge badge-green pulse">🚦 Ride Active</span></div>
-      <!-- SOS BUTTON -->
-      <button id="sosBtn" class="hidden btn btn-sm" style="background:#C62828;color:white;font-weight:800;animation:sosPulse 1.5s ease-in-out infinite" onclick="triggerSOS()">
-        🚨 SOS
-      </button>
+      <div id="rideStatusBadge" class="hidden"><span class="badge badge-green" style="animation:pulse 2s infinite">🚦 Ride Active</span></div>
+      <button id="sosBtn" class="hidden btn btn-sm" style="background:#C62828;color:white;font-weight:800;animation:sosPulse 1.5s ease-in-out infinite" onclick="triggerSOS()">🚨 SOS</button>
       <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
       <button class="btn btn-sm btn-ghost" onclick="logout()">Logout</button>
     </div>
@@ -35,17 +35,15 @@
   </div>
 </nav>
 
-<div class="mobile-sidebar" id="mobileSidebar">
-  <div class="mobile-sidebar-overlay" onclick="toggleMobileSidebar()"></div>
-  <div class="mobile-sidebar-panel" id="mobileSidebarPanel"></div>
-</div>
-
 <div class="dash-layout">
-  <aside class="sidebar">
+  <aside class="sidebar" id="mainSidebar">
     <div style="padding:16px 12px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:12px">
         <img id="sidebarAvatar" src="https://ui-avatars.com/api/?name=Passenger&background=1565C0&color=fff&size=48" style="width:48px;height:48px;border-radius:50%;border:3px solid var(--blue)">
-        <div><div style="font-weight:700;font-size:0.95rem" id="sidebarName">Loading...</div><div style="font-size:0.75rem;color:var(--text2)" id="sidebarId">PAX-XXXXX</div></div>
+        <div>
+          <div style="font-weight:700;font-size:0.95rem" id="sidebarName">Loading...</div>
+          <div style="font-size:0.75rem;color:rgba(255,255,255,0.5)" id="sidebarId">PAX-XXXXX</div>
+        </div>
       </div>
     </div>
     <div class="divider"></div>
@@ -75,7 +73,6 @@
         <div class="stat-card"><div class="stat-icon stat-icon-green">📏</div><div><div class="stat-value" id="stat-km">0 km</div><div class="stat-label">Distance Traveled</div></div></div>
         <div class="stat-card"><div class="stat-icon" style="background:#F3E5F5">⭐</div><div><div class="stat-value" id="stat-avg">5.0</div><div class="stat-label">Avg Driver Rating</div></div></div>
       </div>
-      <!-- Active Ride -->
       <div id="activeRideBanner" class="hidden" style="background:linear-gradient(135deg,var(--yellow-light),var(--blue-light));border:2px solid var(--yellow);border-radius:var(--radius);padding:20px;margin-bottom:24px">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
           <div style="display:flex;align-items:center;gap:16px">
@@ -88,27 +85,20 @@
           </div>
         </div>
       </div>
-      <!-- Quick Actions -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px">
-        <div class="card-flat" style="text-align:center;cursor:pointer" onclick="showSection('scanner')">
-          <div style="font-size:40px;margin-bottom:8px">📱</div>
-          <div style="font-weight:600">Scan Driver QR</div>
-          <div style="font-size:0.82rem;color:var(--text2);margin-top:4px">Connect with a driver</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">
+        <div class="section-card" style="text-align:center;cursor:pointer;margin-bottom:0" onclick="showSection('scanner')">
+          <div style="font-size:36px;margin-bottom:8px">📱</div><div style="font-weight:600">Scan Driver QR</div>
         </div>
-        <div class="card-flat" style="text-align:center;cursor:pointer" onclick="showSection('nearby')">
-          <div style="font-size:40px;margin-bottom:8px">📍</div>
-          <div style="font-weight:600">Nearby Drivers</div>
-          <div style="font-size:0.82rem;color:var(--text2);margin-top:4px">Find drivers near you</div>
+        <div class="section-card" style="text-align:center;cursor:pointer;margin-bottom:0" onclick="showSection('nearby')">
+          <div style="font-size:36px;margin-bottom:8px">📍</div><div style="font-weight:600">Nearby Drivers</div>
         </div>
-        <div class="card-flat" style="text-align:center;cursor:pointer" onclick="showSection('history')">
-          <div style="font-size:40px;margin-bottom:8px">📜</div>
-          <div style="font-weight:600">Ride History</div>
-          <div style="font-size:0.82rem;color:var(--text2);margin-top:4px">View past rides</div>
+        <div class="section-card" style="text-align:center;cursor:pointer;margin-bottom:0" onclick="showSection('history')">
+          <div style="font-size:36px;margin-bottom:8px">📜</div><div style="font-weight:600">Ride History</div>
         </div>
       </div>
-      <div class="card-flat">
+      <div class="section-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <h3>📜 Recent Rides</h3>
+          <h3 style="margin:0">📜 Recent Rides</h3>
           <button class="btn btn-ghost btn-sm" onclick="showSection('history')">View All →</button>
         </div>
         <div id="recentRidesList"><div style="text-align:center;padding:32px;color:var(--text3)">No rides yet</div></div>
@@ -119,18 +109,14 @@
     <div id="section-profile" class="hidden">
       <div class="dash-header"><div class="dash-title">👤 My Profile</div></div>
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:24px">
-        <div class="card-flat" style="text-align:center">
-          <div class="avatar-upload" style="margin-bottom:16px">
-            <img id="profileImg" src="https://ui-avatars.com/api/?name=Passenger&background=1565C0&color=fff&size=140" class="profile-avatar profile-avatar-lg">
-            <label class="avatar-upload-btn" for="profileImgInput">📷</label>
-            <input type="file" id="profileImgInput" accept="image/*" style="display:none">
-          </div>
+        <div class="section-card" style="text-align:center">
+          <img id="profileImg" src="https://ui-avatars.com/api/?name=Passenger&background=1565C0&color=fff&size=120" style="width:120px;height:120px;border-radius:50%;border:4px solid var(--blue);margin-bottom:12px">
           <h3 id="profileName">Loading...</h3>
           <p style="font-size:0.85rem;color:var(--text2);margin-top:4px" id="profileId">PAX-XXXXX</p>
         </div>
         <div>
-          <div class="card-flat" style="margin-bottom:20px">
-            <h3 style="margin-bottom:20px">Personal Information</h3>
+          <div class="section-card" style="margin-bottom:20px">
+            <h3>Personal Information</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
               <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="editName" placeholder="Full Name"></div>
               <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="editPhone" placeholder="Phone Number"></div>
@@ -138,20 +124,16 @@
             </div>
             <button class="btn btn-yellow" onclick="saveProfile()">💾 Save Changes</button>
           </div>
-
-          <!-- EMERGENCY CONTACT SECTION -->
-          <div class="card-flat" style="border-left:4px solid #C62828">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <div class="section-card" style="border-left:4px solid #C62828">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
               <span style="font-size:28px">🚨</span>
-              <div>
-                <h3 style="color:#C62828">Emergency Contact</h3>
-                <p style="font-size:0.85rem;color:var(--text2)">This person will be alerted if you press SOS</p>
-              </div>
+              <div><h3 style="color:#C62828;margin:0">Emergency Contact</h3>
+                <p style="font-size:0.85rem;color:var(--text2);margin-top:2px">Alerted when you press SOS</p></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-              <div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" id="emName" placeholder="Parent / Guardian name"></div>
-              <div class="form-group"><label class="form-label">Emergency Mobile</label><input class="form-input" id="emMobile" placeholder="10-digit mobile" type="tel"></div>
-              <div class="form-group" style="grid-column:1/-1"><label class="form-label">Emergency Email</label><input class="form-input" id="emEmail" type="email" placeholder="emergency@email.com"></div>
+              <div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" id="emName" placeholder="Parent / Guardian"></div>
+              <div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="emMobile" placeholder="10-digit mobile" type="tel"></div>
+              <div class="form-group" style="grid-column:1/-1"><label class="form-label">Email</label><input class="form-input" id="emEmail" type="email" placeholder="emergency@email.com"></div>
             </div>
             <button class="btn btn-full" style="background:#C62828;color:white" onclick="saveEmergencyContact()">💾 Save Emergency Contact</button>
           </div>
@@ -163,12 +145,12 @@
     <div id="section-scanner" class="hidden">
       <div class="dash-header"><div class="dash-title">📱 Scan Driver QR</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
-        <div class="card-flat">
-          <h3 style="margin-bottom:16px;text-align:center">Point camera at driver's QR code</h3>
+        <div class="section-card">
+          <h3 style="text-align:center">Point camera at driver's QR code</h3>
           <div class="scanner-box" id="scannerBox">
             <video id="scannerVideo" autoplay playsinline style="width:100%;height:100%;object-fit:cover"></video>
-            <div class="scanner-overlay">
-              <div style="position:relative">
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+              <div style="position:relative;width:60%;height:60%">
                 <div class="scanner-frame"></div>
                 <div class="scanner-line"></div>
               </div>
@@ -176,45 +158,45 @@
           </div>
           <div style="display:flex;gap:10px;margin-top:16px">
             <button class="btn btn-yellow btn-full" onclick="startScanner()" id="startScanBtn">📷 Start Camera</button>
-            <button class="btn btn-outline btn-full hidden" onclick="stopScanner()" id="stopScanBtn">⏹ Stop</button>
+            <button class="btn btn-outline btn-full" onclick="stopScanner()" id="stopScanBtn" style="display:none">⏹ Stop</button>
           </div>
           <div class="divider"></div>
           <div class="form-group">
             <label class="form-label">Or Enter Driver ID Manually</label>
             <div style="display:flex;gap:8px">
               <input class="form-input" id="manualDriverId" placeholder="e.g. DRV-ABC123">
-              <button class="btn btn-blue" onclick="lookupDriver()">🔍 Find</button>
+              <button class="btn btn-blue" onclick="lookupDriver()" id="lookupBtn">🔍 Find</button>
             </div>
           </div>
         </div>
-        <!-- Driver Details Panel -->
-        <div id="driverDetailsPanel" class="hidden">
-          <div class="card-flat">
-            <h3 style="margin-bottom:16px">✅ Driver Found</h3>
+        <div id="driverDetailsPanel" style="display:none">
+          <div class="section-card">
+            <h3>✅ Driver Found</h3>
             <div style="text-align:center;margin-bottom:20px">
-              <img id="foundDriverAvatar" src="" style="width:100px;height:100px;border-radius:50%;border:4px solid var(--yellow);margin-bottom:12px;object-fit:cover">
+              <div style="position:relative;display:inline-block;margin-bottom:12px">
+                <img id="foundDriverAvatar" src="" style="width:120px;height:120px;border-radius:50%;border:4px solid var(--yellow);object-fit:cover;box-shadow:0 4px 16px rgba(0,0,0,0.15)">
+                <div id="foundVerifiedBadge" style="position:absolute;bottom:4px;right:4px;width:28px;height:28px;border-radius:50%;background:#4CAF50;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:14px">✅</div>
+              </div>
               <div style="font-size:1.2rem;font-weight:700" id="foundDriverName"></div>
               <div style="font-size:0.85rem;color:var(--text2)" id="foundDriverId"></div>
-              <div style="margin-top:8px"><span class="badge badge-green" id="foundDriverStatus">✅ Verified</span></div>
+              <div style="margin-top:8px" id="foundDriverStatus"></div>
             </div>
-            <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:16px;margin-bottom:16px">
+            <div style="background:var(--bg2);border-radius:10px;padding:16px;margin-bottom:16px">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:0.88rem">
                 <div><span style="color:var(--text2)">Vehicle:</span><div style="font-weight:600" id="foundVehicle"></div></div>
                 <div><span style="color:var(--text2)">Type:</span><div style="font-weight:600" id="foundVehicleType"></div></div>
                 <div><span style="color:var(--text2)">Rating:</span><div style="font-weight:600" id="foundRating"></div></div>
-                <div><span style="color:var(--text2)">Rides:</span><div style="font-weight:600" id="foundRides"></div></div>
+                <div><span style="color:var(--text2)">Gender:</span><div style="font-weight:600" id="foundGender"></div></div>
               </div>
             </div>
-            <!-- Driver Documents for Passenger -->
-            <div id="passengerDriverDocs" style="margin-bottom:16px"></div>
-            <button class="btn btn-yellow btn-full btn-lg" onclick="confirmDriver()">✅ Confirm & Connect</button>
+            <button class="btn btn-yellow btn-full btn-lg" onclick="confirmDriver()">✅ Confirm &amp; Start Ride</button>
             <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="cancelDriverSelection()">✕ Cancel</button>
           </div>
         </div>
-        <div id="scannerPlaceholder" class="card-flat" style="text-align:center;padding:48px">
+        <div id="scannerPlaceholder" class="section-card" style="text-align:center;padding:48px">
           <div style="font-size:64px;margin-bottom:16px">🔍</div>
           <h3>Scan a Driver QR</h3>
-          <p style="color:var(--text2);margin-top:8px">Start the camera and point it at a driver's QR code to see their details</p>
+          <p style="color:var(--text2);margin-top:8px">Start the camera or enter a Driver ID to see their details</p>
         </div>
       </div>
     </div>
@@ -223,9 +205,9 @@
     <div id="section-nearby" class="hidden">
       <div class="dash-header">
         <div class="dash-title">📍 Nearby Drivers</div>
-        <button class="btn btn-yellow" onclick="loadNearbyDrivers()">🔄 Refresh</button>
+        <button class="btn btn-yellow" onclick="refreshNearby()">🔄 Refresh</button>
       </div>
-      <div class="map-container" style="height:300px;margin-bottom:20px">
+      <div class="map-container" style="height:300px;margin-bottom:20px;border-radius:var(--radius);overflow:hidden">
         <div id="nearbyMap" style="height:100%;width:100%"></div>
       </div>
       <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
@@ -246,53 +228,66 @@
           <option value="20">Within 20 km</option>
         </select>
       </div>
-      <div id="nearbyDriversList"><div style="text-align:center;padding:48px;color:var(--text3)"><div class="spinner" style="margin:0 auto 16px"></div>Loading nearby drivers...</div></div>
+      <div id="nearbyDriversList"><div style="text-align:center;padding:48px;color:var(--text3)">Click Refresh to find nearby drivers</div></div>
     </div>
 
     <!-- LIVE TRACKING -->
     <div id="section-tracking" class="hidden">
       <div class="dash-header">
         <div class="dash-title">🗺️ Live Tracking</div>
-        <div id="rideControls" style="display:flex;gap:10px">
-          <button class="btn btn-yellow hidden" onclick="startRide()" id="startRideBtn">▶ Start Ride</button>
-          <button class="btn btn-blue hidden" onclick="endRide()" id="endRideBtn">🏁 End Ride</button>
+        <button class="btn btn-blue" onclick="endRide()" id="endRideBtn" style="display:none">🏁 End Ride</button>
+      </div>
+      <!-- Live Stats -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+        <div class="section-card" style="text-align:center;padding:16px;margin-bottom:0">
+          <div style="font-size:1.4rem;font-weight:800;color:var(--blue)" id="t-dist">0.00</div>
+          <div style="font-size:0.72rem;color:var(--text2);font-weight:600">km</div>
+        </div>
+        <div class="section-card" style="text-align:center;padding:16px;margin-bottom:0">
+          <div style="font-size:1.4rem;font-weight:800" id="t-time">0</div>
+          <div style="font-size:0.72rem;color:var(--text2);font-weight:600">min</div>
+        </div>
+        <div class="section-card" style="text-align:center;padding:16px;margin-bottom:0">
+          <div style="font-size:1.4rem;font-weight:800;color:#4CAF50" id="t-fare">₹25</div>
+          <div style="font-size:0.72rem;color:var(--text2);font-weight:600">Est. Fare</div>
+        </div>
+        <div class="section-card" style="text-align:center;padding:16px;margin-bottom:0">
+          <div style="font-size:0.95rem;font-weight:700" id="t-driver">—</div>
+          <div style="font-size:0.72rem;color:var(--text2);font-weight:600">Driver</div>
         </div>
       </div>
-      <div class="tracking-panel" style="margin-bottom:20px">
-        <div class="tracking-info">
-          <div class="tracking-stat"><div class="t-value" id="t-dist">0 km</div><div class="t-label">Distance</div></div>
-          <div class="tracking-stat"><div class="t-value" id="t-time">0 min</div><div class="t-label">Duration</div></div>
-          <div class="tracking-stat"><div class="t-value" id="t-fare">₹0</div><div class="t-label">Est. Fare</div></div>
-        </div>
-      </div>
-      <div class="map-container" style="height:450px">
-        <div class="map-overlay">
-          <div class="map-badge">📍 <span id="trackStatus">No active ride</span></div>
-          <div class="map-badge" id="driverBadge" style="display:none">🚗 Driver Connected</div>
+      <!-- Map -->
+      <div style="position:relative;height:420px;border-radius:16px;overflow:hidden;border:2px solid var(--border)">
+        <div style="position:absolute;top:12px;left:12px;z-index:1000;display:flex;flex-direction:column;gap:6px">
+          <div style="background:rgba(0,0,0,0.75);color:white;padding:6px 14px;border-radius:20px;font-size:0.8rem;font-weight:600">🗺️ <span id="trackStatus">No active ride</span></div>
+          <div id="driverBadge" style="display:none;background:rgba(255,193,7,0.9);color:#000;padding:6px 14px;border-radius:20px;font-size:0.8rem;font-weight:600">🚗 Driver Connected</div>
         </div>
         <div id="passengerMap" style="height:100%;width:100%"></div>
       </div>
-      <!-- Payment Modal (shown after ride ends) -->
-      <div id="paymentSection" class="hidden" style="margin-top:20px">
-        <div class="card-flat" style="text-align:center">
-          <h3 style="margin-bottom:16px">💳 Pay for Your Ride</h3>
-          <div style="font-size:2rem;font-weight:800;color:var(--yellow-dark);margin-bottom:8px" id="finalFare">₹0</div>
-          <p style="color:var(--text2);margin-bottom:20px">Scan the driver's payment QR to pay</p>
+      <!-- Payment (after ride ends) -->
+      <div id="paymentSection" style="display:none;margin-top:20px">
+        <div class="section-card" style="text-align:center">
+          <div style="font-size:48px;margin-bottom:8px">🏁</div>
+          <h3 style="margin-bottom:8px">Ride Complete!</h3>
+          <div style="background:var(--bg2);border-radius:12px;padding:16px;margin-bottom:16px;text-align:left;font-size:0.88rem">
+            <div style="font-weight:700;margin-bottom:8px">💰 Fare Breakdown</div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Base fare</span><span>₹25.00</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Distance (<span id="pay-dist">0</span> km × ₹12)</span><span id="pay-dist-charge">₹0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Time (<span id="pay-time">0</span> min × ₹1)</span><span id="pay-time-charge">₹0</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:800;font-size:1.1rem"><span>Total</span><span style="color:var(--yellow-dark)" id="finalFare">₹25</span></div>
+          </div>
+          <p style="color:var(--text2);margin-bottom:16px">Scan the driver's payment QR to pay</p>
           <div id="paymentQRDisplay" style="margin-bottom:20px"></div>
           <button class="btn btn-yellow btn-lg" onclick="confirmPayment()">✅ Payment Done</button>
         </div>
       </div>
-
-      <!-- SOS PANEL (always visible during ride) -->
-      <div id="sosPanelTracking" class="hidden" style="margin-top:20px">
+      <!-- SOS Panel -->
+      <div id="sosPanelTracking" style="display:none;margin-top:20px">
         <div style="background:linear-gradient(135deg,#FFEBEE,#FFF8E1);border:2px solid #C62828;border-radius:var(--radius);padding:24px;text-align:center">
           <div style="font-size:48px;margin-bottom:12px">🚨</div>
           <h3 style="color:#C62828;margin-bottom:8px">Emergency SOS</h3>
-          <p style="color:var(--text2);margin-bottom:20px;font-size:0.9rem">Press the button below to instantly alert your emergency contact with your live location</p>
-          <button class="btn btn-lg btn-full" style="background:#C62828;color:white;font-size:1.1rem;font-weight:800;animation:sosPulse 1.5s ease-in-out infinite" onclick="triggerSOS()">
-            🚨 SEND SOS ALERT NOW
-          </button>
-          <p style="margin-top:12px;font-size:0.78rem;color:var(--text3)">Your emergency contact will receive your location + driver details via email</p>
+          <p style="color:var(--text2);margin-bottom:20px;font-size:0.9rem">Press to instantly alert your emergency contact with your live location</p>
+          <button class="btn btn-lg btn-full" style="background:#C62828;color:white;font-size:1.1rem;font-weight:800;animation:sosPulse 1.5s ease-in-out infinite" onclick="triggerSOS()">🚨 SEND SOS ALERT NOW</button>
         </div>
       </div>
     </div>
@@ -307,536 +302,380 @@
 </div>
 
 <script>
-let passengerData={}, nearbyMap=null, passengerMap=null;
-let passengerMarker=null, driverMarker=null;
-let trackingInterval=null, rideStartTime=null, totalDistance=0, lastPos=null;
-let selectedDriver=null, activeRideId=null;
-let scannerStream=null;
+// ── STATE ──────────────────────────────────────────────────────────────────────
+let passengerData = {};
+let nearbyMap = null, passengerMap = null;
+let passengerMarker = null, driverMarker = null;
+let trackingInterval = null, rideStartTime = null, totalDistance = 0, lastPos = null;
+let selectedDriver = null, activeRideId = null;
+let scannerStream = null;
+let _lookupInProgress = false;
+let _paxLastGps = 0, _paxGpsId = null;
+let _driverTrackInterval = null, _trackedDriverId = null;
 
-// ── THEME ──
-function toggleTheme(){
-  const h=document.documentElement,t=h.getAttribute('data-theme')==='dark'?'light':'dark';
-  h.setAttribute('data-theme',t);document.getElementById('themeBtn').textContent=t==='dark'?'☀️':'🌙';
-  localStorage.setItem('rr_theme',t);
+// ── THEME ──────────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const h = document.documentElement;
+  const t = h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  h.setAttribute('data-theme', t);
+  document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('rr_theme', t);
 }
-(function(){
-  const t=localStorage.getItem('rr_theme')||'light';
-  document.documentElement.setAttribute('data-theme',t);
-  const b=document.getElementById('themeBtn');if(b)b.textContent=t==='dark'?'☀️':'🌙';
+(function() {
+  const t = localStorage.getItem('rr_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+  const b = document.getElementById('themeBtn');
+  if (b) b.textContent = t === 'dark' ? '☀️' : '🌙';
 })();
 
-function showToast(msg,type='info'){
-  const c=document.getElementById('toastContainer');
-  const icons={info:'ℹ️',success:'✅',error:'❌',warn:'⚠️'};
-  const t=document.createElement('div');t.className='toast';
-  t.innerHTML=`<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
-  c.appendChild(t);setTimeout(()=>t.remove(),4000);
+function showToast(msg, type = 'info') {
+  const c = document.getElementById('toastContainer');
+  const icons = { info: 'ℹ️', success: '✅', error: '❌', warn: '⚠️' };
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
 }
 
-function showSection(name){
-  document.querySelectorAll('[id^="section-"]').forEach(s=>s.classList.add('hidden'));
-  document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.remove('active'));
-  document.getElementById('section-'+name).classList.remove('hidden');
-  const nb=document.getElementById('nav-'+name);if(nb)nb.classList.add('active');
-  if(name==='nearby')initNearbyMap();
-  if(name==='tracking')initPassengerMap();
-  if(name==='history')loadRideHistory();
-  document.getElementById('mobileSidebar').classList.remove('open');
+function showSection(name) {
+  document.querySelectorAll('[id^="section-"]').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+  const sec = document.getElementById('section-' + name);
+  if (sec) sec.classList.remove('hidden');
+  const nb = document.getElementById('nav-' + name);
+  if (nb) nb.classList.add('active');
+  if (name === 'nearby') initNearbyMap();
+  if (name === 'tracking') initPassengerMap();
+  if (name === 'history') loadRideHistory();
+  document.getElementById('mainSidebar').classList.remove('open');
 }
 
-function toggleMobileSidebar(){document.getElementById('mobileSidebar').classList.toggle('open');}
+function toggleMobileSidebar() {
+  document.getElementById('mainSidebar').classList.toggle('open');
+}
 
-// ── LOAD DATA ──
-async function loadPassengerData(){
-  try{
-    const r=await authFetch('/api/passenger_profile',{credentials:'include'});
-    const d=await r.json();
-    if(!d.success){window.location.href='/login/passenger';return;}
-    passengerData=d.passenger;
-    const name=passengerData.name||'Passenger';
-    document.getElementById('sidebarName').textContent=name;
-    document.getElementById('sidebarId').textContent='PAX-'+passengerData.id;
-    document.getElementById('passengerFirstName').textContent=name.split(' ')[0];
-    document.getElementById('profileName').textContent=name;
-    document.getElementById('profileId').textContent='PAX-'+passengerData.id;
-    document.getElementById('editName').value=passengerData.name||'';
-    document.getElementById('editPhone').value=passengerData.phone||'';
-    document.getElementById('editEmail').value=passengerData.email||'';
-    document.getElementById('stat-rides').textContent=passengerData.total_rides||0;
-    document.getElementById('stat-spent').textContent='₹'+(passengerData.total_spent||0);
-    // Emergency contact fields
-    if(passengerData.emergency_name)  document.getElementById('emName').value=passengerData.emergency_name;
-    if(passengerData.emergency_mobile)document.getElementById('emMobile').value=passengerData.emergency_mobile;
-    if(passengerData.emergency_email) document.getElementById('emEmail').value=passengerData.emergency_email;
-    const avatarUrl=`https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1565C0&color=fff&size=140`;
-    document.getElementById('sidebarAvatar').src=avatarUrl;
-    document.getElementById('profileImg').src=avatarUrl;
+// ── LOAD DATA ──────────────────────────────────────────────────────────────────
+async function loadPassengerData() {
+  try {
+    const r = await authFetch('/api/passenger_profile', { credentials: 'include' });
+    const d = await r.json();
+    if (!d.success) { window.location.href = '/login/passenger'; return; }
+    passengerData = d.passenger;
+    const name = passengerData.name || 'Passenger';
+    document.getElementById('sidebarName').textContent = name;
+    document.getElementById('sidebarId').textContent = 'PAX-' + passengerData.id;
+    document.getElementById('passengerFirstName').textContent = name.split(' ')[0];
+    document.getElementById('profileName').textContent = name;
+    document.getElementById('profileId').textContent = 'PAX-' + passengerData.id;
+    document.getElementById('editName').value = passengerData.name || '';
+    document.getElementById('editPhone').value = passengerData.phone || '';
+    document.getElementById('editEmail').value = passengerData.email || '';
+    document.getElementById('stat-rides').textContent = passengerData.total_rides || 0;
+    document.getElementById('stat-spent').textContent = '₹' + (passengerData.total_spent || 0);
+    if (passengerData.emergency_name) document.getElementById('emName').value = passengerData.emergency_name;
+    if (passengerData.emergency_mobile) document.getElementById('emMobile').value = passengerData.emergency_mobile;
+    if (passengerData.emergency_email) document.getElementById('emEmail').value = passengerData.emergency_email;
+    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1565C0&color=fff&size=120`;
+    document.getElementById('sidebarAvatar').src = avatarUrl;
+    document.getElementById('profileImg').src = avatarUrl;
     checkActiveRide();
     loadRecentRides();
-  }catch(e){showToast('Failed to load profile','error');}
+  } catch (e) { showToast('Failed to load profile', 'error'); }
 }
 
-async function checkActiveRide(){
-  try{
-    const r=await authFetch('/api/get_active_ride',{credentials:'include'});
-    const d=await r.json();
-    if(d.success&&d.ride){
-      activeRideId=d.ride.id;
+async function checkActiveRide() {
+  try {
+    const r = await authFetch('/api/get_active_ride', { credentials: 'include' });
+    const d = await r.json();
+    if (d.success && d.ride) {
+      activeRideId = d.ride.id;
       document.getElementById('activeRideBanner').classList.remove('hidden');
       document.getElementById('rideStatusBadge').classList.remove('hidden');
-      document.getElementById('activeRideInfo').textContent=`Driver: ${d.ride.driver_name} | ${d.ride.driver_vehicle}`;
-      document.getElementById('startRideBtn').classList.add('hidden');
-      document.getElementById('endRideBtn').classList.remove('hidden');
-      // Show SOS button in navbar
+      document.getElementById('activeRideInfo').textContent = `Driver: ${d.ride.driver_name || 'Connected'}`;
+      document.getElementById('endRideBtn').style.display = 'inline-flex';
       document.getElementById('sosBtn').classList.remove('hidden');
-      // Show SOS panel in tracking
-      const sosPanelEl=document.getElementById('sosPanelTracking');
-      if(sosPanelEl)sosPanelEl.classList.remove('hidden');
+      document.getElementById('sosPanelTracking').style.display = 'block';
+      document.getElementById('t-driver').textContent = d.ride.driver_name || 'Connected';
+      if (d.ride.driver_id) startDriverTracking(d.ride.driver_id);
     }
-  }catch(e){}
+  } catch (e) {}
 }
 
-async function loadRecentRides(){
-  try{
-    const r=await authFetch('/api/passenger_ride_history?limit=3',{credentials:'include'});
-    const d=await r.json();
-    const el=document.getElementById('recentRidesList');
-    if(!d.success||!d.rides||d.rides.length===0){el.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3)">No rides yet</div>';return;}
-    el.innerHTML=d.rides.map(ride=>`
-      <div class="ride-card" style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="font-weight:600">${ride.driver_name||'Driver'}</div>
-          <span class="badge ${ride.status==='completed'?'badge-green':'badge-gray'}">${ride.status}</span>
-        </div>
-        <div style="font-size:0.85rem;color:var(--text2);margin-top:6px">
-          ${new Date(ride.created_at).toLocaleDateString()} • ₹${ride.fare||0} • ${ride.distance_km||0} km
-        </div>
+async function loadRecentRides() {
+  try {
+    const r = await authFetch('/api/passenger_ride_history?limit=3', { credentials: 'include' });
+    const d = await r.json();
+    const el = document.getElementById('recentRidesList');
+    if (!d.success || !d.rides || d.rides.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3)">No rides yet</div>';
+      return;
+    }
+    el.innerHTML = d.rides.map(ride => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)">
+        <div><div style="font-weight:600">${ride.driver_name || 'Driver'}</div>
+          <div style="font-size:0.82rem;color:var(--text2)">${new Date(ride.created_at).toLocaleDateString()}</div></div>
+        <div style="text-align:right"><div style="font-weight:700;color:var(--yellow-dark)">₹${ride.fare || 0}</div>
+          <span class="badge ${ride.status === 'completed' ? 'badge-green' : 'badge-gray'}">${ride.status}</span></div>
       </div>`).join('');
-  }catch(e){}
+  } catch (e) {}
 }
 
-async function loadRideHistory(){
-  try{
-    const r=await authFetch('/api/passenger_ride_history',{credentials:'include'});
-    const d=await r.json();
-    const el=document.getElementById('rideHistoryList');
-    if(!d.success||!d.rides||d.rides.length===0){
-      el.innerHTML='<div style="text-align:center;padding:48px;color:var(--text3)"><div style="font-size:48px;margin-bottom:12px">📭</div>No rides yet</div>';return;
+async function loadRideHistory() {
+  try {
+    const r = await authFetch('/api/passenger_ride_history', { credentials: 'include' });
+    const d = await r.json();
+    const el = document.getElementById('rideHistoryList');
+    if (!d.success || !d.rides || d.rides.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:48px;color:var(--text3)"><div style="font-size:48px;margin-bottom:12px">📭</div>No rides yet</div>';
+      return;
     }
-    el.innerHTML=d.rides.map(ride=>`
-      <div class="ride-card" style="margin-bottom:12px">
+    el.innerHTML = d.rides.map(ride => `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <div><div style="font-weight:700">${ride.driver_name||'Driver'}</div>
+          <div><div style="font-weight:700">${ride.driver_name || 'Driver'}</div>
             <div style="font-size:0.82rem;color:var(--text2)">${new Date(ride.created_at).toLocaleString()}</div></div>
-          <div style="text-align:right">
-            <div style="font-weight:700;color:var(--yellow-dark)">₹${ride.fare||0}</div>
-            <span class="badge ${ride.status==='completed'?'badge-green':'badge-gray'}">${ride.status}</span>
-          </div>
+          <div style="text-align:right"><div style="font-weight:700;color:var(--yellow-dark)">₹${ride.fare || 0}</div>
+            <span class="badge ${ride.status === 'completed' ? 'badge-green' : 'badge-gray'}">${ride.status}</span></div>
         </div>
         <div style="display:flex;gap:16px;margin-top:10px;font-size:0.82rem;color:var(--text2)">
-          <span>📏 ${ride.distance_km||0} km</span><span>⏱ ${ride.duration_minutes||0} min</span>
-          <span>💳 ${ride.payment_status||'pending'}</span>
+          <span>📏 ${ride.distance_km || 0} km</span>
+          <span>⏱ ${ride.duration_minutes || 0} min</span>
+          <span>💳 ${ride.payment_status || 'pending'}</span>
         </div>
       </div>`).join('');
-  }catch(e){}
+  } catch (e) {}
 }
 
-// ── SCANNER ──
-// ── SCANNER — runs ONCE per lookup, no loops/intervals ──
-let _lookupInProgress = false;  // Prevent duplicate calls
-
-async function startScanner(){
-  try{
-    scannerStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    document.getElementById('scannerVideo').srcObject=scannerStream;
-    document.getElementById('startScanBtn').classList.add('hidden');
-    document.getElementById('stopScanBtn').classList.remove('hidden');
-    showToast('Camera started. Point at driver QR code','info');
-    setTimeout(()=>showToast('Tip: Use manual ID entry if camera QR detection is slow','info'),3000);
-  }catch(e){showToast('Camera access denied: '+e.message,'error');}
+// ── SCANNER ────────────────────────────────────────────────────────────────────
+async function startScanner() {
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    document.getElementById('scannerVideo').srcObject = scannerStream;
+    document.getElementById('startScanBtn').style.display = 'none';
+    document.getElementById('stopScanBtn').style.display = 'inline-flex';
+    showToast('Camera started — point at driver QR code', 'info');
+    setTimeout(() => showToast('Tip: Use manual ID entry if camera is slow', 'info'), 3000);
+  } catch (e) { showToast('Camera access denied: ' + e.message, 'error'); }
 }
 
-function stopScanner(){
-  if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null;}
-  document.getElementById('startScanBtn').classList.remove('hidden');
-  document.getElementById('stopScanBtn').classList.add('hidden');
+function stopScanner() {
+  if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+  document.getElementById('startScanBtn').style.display = 'inline-flex';
+  document.getElementById('stopScanBtn').style.display = 'none';
 }
 
-async function lookupDriver(){
-  // Prevent duplicate API calls
-  if(_lookupInProgress) return;
-  const id=document.getElementById('manualDriverId').value.trim();
-  if(!id){showToast('Please enter a Driver ID','warn');return;}
-
+async function lookupDriver() {
+  if (_lookupInProgress) return;
+  const id = document.getElementById('manualDriverId').value.trim();
+  if (!id) { showToast('Please enter a Driver ID', 'warn'); return; }
   _lookupInProgress = true;
-  const btn = document.querySelector('[onclick="lookupDriver()"]');
-  if(btn){ btn.disabled=true; btn.textContent='🔍 Searching...'; }
-
-  try{
-    const r=await authFetch('/api/lookup_driver?id='+encodeURIComponent(id));
-    if(!r) return;
-    const d=await r.json();
-    if(d.success){showDriverDetails(d.driver);}
-    else showToast(d.message||'Driver not found','error');
-  }catch(e){showToast('Lookup failed: '+e.message,'error');}
-  finally{
+  const btn = document.getElementById('lookupBtn');
+  btn.disabled = true; btn.textContent = '🔍 Searching...';
+  try {
+    const r = await authFetch('/api/lookup_driver?id=' + encodeURIComponent(id));
+    if (!r) {
+      showToast('Network error — please check your connection and retry', 'error');
+      return;
+    }
+    const d = await r.json();
+    if (d.success) showDriverDetails(d.driver);
+    else showToast(d.message || 'Driver not found', 'error');
+  } catch (e) {
+    showToast('Connection failed. Please retry.', 'error');
+  } finally {
     _lookupInProgress = false;
-    if(btn){ btn.disabled=false; btn.textContent='🔍 Find'; }
+    btn.disabled = false; btn.textContent = '🔍 Find';
   }
 }
 
-function showDriverDetails(driver){
-  selectedDriver=driver;
-  document.getElementById('scannerPlaceholder').classList.add('hidden');
-  document.getElementById('driverDetailsPanel').classList.remove('hidden');
-  const name=driver.name||'Driver';
+function showDriverDetails(driver) {
+  selectedDriver = driver;
+  document.getElementById('scannerPlaceholder').style.display = 'none';
+  document.getElementById('driverDetailsPanel').style.display = 'block';
+  const name = driver.name || 'Driver';
 
-  // Profile photo: use selfie if available, else avatar
-  const photoSrc = driver.profile_photo && driver.profile_photo.startsWith('data:')
+  // Use real profile photo if available, else generate avatar
+  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FFC107&color=000&size=200`;
+  const photoSrc = (driver.profile_photo && driver.profile_photo.startsWith('data:'))
     ? driver.profile_photo
-    : `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FFC107&color=000&size=80`;
+    : fallbackAvatar;
 
-  document.getElementById('foundDriverAvatar').src=photoSrc;
-  document.getElementById('foundDriverName').textContent=name;
-  document.getElementById('foundDriverId').textContent=driver.unique_id||'';
-  document.getElementById('foundVehicle').textContent=driver.vehicle_number||'N/A';
-  document.getElementById('foundVehicleType').textContent=driver.vehicle_type||'N/A';
-  document.getElementById('foundRating').textContent=(driver.rating||5.0).toFixed(1)+' ⭐';
-  document.getElementById('foundRides').textContent=(driver.total_rides||0)+' rides';
-  document.getElementById('foundDriverStatus').textContent=driver.verification_status==='verified'?'✅ Verified':'⏳ Pending';
+  document.getElementById('foundDriverAvatar').src = photoSrc;
+  document.getElementById('foundDriverName').textContent = name;
+  document.getElementById('foundDriverId').textContent = driver.unique_id || '';
+  document.getElementById('foundVehicle').textContent = driver.vehicle_number || 'N/A';
+  document.getElementById('foundVehicleType').textContent = driver.vehicle_type || 'N/A';
+  document.getElementById('foundRating').textContent = parseFloat(driver.rating || 5).toFixed(1) + ' ⭐';
+  document.getElementById('foundGender').textContent = driver.gender || 'N/A';
+  const statusEl = document.getElementById('foundDriverStatus');
+  const isVerified = driver.verification_status === 'verified';
+  statusEl.innerHTML = isVerified
+    ? '<span class="badge badge-green">✅ Verified Driver</span>'
+    : '<span class="badge badge-yellow">⏳ Pending Verification</span>';
+  // Show/hide verified badge overlay
+  const badge = document.getElementById('foundVerifiedBadge');
+  if (badge) badge.style.display = isVerified ? 'flex' : 'none';
   stopScanner();
-
-  // Load driver documents for passenger to view
-  loadDriverDocsForPassenger(driver.id);
 }
 
-function cancelDriverSelection(){
-  selectedDriver=null;
-  document.getElementById('driverDetailsPanel').classList.add('hidden');
-  document.getElementById('scannerPlaceholder').classList.remove('hidden');
-  // Clear docs
-  const docsEl=document.getElementById('passengerDriverDocs');
-  if(docsEl)docsEl.innerHTML='';
+function cancelDriverSelection() {
+  selectedDriver = null;
+  document.getElementById('driverDetailsPanel').style.display = 'none';
+  document.getElementById('scannerPlaceholder').style.display = 'block';
 }
 
-async function loadDriverDocsForPassenger(driverId){
-  // SECURITY: Passengers cannot view driver documents
-  // Only show verification status
-  const docsEl = document.getElementById('passengerDriverDocs');
-  if(!docsEl) return;
-  docsEl.innerHTML = `
-    <div style="background:var(--bg2);border-radius:10px;padding:16px;text-align:center">
-      <div style="font-size:32px;margin-bottom:8px">🔒</div>
-      <div style="font-weight:600;font-size:0.9rem">Documents are private</div>
-      <div style="font-size:0.8rem;color:var(--text2);margin-top:4px">Driver documents are verified by admin and kept secure</div>
-    </div>`;
-}
-
-// viewPassengerDoc removed for security
-
-async function confirmDriver(){
-  if(!selectedDriver){showToast('No driver selected','warn');return;}
-  // Get current location for ride start
-  let lat=null,lng=null;
-  try{
-    const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000}));
-    lat=pos.coords.latitude; lng=pos.coords.longitude;
-  }catch(e){}
-  try{
-    const r=await authFetch('/api/start_ride',{method:'POST',
-      body:JSON.stringify({driver_id:selectedDriver.id,latitude:lat,longitude:lng,
-        pickup_location:'Current Location',dropoff_location:'Destination'})});
-    const d=await r.json();
-    if(d.success){
-      activeRideId=d.ride_id||d.ride?.id;
-      showToast('Connected with driver! Ride started.','success');
+async function confirmDriver() {
+  if (!selectedDriver) { showToast('No driver selected', 'warn'); return; }
+  let lat = null, lng = null;
+  try {
+    const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
+    lat = pos.coords.latitude; lng = pos.coords.longitude;
+  } catch (e) {}
+  try {
+    const r = await authFetch('/api/start_ride', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ driver_id: selectedDriver.id, latitude: lat, longitude: lng,
+        pickup_location: 'Current Location', dropoff_location: 'Destination' })
+    });
+    const d = await r.json();
+    if (d.success) {
+      activeRideId = d.ride_id || d.ride?.id;
+      showToast('Connected with driver! Ride started.', 'success');
       document.getElementById('activeRideBanner').classList.remove('hidden');
       document.getElementById('rideStatusBadge').classList.remove('hidden');
-      document.getElementById('activeRideInfo').textContent=`Driver: ${selectedDriver.name}`;
-      document.getElementById('startRideBtn').classList.add('hidden');
-      document.getElementById('endRideBtn').classList.remove('hidden');
-      // Show SOS
+      document.getElementById('activeRideInfo').textContent = `Driver: ${selectedDriver.name}`;
+      document.getElementById('endRideBtn').style.display = 'inline-flex';
       document.getElementById('sosBtn').classList.remove('hidden');
-      const sosPanelEl=document.getElementById('sosPanelTracking');
-      if(sosPanelEl)sosPanelEl.classList.remove('hidden');
+      document.getElementById('sosPanelTracking').style.display = 'block';
+      document.getElementById('t-driver').textContent = selectedDriver.name || 'Connected';
       showSection('tracking');
       startPassengerTracking();
-      // Start live driver tracking (polls every 5s)
-      if(selectedDriver && selectedDriver.id) startDriverTracking(selectedDriver.id);
-    }else showToast(d.message,'error');
-  }catch(e){showToast('Failed to start ride','error');}
+      startDriverTracking(selectedDriver.id);
+    } else showToast(d.message, 'error');
+  } catch (e) { showToast('Failed to start ride', 'error'); }
 }
 
-// ── MAPS ──
-function initNearbyMap(){
-  if(nearbyMap)return;
-  nearbyMap=L.map('nearbyMap').setView([20.5937,78.9629],12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(nearbyMap);
-  navigator.geolocation.getCurrentPosition(pos=>{
-    nearbyMap.setView([pos.coords.latitude,pos.coords.longitude],14);
-    L.marker([pos.coords.latitude,pos.coords.longitude],{icon:L.divIcon({html:'👤',className:'',iconSize:[30,30]})}).addTo(nearbyMap).bindPopup('You');
-    loadNearbyDrivers(pos.coords.latitude,pos.coords.longitude);
-  });
+// ── NEARBY DRIVERS ─────────────────────────────────────────────────────────────
+function initNearbyMap() {
+  if (nearbyMap) return;
+  nearbyMap = L.map('nearbyMap').setView([20.5937, 78.9629], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(nearbyMap);
+  navigator.geolocation.getCurrentPosition(pos => {
+    nearbyMap.setView([pos.coords.latitude, pos.coords.longitude], 14);
+    L.marker([pos.coords.latitude, pos.coords.longitude], {
+      icon: L.divIcon({ html: '👤', className: '', iconSize: [30, 30] })
+    }).addTo(nearbyMap).bindPopup('You');
+    loadNearbyDrivers(pos.coords.latitude, pos.coords.longitude);
+  }, () => loadNearbyDrivers());
 }
 
-function initPassengerMap(){
-  if(passengerMap)return;
-  passengerMap=L.map('passengerMap').setView([20.5937,78.9629],12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(passengerMap);
-  if(activeRideId){
-    document.getElementById('endRideBtn').classList.remove('hidden');
-    document.getElementById('trackStatus').textContent='Ride active - tracking...';
-    startPassengerTracking();
-  }
+function refreshNearby() {
+  navigator.geolocation.getCurrentPosition(
+    pos => loadNearbyDrivers(pos.coords.latitude, pos.coords.longitude),
+    () => loadNearbyDrivers()
+  );
 }
 
-async function loadNearbyDrivers(lat,lng){
-  try{
-    const dist=document.getElementById('filterDist')?.value||'10';
-    const gender=document.getElementById('filterGender')?.value||'';
-    const url=lat?`/api/nearby_drivers?lat=${lat}&lng=${lng}&radius=${dist}&gender=${gender}`:`/api/nearby_drivers?radius=${dist}&gender=${gender}`;
-    const r=await authFetch(url);if(!r)return;const d=await r.json();
-    const el=document.getElementById('nearbyDriversList');
-    if(!d.success||!d.drivers||d.drivers.length===0){
-      el.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3)">No drivers nearby</div>';return;
+function filterDrivers() { refreshNearby(); }
+
+async function loadNearbyDrivers(lat, lng) {
+  const dist = document.getElementById('filterDist')?.value || '10';
+  const gender = document.getElementById('filterGender')?.value || '';
+  const type = document.getElementById('filterType')?.value || '';
+  let url = `/api/nearby_drivers?radius=${dist}&gender=${gender}&type=${type}`;
+  if (lat) url += `&lat=${lat}&lng=${lng}`;
+  try {
+    const r = await authFetch(url);
+    const d = await r.json();
+    const el = document.getElementById('nearbyDriversList');
+    if (!d.success || !d.drivers || d.drivers.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3)">No drivers nearby</div>';
+      return;
     }
-    el.innerHTML=d.drivers.map(drv=>`
-      <div class="driver-nearby-card" style="margin-bottom:12px">
-        <div class="driver-avatar">${drv.name?drv.name[0]:'D'}</div>
-        <div class="driver-info">
-          <div class="driver-name">${drv.name}</div>
-          <div class="driver-meta">
-            <span>🚗 ${drv.vehicle_type}</span>
-            <span>⭐ ${(drv.rating||5.0).toFixed(1)}</span>
-            <span>📏 ${drv.distance_km?drv.distance_km.toFixed(1)+' km':'Nearby'}</span>
-          </div>
+    el.innerHTML = d.drivers.map(drv => `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:16px">
+        <div style="width:48px;height:48px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:800;flex-shrink:0">${(drv.name||'D')[0]}</div>
+        <div style="flex:1">
+          <div style="font-weight:700">${drv.name}</div>
+          <div style="font-size:0.82rem;color:var(--text2)">🚗 ${drv.vehicle_type} &nbsp;⭐ ${parseFloat(drv.rating||5).toFixed(1)} &nbsp;📏 ${drv.distance_km ? drv.distance_km.toFixed(1)+' km' : 'Nearby'}</div>
+          ${drv.gender ? `<div style="font-size:0.75rem;margin-top:2px">${drv.gender === 'Female' ? '👩 Female' : '👨 Male'} Driver</div>` : ''}
         </div>
-        <div class="driver-actions">
-          <button class="btn btn-yellow btn-sm" onclick="selectNearbyDriver(${drv.id},'${drv.unique_id}')">Connect</button>
-        </div>
+        <button class="btn btn-yellow btn-sm" onclick="selectNearbyDriver('${drv.unique_id}')">Connect</button>
       </div>`).join('');
-    // Add markers to map
-    if(nearbyMap){
-      d.drivers.forEach(drv=>{
-        if(drv.latitude&&drv.longitude){
-          L.marker([drv.latitude,drv.longitude],{icon:L.divIcon({html:'🚗',className:'',iconSize:[30,30]})})
-            .addTo(nearbyMap).bindPopup(`${drv.name}<br>${drv.vehicle_type}`);
+    if (nearbyMap) {
+      d.drivers.forEach(drv => {
+        if (drv.latitude && drv.longitude) {
+          L.marker([drv.latitude, drv.longitude], {
+            icon: L.divIcon({ html: '🚗', className: '', iconSize: [30, 30] })
+          }).addTo(nearbyMap).bindPopup(`${drv.name}<br>${drv.vehicle_type}`);
         }
       });
     }
-  }catch(e){showToast('Failed to load nearby drivers','error');}
+  } catch (e) { showToast('Failed to load nearby drivers', 'error'); }
 }
 
-function selectNearbyDriver(id,uniqueId){
-  document.getElementById('manualDriverId').value=uniqueId;
+function selectNearbyDriver(uniqueId) {
+  document.getElementById('manualDriverId').value = uniqueId;
   showSection('scanner');
   lookupDriver();
 }
 
-function startPassengerTracking(){
-  if(trackingInterval)clearInterval(trackingInterval);
-  rideStartTime=Date.now();totalDistance=0;lastPos=null;
-  trackingInterval=setInterval(updatePassengerLocation,5000);
+// ── PASSENGER MAP & TRACKING ───────────────────────────────────────────────────
+function initPassengerMap() {
+  if (passengerMap) { setTimeout(() => passengerMap.invalidateSize(), 100); return; }
+  passengerMap = L.map('passengerMap').setView([20.5937, 78.9629], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(passengerMap);
+  if (activeRideId) {
+    document.getElementById('endRideBtn').style.display = 'inline-flex';
+    document.getElementById('trackStatus').textContent = 'Ride active — tracking...';
+    startPassengerTracking();
+  }
+}
+
+function startPassengerTracking() {
+  if (trackingInterval) clearInterval(trackingInterval);
+  rideStartTime = Date.now(); totalDistance = 0; lastPos = null;
+  trackingInterval = setInterval(updatePassengerLocation, 5000);
   updatePassengerLocation();
 }
 
-function updatePassengerLocation(){
-  navigator.geolocation.getCurrentPosition(pos=>{
-    const lat=pos.coords.latitude,lng=pos.coords.longitude;
-    if(lastPos){
-      const d=calcDistance(lastPos.lat,lastPos.lng,lat,lng);
-      totalDistance+=d;
-      document.getElementById('t-dist').textContent=totalDistance.toFixed(2)+' km';
+function updatePassengerLocation() {
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    if (lastPos) {
+      const dist = haversine(lastPos.lat, lastPos.lng, lat, lng);
+      if (dist < 0.5) totalDistance += dist;
     }
-    lastPos={lat,lng};
-    const elapsed=Math.round((Date.now()-rideStartTime)/60000);
-    document.getElementById('t-time').textContent=elapsed+' min';
-    const fare=50+(totalDistance*15)+(elapsed*2);
-    document.getElementById('t-fare').textContent='₹'+Math.round(fare);
-    if(!passengerMarker){
-      passengerMarker=L.marker([lat,lng],{icon:L.divIcon({html:'👤',className:'',iconSize:[30,30]})}).addTo(passengerMap).bindPopup('You');
-    }else passengerMarker.setLatLng([lat,lng]);
-    passengerMap.setView([lat,lng],15);
-    document.getElementById('trackStatus').textContent='📍 Tracking active';
-    fetch('/api/update_location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat,lng,type:'passenger',ride_id:activeRideId})}).catch(()=>{});
-    // Poll driver location
-    if(activeRideId)pollDriverLocation();
-  },err=>{},{enableHighAccuracy:true,timeout:10000});
-}
-
-async function pollDriverLocation(){
-  try{
-    const r=await authFetch('/api/get_driver_location?ride_id='+activeRideId);
-    const d=await r.json();
-    if(d.success&&d.lat&&d.lng){
-      if(!driverMarker){
-        driverMarker=L.marker([d.lat,d.lng],{icon:L.divIcon({html:'🚗',className:'',iconSize:[30,30]})}).addTo(passengerMap).bindPopup('Driver');
-        document.getElementById('driverBadge').style.display='flex';
-      }else driverMarker.setLatLng([d.lat,d.lng]);
+    lastPos = { lat, lng };
+    const elapsedMin = (Date.now() - rideStartTime) / 60000;
+    const fare = Math.round(25 + totalDistance * 12 + elapsedMin * 1);
+    document.getElementById('t-dist').textContent = totalDistance.toFixed(2);
+    document.getElementById('t-time').textContent = Math.round(elapsedMin);
+    document.getElementById('t-fare').textContent = '₹' + fare;
+    if (passengerMap) {
+      if (!passengerMarker) {
+        const icon = L.divIcon({
+          html: '<div style="background:#1565C0;border:3px solid #fff;border-radius:50%;width:18px;height:18px;box-shadow:0 2px 8px rgba(0,0,0,0.4)"></div>',
+          className: '', iconSize: [18, 18], iconAnchor: [9, 9]
+        });
+        passengerMarker = L.marker([lat, lng], { icon }).addTo(passengerMap).bindPopup('👤 You');
+      } else passengerMarker.setLatLng([lat, lng]);
+      passengerMap.setView([lat, lng], 15);
     }
-  }catch(e){}
+    document.getElementById('trackStatus').textContent = '📍 ' + totalDistance.toFixed(2) + ' km';
+    const token = localStorage.getItem('rr_token') || '';
+    fetch('/api/update_location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      credentials: 'include',
+      body: JSON.stringify({ lat, lng, type: 'passenger', ride_id: activeRideId })
+    }).catch(() => {});
+  }, () => {}, { enableHighAccuracy: true, timeout: 10000 });
 }
 
-function calcDistance(lat1,lon1,lat2,lon2){
-  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
-  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}
-
-async function endRide(){
-  if(!confirm('End this ride?'))return;
-  clearInterval(trackingInterval);
-  stopDriverTracking(); // Stop live driver tracking
-  try{
-    const r=await authFetch('/api/complete_ride',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({distance_km:totalDistance,ride_id:activeRideId})});
-    const d=await r.json();
-    if(d.success){
-      showToast('Ride ended! Fare: ₹'+d.fare,'success');
-      document.getElementById('activeRideBanner').classList.add('hidden');
-      document.getElementById('rideStatusBadge').classList.add('hidden');
-      document.getElementById('endRideBtn').classList.add('hidden');
-      document.getElementById('t-fare').textContent='₹'+d.fare;
-      // Show payment
-      document.getElementById('paymentSection').classList.remove('hidden');
-      document.getElementById('finalFare').textContent='₹'+d.fare;
-      if(d.payment_qr){
-        document.getElementById('paymentQRDisplay').innerHTML=`<img src="${d.payment_qr}" style="max-width:200px;border-radius:var(--radius-sm)">`;
-      }
-      activeRideId=null;
-    }else showToast(d.message,'error');
-  }catch(e){showToast('Failed to end ride','error');}
-}
-
-async function confirmPayment(){
-  showToast('Payment confirmed! Thank you for riding with RakshaRide.','success');
-  document.getElementById('paymentSection').classList.add('hidden');
-  loadPassengerData();
-}
-
-async function saveProfile(){
-  const data={name:document.getElementById('editName').value,phone:document.getElementById('editPhone').value};
-  try{
-    const r=await authFetch('/api/update_passenger_profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    const d=await r.json();
-    if(d.success){showToast('Profile updated!','success');loadPassengerData();}
-    else showToast(d.message,'error');
-  }catch(e){showToast('Failed to save','error');}
-}
-
-async function saveEmergencyContact(){
-  const data={
-    emergency_name:  document.getElementById('emName').value.trim(),
-    emergency_mobile:document.getElementById('emMobile').value.trim(),
-    emergency_email: document.getElementById('emEmail').value.trim()
-  };
-  if(!data.emergency_mobile && !data.emergency_email){
-    showToast('Enter at least one emergency contact','warn'); return;
-  }
-  try{
-    const r=await authFetch('/api/update_emergency_contact',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      credentials:'include',
-      body:JSON.stringify(data)
-    });
-    const d=await r.json();
-    if(d.success){
-      showToast('Emergency contact saved! 🚨','success');
-    } else if(r.status===401){
-      showToast('Session expired — please login again','error');
-      setTimeout(()=>window.location.href='/login/passenger',2000);
-    } else {
-      showToast(d.message,'error');
-    }
-  }catch(e){showToast('Failed to save emergency contact','error');}
-}
-
-async function triggerSOS(){
-  if(!confirm('🚨 SEND SOS ALERT?\n\nThis will immediately send your location and driver details to your emergency contact.\n\nPress OK to confirm.'))return;
-
-  const btn=document.querySelector('[onclick="triggerSOS()"]');
-  if(btn){btn.textContent='📡 Sending SOS...';btn.disabled=true;}
-
-  // Get current GPS location
-  let lat=null,lng=null;
-  try{
-    const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:5000}));
-    lat=pos.coords.latitude; lng=pos.coords.longitude;
-  }catch(e){showToast('Could not get GPS location — sending alert anyway','warn');}
-
-  try{
-    const r=await authFetch('/api/sos_alert',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({lat,lng,ride_id:activeRideId})});
-    const d=await r.json();
-    if(d.success){
-      showToast('🚨 SOS SENT! '+d.message,'success');
-      // Show confirmation overlay
-      const overlay=document.createElement('div');
-      overlay.style.cssText='position:fixed;inset:0;background:rgba(198,40,40,0.95);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;color:white;text-align:center;padding:24px';
-      overlay.innerHTML=`
-        <div style="font-size:80px">🚨</div>
-        <h1 style="font-size:2rem;margin:0">SOS ALERT SENT!</h1>
-        <p style="font-size:1.1rem;opacity:0.9;max-width:400px">${d.message}</p>
-        ${d.maps_link?`<a href="${d.maps_link}" target="_blank" style="background:white;color:#C62828;padding:12px 28px;border-radius:8px;font-weight:700;text-decoration:none">📍 View Your Location</a>`:''}
-        <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.2);border:2px solid white;color:white;padding:10px 28px;border-radius:8px;cursor:pointer;font-weight:600;margin-top:8px">✕ Close</button>`;
-      document.body.appendChild(overlay);
-      setTimeout(()=>overlay.remove(),15000);
-    }else{
-      showToast('SOS failed: '+(d.message||'No emergency contact set'),'error');
-      showToast('Go to Profile → Add Emergency Contact first','warn');
-    }
-  }catch(e){showToast('SOS failed: '+e.message,'error');}
-  finally{
-    if(btn){btn.textContent='🚨 SEND SOS ALERT NOW';btn.disabled=false;}
-  }
-}
-
-async function logout(){await authFetch('/api/logout',{method:'POST'});window.location.href='/';}
-
-// Verify session on load, then load data
-(async function init(){
-  try{
-    const r=await authFetch('/api/session_check',{credentials:'include'});
-    const d=await r.json();
-    if(!d.logged_in){
-      showToast('Session expired — redirecting to login','warn');
-      setTimeout(()=>window.location.href='/login/passenger',1500);
-      return;
-    }
-  }catch(e){}
-  loadPassengerData();
-})();
-
-// ── PASSENGER GPS (sends own location every 5s) ──────────────────────────────
-let _paxLastGps = 0;
-let _paxGpsId = null;
-
-function startPassengerGPS() {
-  if (!navigator.geolocation || _paxGpsId) return;
-  _paxGpsId = navigator.geolocation.watchPosition(
-    function(pos) {
-      const now = Date.now();
-      if (now - _paxLastGps < 5000) return;
-      _paxLastGps = now;
-      const token = localStorage.getItem('rr_token') || '';
-      fetch('/api/update_location', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, type: 'passenger' }),
-        credentials: 'include'
-      }).catch(e => console.log('[GPS] pax error:', e));
-    },
-    function(err) { console.log('[GPS] pax error:', err.message); },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 4000 }
-  );
-}
-startPassengerGPS();
-
-// ── LIVE DRIVER TRACKING (polls every 5s when ride is active) ────────────────
-let _driverTrackInterval = null;
-let _trackedDriverId = null;
-
+// Live driver location polling every 5s
 function startDriverTracking(driverId) {
   if (_driverTrackInterval) clearInterval(_driverTrackInterval);
   _trackedDriverId = driverId;
@@ -845,22 +684,190 @@ function startDriverTracking(driverId) {
     try {
       const token = localStorage.getItem('rr_token') || '';
       const r = await fetch(`/api/get_driver_location?driver_id=${_trackedDriverId}`, {
-        headers: { 'Authorization': 'Bearer ' + token },
-        credentials: 'include'
+        headers: { 'Authorization': 'Bearer ' + token }, credentials: 'include'
       });
       const d = await r.json();
-      if (d.success && d.lat && passengerMap && driverMarker) {
-        driverMarker.setLatLng([d.lat, d.lng]);
-        console.log('[GPS] Driver at', d.lat, d.lng);
+      if (d.success && d.lat && d.lng && passengerMap) {
+        const icon = L.divIcon({
+          html: '<div style="background:#FFC107;border:3px solid #fff;border-radius:50%;width:20px;height:20px;box-shadow:0 2px 8px rgba(0,0,0,0.4)"></div>',
+          className: '', iconSize: [20, 20], iconAnchor: [10, 10]
+        });
+        if (!driverMarker) {
+          driverMarker = L.marker([d.lat, d.lng], { icon }).addTo(passengerMap).bindPopup('🚗 Driver');
+          document.getElementById('driverBadge').style.display = 'flex';
+        } else driverMarker.setLatLng([d.lat, d.lng]);
       }
-    } catch(e) { /* silent */ }
-  }, 5000); // poll every 5 seconds — safe for Render
+    } catch (e) {}
+  }, 5000);
 }
 
 function stopDriverTracking() {
   if (_driverTrackInterval) { clearInterval(_driverTrackInterval); _driverTrackInterval = null; }
   _trackedDriverId = null;
 }
+
+// Passive GPS — sends passenger location every 5s always
+function startPassengerGPS() {
+  if (!navigator.geolocation || _paxGpsId) return;
+  _paxGpsId = navigator.geolocation.watchPosition(pos => {
+    const now = Date.now();
+    if (now - _paxLastGps < 5000) return;
+    _paxLastGps = now;
+    const token = localStorage.getItem('rr_token') || '';
+    fetch('/api/update_location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      credentials: 'include',
+      body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, type: 'passenger' })
+    }).catch(() => {});
+  }, () => {}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 4000 });
+}
+
+function calcDistance(lat1, lon1, lat2, lon2) {
+  return haversine(lat1, lon1, lat2, lon2);
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ── END RIDE ───────────────────────────────────────────────────────────────────
+async function endRide() {
+  if (!confirm('End this ride?')) return;
+  clearInterval(trackingInterval);
+  stopDriverTracking();
+  const elapsedMin = rideStartTime ? Math.round((Date.now() - rideStartTime) / 60000) : 0;
+  try {
+    const r = await authFetch('/api/complete_ride', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ distance_km: totalDistance, ride_id: activeRideId, duration_minutes: elapsedMin })
+    });
+    const d = await r.json();
+    if (d.success) {
+      const rideData = d.ride || d;
+      const fare = rideData.fare || Math.round(25 + totalDistance * 12 + elapsedMin);
+      const distCharge = (totalDistance * 12).toFixed(2);
+      const timeCharge = elapsedMin.toFixed(2);
+      showToast('Ride ended! Fare: ₹' + fare, 'success');
+      document.getElementById('activeRideBanner').classList.add('hidden');
+      document.getElementById('rideStatusBadge').classList.add('hidden');
+      document.getElementById('endRideBtn').style.display = 'none';
+      document.getElementById('sosBtn').classList.add('hidden');
+      document.getElementById('sosPanelTracking').style.display = 'none';
+      // Show fare breakdown
+      document.getElementById('paymentSection').style.display = 'block';
+      document.getElementById('finalFare').textContent = '₹' + fare;
+      document.getElementById('pay-dist').textContent = totalDistance.toFixed(2);
+      document.getElementById('pay-dist-charge').textContent = '₹' + distCharge;
+      document.getElementById('pay-time').textContent = elapsedMin;
+      document.getElementById('pay-time-charge').textContent = '₹' + timeCharge;
+      if (rideData.payment_qr) {
+        document.getElementById('paymentQRDisplay').innerHTML =
+          `<img src="${rideData.payment_qr}" style="max-width:200px;border-radius:10px;border:2px solid var(--border)">`;
+      }
+      activeRideId = null;
+    } else showToast(d.message, 'error');
+  } catch (e) { showToast('Failed to end ride', 'error'); }
+}
+
+async function confirmPayment() {
+  showToast('Payment confirmed! Thank you for riding with RakshaRide.', 'success');
+  document.getElementById('paymentSection').style.display = 'none';
+  loadPassengerData();
+}
+
+// ── PROFILE ────────────────────────────────────────────────────────────────────
+async function saveProfile() {
+  const data = { name: document.getElementById('editName').value, phone: document.getElementById('editPhone').value };
+  try {
+    const r = await authFetch('/api/update_passenger_profile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    });
+    const d = await r.json();
+    if (d.success) { showToast('Profile updated!', 'success'); loadPassengerData(); }
+    else showToast(d.message, 'error');
+  } catch (e) { showToast('Failed to save', 'error'); }
+}
+
+async function saveEmergencyContact() {
+  const data = {
+    emergency_name: document.getElementById('emName').value.trim(),
+    emergency_mobile: document.getElementById('emMobile').value.trim(),
+    emergency_email: document.getElementById('emEmail').value.trim()
+  };
+  if (!data.emergency_mobile && !data.emergency_email) {
+    showToast('Enter at least one emergency contact', 'warn'); return;
+  }
+  try {
+    const r = await authFetch('/api/update_emergency_contact', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', body: JSON.stringify(data)
+    });
+    const d = await r.json();
+    if (d.success) showToast('Emergency contact saved! 🚨', 'success');
+    else showToast(d.message, 'error');
+  } catch (e) { showToast('Failed to save emergency contact', 'error'); }
+}
+
+// ── SOS ────────────────────────────────────────────────────────────────────────
+async function triggerSOS() {
+  if (!confirm('🚨 SEND SOS ALERT?\n\nThis will immediately alert your emergency contact with your location.\n\nPress OK to confirm.')) return;
+  const btn = document.getElementById('sosBtn');
+  if (btn) { btn.textContent = '📡 Sending...'; btn.disabled = true; }
+  let lat = null, lng = null;
+  try {
+    const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
+    lat = pos.coords.latitude; lng = pos.coords.longitude;
+  } catch (e) {}
+  try {
+    const r = await authFetch('/api/sos_alert', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lng, ride_id: activeRideId })
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast('🚨 SOS SENT! ' + d.message, 'success');
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(198,40,40,0.95);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;color:white;text-align:center;padding:24px';
+      overlay.innerHTML = `<div style="font-size:80px">🚨</div><h1 style="font-size:2rem;margin:0">SOS ALERT SENT!</h1>
+        <p style="font-size:1.1rem;opacity:0.9;max-width:400px">${d.message}</p>
+        ${d.maps_link ? `<a href="${d.maps_link}" target="_blank" style="background:white;color:#C62828;padding:12px 28px;border-radius:8px;font-weight:700;text-decoration:none">📍 View Your Location</a>` : ''}
+        <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.2);border:2px solid white;color:white;padding:10px 28px;border-radius:8px;cursor:pointer;font-weight:600">✕ Close</button>`;
+      document.body.appendChild(overlay);
+      setTimeout(() => overlay.remove(), 15000);
+    } else {
+      showToast('SOS failed: ' + (d.message || 'No emergency contact set'), 'error');
+      showToast('Go to Profile → Add Emergency Contact first', 'warn');
+    }
+  } catch (e) { showToast('SOS failed: ' + e.message, 'error'); }
+  finally { if (btn) { btn.textContent = '🚨 SOS'; btn.disabled = false; } }
+}
+
+// ── LOGOUT ─────────────────────────────────────────────────────────────────────
+async function logout() {
+  try { await authFetch('/api/logout', { method: 'POST' }); } catch (e) {}
+  window.location.href = '/';
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────────────
+(async function init() {
+  try {
+    const r = await authFetch('/api/session_check', { credentials: 'include' });
+    const d = await r.json();
+    if (!d.logged_in) {
+      showToast('Session expired — redirecting', 'warn');
+      setTimeout(() => window.location.href = '/login/passenger', 1500);
+      return;
+    }
+  } catch (e) {}
+  loadPassengerData();
+  startPassengerGPS();
+})();
 </script>
 </body>
 </html>

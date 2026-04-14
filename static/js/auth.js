@@ -63,14 +63,20 @@ async function authFetch(url, options = {}) {
         bodyData = { success: false, message: bodyText || 'Invalid response' };
     }
 
-    // Handle 401 — redirect to login
+    // Handle 401 — redirect to login only if no token at all
     if (response.status === 401) {
         const code = bodyData && bodyData.code;
-        if (code === 'AUTH_REQUIRED' || !token) {
+        if (code === 'AUTH_REQUIRED') {
             clearToken();
             const userType = localStorage.getItem(RR_USER_TYPE_KEY) || 'passenger';
-            // Small delay so current function can handle the null return
-            setTimeout(() => { window.location.href = `/login/${userType}`; }, 500);
+            setTimeout(() => { window.location.href = `/login/${userType}`; }, 800);
+            return null;
+        }
+        // If we have a token but got 401, token may be expired — clear and redirect
+        if (!token) {
+            clearToken();
+            const userType = localStorage.getItem(RR_USER_TYPE_KEY) || 'passenger';
+            setTimeout(() => { window.location.href = `/login/${userType}`; }, 800);
             return null;
         }
     }
