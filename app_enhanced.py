@@ -351,7 +351,13 @@ def sign_qr_payload(id, name, vehicle, mobile):
     }
 
 # -- DATABASE HELPER ----------------------------------------------------------
-DB_PATH = 'database_enhanced.db'
+# On Render: set DB_PATH env var to /var/data/database_enhanced.db
+# (requires a Render Disk mounted at /var/data)
+# Default falls back to local file for development
+_default_db = os.path.join(os.environ.get('RENDER_DISK_PATH', ''), 'database_enhanced.db') \
+    if os.environ.get('RENDER_DISK_PATH') else 'database_enhanced.db'
+DB_PATH = os.environ.get('DB_PATH', _default_db)
+print(f"[DB] Using database at: {DB_PATH}")
 import threading
 _db_local = threading.local()
 
@@ -3930,7 +3936,7 @@ def api_driver_profile():
     did, err = _require_driver()
     if err: return err
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("""SELECT id, name, age, mobile, email, vehicle_number, vehicle_type,
                      rc_number, license_number, aadhaar_number, role, owner_id,
@@ -3973,7 +3979,7 @@ def api_driver_profile():
                 if qr_img:
                     driver['qr_image'] = qr_img
                     # Save it so we don't regenerate every time
-                    conn2 = sqlite3.connect('database_enhanced.db')
+                    conn2 = sqlite3.connect(DB_PATH)
                     conn2.execute("UPDATE drivers SET qr_code=? WHERE id=?", (qr_img, driver['id']))
                     conn2.commit(); conn2.close()
                 else:
@@ -3989,7 +3995,7 @@ def api_passenger_profile():
     pid, err = _require_passenger()
     if err: return err
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("""SELECT id, name, phone, email, total_rides, total_spent,
                      emergency_name, emergency_mobile, emergency_email
@@ -4010,7 +4016,7 @@ def api_toggle_availability():
     did, err = _require_driver()
     if err: return err
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT is_available FROM drivers WHERE id = ?", (did,))
         row = c.fetchone()
@@ -4028,7 +4034,7 @@ def api_update_driver_profile():
     if err: return err
     try:
         data = request.get_json()
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("UPDATE drivers SET name=?, age=?, mobile=? WHERE id=?",
                   (data.get('name'), data.get('age'), data.get('mobile'), did))
@@ -4048,7 +4054,7 @@ def api_update_passenger_profile():
         phone = (data.get('phone') or '').strip()
         if not name:
             return jsonify({"success": False, "message": "Name is required"}), 400
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("UPDATE passengers SET name=?, phone=? WHERE id=?", (name, phone, pid))
         conn.commit()
@@ -4063,7 +4069,7 @@ def api_driver_ride_history():
     if err: return err
     try:
         limit = request.args.get('limit', 100, type=int)
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("""SELECT id, passenger_name, status, fare, distance_km,
                      duration_minutes, payment_status, created_at
@@ -4082,7 +4088,7 @@ def api_passenger_ride_history():
     if err: return err
     try:
         limit = request.args.get('limit', 100, type=int)
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("""SELECT id, driver_name, status, fare, distance_km,
                      duration_minutes, payment_status, created_at
@@ -4154,7 +4160,7 @@ def api_get_driver_documents():
     if not uid:
         return jsonify({"success": False, "message": "Driver authentication required"}), 401
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT role, owner_id, verification_status FROM drivers WHERE id = ?", (uid,))
         row = c.fetchone()
@@ -4224,7 +4230,7 @@ def api_get_single_document(doc_type):
     if not uid:
         return jsonify({"success": False, "message": "Driver authentication required"}), 401
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT role, owner_id FROM drivers WHERE id = ?", (uid,))
         row = c.fetchone()
@@ -4258,7 +4264,7 @@ def api_get_payment_qr():
     if not uid:
         return jsonify({"success": False}), 401
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT payment_qr_image, upi_id FROM drivers WHERE id = ?", (uid,))
         row = c.fetchone()
@@ -4285,7 +4291,7 @@ def api_update_location():
         if not lat or not lng:
             return jsonify({"success": False, "message": "lat/lng required"}), 400
 
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
 
         # Upsert into live_locations (single row per user — no duplicates)
@@ -4318,7 +4324,7 @@ def api_get_driver_location():
         driver_id = request.args.get('driver_id', type=int)
         ride_id   = request.args.get('ride_id')
 
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
 
         if not driver_id and ride_id:
@@ -4354,7 +4360,7 @@ def api_get_driver_location():
 def api_lookup_driver():
     driver_id = request.args.get('id', '').strip()
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("""SELECT id, name, vehicle_number, vehicle_type, rating, total_rides,
                      unique_id, verification_status, is_available, gender, profile_image
@@ -4426,7 +4432,7 @@ def api_nearby_drivers():
         radius = request.args.get('radius', 10, type=float)
         gender_filter = request.args.get('gender', '').strip()  # 'Male', 'Female', or ''
 
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         query = """SELECT id, name, vehicle_number, vehicle_type, rating, total_rides,
                    unique_id, latitude, longitude, is_available, gender
@@ -4477,7 +4483,7 @@ def api_owner_upload_doc():
     try:
         owner_id = current_user['user_id']
         # Verify this user is an OWNER
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT role FROM drivers WHERE id=?", (owner_id,))
         row = c.fetchone()
@@ -4512,7 +4518,7 @@ def api_owner_delete_doc():
         return jsonify({"success": False, "message": "Driver authentication required"}), 401
     try:
         owner_id = current_user['user_id']
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT role FROM drivers WHERE id=?", (owner_id,))
         row = c.fetchone()
@@ -4575,7 +4581,7 @@ def api_debug_docs():
     if not current_user or current_user.get('user_type') != 'driver':
         return jsonify({"error": "Driver auth required"}), 401
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         uid = current_user['user_id']
         c.execute("SELECT role, owner_id FROM drivers WHERE id=?", (uid,))
@@ -4614,7 +4620,7 @@ def db_viewer_page():
 def api_db_tables():
     """Get all table names and row counts"""
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = []
@@ -4641,7 +4647,7 @@ def api_db_table_data(table_name):
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         offset = (page - 1) * per_page
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         # Get columns
@@ -4686,7 +4692,7 @@ def api_db_table_data(table_name):
 def api_db_stats():
     """Get live database statistics"""
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         stats = {}
         tables = ['passengers','drivers','rides','payments','driver_documents',
@@ -4729,7 +4735,7 @@ def api_db_edit_row(table_name, row_id):
             return jsonify({"success": False, "message": "No fields to update"}), 400
         set_clause = ', '.join([f"[{k}] = ?" for k in updates])
         values = list(updates.values()) + [row_id]
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute(f"UPDATE [{table_name}] SET {set_clause} WHERE id = ?", values)
         conn.commit()
@@ -4753,7 +4759,7 @@ def api_db_delete_row(table_name, row_id):
     if table_name not in allowed:
         return jsonify({"success": False, "message": "Table not allowed"}), 403
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute(f"DELETE FROM [{table_name}] WHERE id = ?", (row_id,))
         conn.commit()
@@ -4772,7 +4778,7 @@ def api_db_verify_driver(driver_id):
     if not session.get('is_admin'):
         return jsonify({"success": False, "message": "Admin access required"}), 403
     try:
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("UPDATE drivers SET verification_status='verified' WHERE id=?", (driver_id,))
         conn.commit()
@@ -4796,7 +4802,7 @@ def api_update_emergency_contact():
         emergency_email  = (data.get('emergency_email') or '').strip()
         if not emergency_mobile and not emergency_email:
             return jsonify({"success": False, "message": "Provide at least one emergency contact (mobile or email)"}), 400
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("""UPDATE passengers SET emergency_name=?, emergency_mobile=?, emergency_email=?
                      WHERE id=?""",
@@ -4823,7 +4829,7 @@ def api_sos_alert():
         ride_id = data.get('ride_id')
         uid     = pid
 
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
 
         # Get passenger + emergency contact
@@ -4952,7 +4958,7 @@ def api_sos_alert():
 
         # Log to DB
         try:
-            conn2 = sqlite3.connect('database_enhanced.db')
+            conn2 = sqlite3.connect(DB_PATH)
             c2 = conn2.cursor()
             c2.execute("""CREATE TABLE IF NOT EXISTS sos_alerts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -5216,7 +5222,7 @@ def api_update_payment_qr():
         data = request.get_json()
         qr_image = data.get('qr_image', '')
         upi_id = data.get('upi_id', '')
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("UPDATE drivers SET payment_qr_image=?, upi_id=? WHERE id=?",
                   (qr_image, upi_id, current_user['user_id']))
@@ -5236,7 +5242,7 @@ def api_get_passenger_location():
     try:
         ride_id = request.args.get('ride_id')
         passenger_id = request.args.get('passenger_id', type=int)
-        conn = sqlite3.connect('database_enhanced.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         if not passenger_id and ride_id:
             c.execute("SELECT passenger_id FROM rides WHERE id=?", (ride_id,))
