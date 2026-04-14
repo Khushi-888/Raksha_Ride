@@ -342,21 +342,34 @@ a{text-decoration:none;color:inherit}
 }
 
 @media(max-width:768px){
-  /* Sidebar hidden — replaced by slide-in panel */
+  /* Sidebar hidden off-screen — slides in on toggle */
   .sidebar{
-    position:fixed;left:-280px;top:var(--nav-h);bottom:0;width:280px;
-    z-index:997;transition:left 0.3s ease;box-shadow:4px 0 20px rgba(0,0,0,0.15);
-    height:calc(100vh - var(--nav-h));overflow-y:auto;
+    position:fixed !important;
+    left:-100% !important;
+    top:var(--nav-h);
+    bottom:0;
+    width:280px;
+    z-index:997;
+    transition:left 0.3s ease;
+    box-shadow:4px 0 20px rgba(0,0,0,0.2);
+    height:calc(100vh - var(--nav-h));
+    overflow-y:auto;
   }
-  .sidebar.open{left:0}
+  .sidebar.open{
+    left:0 !important;
+  }
   .sidebar-overlay{
-    display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);
-    z-index:996;top:var(--nav-h)
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.5);
+    z-index:996;
+    top:var(--nav-h);
   }
-  .sidebar.open ~ .sidebar-overlay,
-  .sidebar-overlay.open{display:block}
+  .sidebar-overlay.open{display:block !important}
 
-  .dash-main{padding:16px}
+  .dash-layout{display:block}
+  .dash-main{padding:16px;width:100%;box-sizing:border-box}
   .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
   .user-boxes{grid-template-columns:1fr}
   .hero{padding:40px 0;text-align:center}
@@ -365,11 +378,10 @@ a{text-decoration:none;color:inherit}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
   .tracking-info{grid-template-columns:repeat(2,1fr)}
   .nav-links .nav-link{display:none}
-  .mobile-menu-btn{display:flex}
+  .mobile-menu-btn{display:flex !important}
 
   /* Dashboard header stacks on mobile */
   .dash-header{flex-direction:column;align-items:flex-start;gap:12px}
-  .dash-header > *:last-child{width:100%}
   .dash-header button{width:100%}
 
   /* Stats 2-col on mobile */
@@ -377,50 +389,31 @@ a{text-decoration:none;color:inherit}
   .stat-card{padding:16px}
   .stat-value{font-size:1.4rem}
 
-  /* Section cards full width */
-  .section-card{padding:16px}
-
-  /* 2-col grids become 1-col */
-  [style*="grid-template-columns:1fr 2fr"],
-  [style*="grid-template-columns:1fr 1fr"]{
-    display:block!important
+  /* 4-col grids → 2-col */
+  [style*="grid-template-columns:repeat(4,1fr)"]{
+    grid-template-columns:repeat(2,1fr) !important
   }
 
   /* Map full width */
-  .map-container,[id$="Map"]{height:300px!important}
+  #driverMap,#passengerMap,#nearbyMap{height:300px !important}
 
-  /* Tracking stats 2-col */
-  [style*="grid-template-columns:repeat(4,1fr)"]{
-    grid-template-columns:repeat(2,1fr)!important
-  }
-
-  /* Buttons full width in header */
-  .dash-header .btn{width:100%;justify-content:center}
-
-  /* Toast on mobile */
+  /* Toast on mobile — bottom */
   .toast-container{top:auto;bottom:20px;right:10px;left:10px}
   .toast{min-width:unset;width:100%}
 
-  /* Scanner box smaller */
+  /* Scanner box */
   .scanner-box{max-width:100%}
 
-  /* QR display */
-  .qr-display img{max-width:160px}
-
   /* Doc grid 1-col */
-  #docsGrid{grid-template-columns:1fr!important}
-
-  /* Payment section */
-  [style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
+  #docsGrid{grid-template-columns:1fr !important}
 
   /* Navbar */
-  .navbar .container{padding:0 16px}
-  .nav-logo .logo-text{display:block}
+  .navbar .container{padding:0 12px}
 }
 
 @media(max-width:480px){
   :root{--nav-h:60px}
-  .stats-grid{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
   .user-box{padding:28px 20px}
   .user-box .box-icon{font-size:56px}
   .user-box .box-title{font-size:1.5rem}
@@ -445,8 +438,14 @@ a{text-decoration:none;color:inherit}
   /* Form inputs */
   .form-input,.form-select{padding:11px 14px;font-size:0.9rem}
 
-  /* Sidebar full width on tiny screens */
-  .sidebar{width:100%}
+  /* Sidebar 85% width on small phones */
+  .sidebar{width:85% !important}
+
+  /* Navbar compact — hide "Set Busy" text, keep icons */
+  .nav-links{gap:6px}
+  .nav-links .btn-sm{padding:6px 10px;font-size:0.78rem}
+  #availBtn{font-size:0.72rem;padding:5px 8px}
+  #statusText{display:none}
 }
 
 /* ── MOBILE SIDEBAR TOGGLE ── */

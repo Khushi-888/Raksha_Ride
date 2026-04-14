@@ -389,24 +389,28 @@ function showSection(name) {
   if (name === 'tracking') initPassengerMap();
   if (name === 'history') loadRideHistory();
   // Close mobile sidebar
-  const sidebar = document.getElementById('mainSidebar');
-  sidebar.classList.remove('open');
-  const overlay = document.getElementById('sidebarOverlay');
-  if (overlay) overlay.classList.remove('open');
+  closeMobileSidebar();
 }
 
 function toggleMobileSidebar() {
   const sidebar = document.getElementById('mainSidebar');
-  sidebar.classList.toggle('open');
+  const isOpen = sidebar.classList.toggle('open');
   let overlay = document.getElementById('sidebarOverlay');
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'sidebarOverlay';
-    overlay.className = 'sidebar-overlay';
-    overlay.onclick = () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); };
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:996;display:none;top:0';
+    overlay.onclick = closeMobileSidebar;
     document.body.appendChild(overlay);
   }
-  overlay.classList.toggle('open', sidebar.classList.contains('open'));
+  overlay.style.display = isOpen ? 'block' : 'none';
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('mainSidebar');
+  if (sidebar) sidebar.classList.remove('open');
+  const overlay = document.getElementById('sidebarOverlay');
+  if (overlay) overlay.style.display = 'none';
 }
 
 // ── LOAD DATA ──────────────────────────────────────────────────────────────────
