@@ -4843,17 +4843,19 @@ def api_sos_alert():
                 "message": "No emergency contact set. Go to Profile → Emergency Contact and add one first."
             }), 400
 
-        # Get driver info from active ride
-        driver_name, vehicle_number = "Unknown", "Unknown"
-        if ride_id:
-            c.execute("SELECT driver_name, driver_vehicle FROM rides WHERE id=? AND passenger_id=?",
-                      (ride_id, uid))
-            ride_row = c.fetchone()
-            if ride_row:
-                driver_name = ride_row[0] or "Unknown"
-                vehicle_number = ride_row[1] or "Unknown"
+        # Get driver info — try ride_id first, then latest active ride
+        driver_name, vehicle_number, driver_mobile = "Unknown", "Unknown", ""
+        c.execute("""SELECT r.driver_name, r.driver_vehicle, d.mobile
+                     FROM rides r LEFT JOIN drivers d ON r.driver_id=d.id
+                     WHERE r.passenger_id=? AND r.status='active'
+                     ORDER BY r.created_at DESC LIMIT 1""", (uid,))
+        ride_row = c.fetchone()
+        if ride_row:
+            driver_name    = ride_row[0] or "Unknown"
+            vehicle_number = ride_row[1] or "Unknown"
+            driver_mobile  = ride_row[2] or ""
 
-        # If no lat/lng from frontend, try last known location from DB
+        # Location: frontend GPS first, then DB fallback
         if not lat or not lng:
             c.execute("SELECT latitude, longitude FROM live_locations WHERE user_id=? AND role='passenger'", (uid,))
             loc_row = c.fetchone()
@@ -4862,89 +4864,91 @@ def api_sos_alert():
 
         conn.close()
 
-        maps_link  = f"https://maps.google.com/?q={lat},{lng}" if lat and lng else "Location unavailable"
-        alert_time = datetime.now().strftime("%d %b %Y, %I:%M %p")
+        has_location = bool(lat and lng)
+        maps_link    = f"https://maps.google.com/?q={lat},{lng}" if has_location else None
+        loc_text     = f"{float(lat):.5f}, {float(lng):.5f}" if has_location else "Not available"
+        alert_time   = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
-        # ── Build email ────────────────────────────────────────────────────────
         subject = f"🚨 SOS EMERGENCY — {pax_name} needs help NOW!"
-        html_body = f"""
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-  <div style="background:#C62828;color:white;padding:28px;border-radius:12px 12px 0 0;text-align:center">
-    <div style="font-size:48px;margin-bottom:8px">🚨</div>
-    <h1 style="margin:0;font-size:26px;font-weight:900">EMERGENCY SOS ALERT</h1>
-    <p style="margin:8px 0 0;opacity:0.9;font-size:15px">Someone needs immediate help</p>
-  </div>
-  <div style="background:#fff;border:2px solid #C62828;border-top:none;padding:28px;border-radius:0 0 12px 12px">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-      <tr style="background:#FFF8E1">
-        <td style="padding:12px 16px;font-weight:bold;width:40%">👤 Passenger</td>
-        <td style="padding:12px 16px">{pax_name}</td>
-      </tr>
-      <tr>
-        <td style="padding:12px 16px;font-weight:bold">📱 Phone</td>
-        <td style="padding:12px 16px">{pax_phone or 'Not provided'}</td>
-      </tr>
-      <tr style="background:#FFF8E1">
-        <td style="padding:12px 16px;font-weight:bold">🚗 Driver</td>
-        <td style="padding:12px 16px">{driver_name}</td>
-      </tr>
-      <tr>
-        <td style="padding:12px 16px;font-weight:bold">🚘 Vehicle</td>
-        <td style="padding:12px 16px">{vehicle_number}</td>
-      </tr>
-      <tr style="background:#FFF8E1">
-        <td style="padding:12px 16px;font-weight:bold">🕐 Alert Time</td>
-        <td style="padding:12px 16px">{alert_time}</td>
-      </tr>
-      <tr>
-        <td style="padding:12px 16px;font-weight:bold">📍 Location</td>
-        <td style="padding:12px 16px">{f'Lat: {lat:.5f}, Lng: {lng:.5f}' if lat else 'Not available'}</td>
-      </tr>
-    </table>
-    <div style="text-align:center;margin-bottom:20px">
+
+        map_button = f"""
+    <div style="text-align:center;margin:24px 0">
       <a href="{maps_link}" style="display:inline-block;background:#C62828;color:white;
-         padding:16px 36px;border-radius:10px;text-decoration:none;font-weight:900;font-size:17px;
-         letter-spacing:0.5px">
+         padding:18px 36px;border-radius:12px;text-decoration:none;font-weight:900;
+         font-size:18px;letter-spacing:0.5px;box-shadow:0 4px 15px rgba(198,40,40,0.4)">
         📍 OPEN LIVE LOCATION IN GOOGLE MAPS
       </a>
+      <br><small style="color:#999;font-size:12px;margin-top:8px;display:block">
+        Coordinates: {loc_text}
+      </small>
+    </div>""" if has_location else """
+    <div style="background:#FFF8E1;border:2px dashed #FFC107;border-radius:10px;
+         padding:16px;text-align:center;margin:20px 0;color:#7B5800">
+      ⚠️ GPS location was not available at time of alert.<br>
+      <strong>Call the passenger directly: """ + (pax_phone or 'number not provided') + """</strong>
+    </div>"""
+
+        html_body = f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5">
+<div style="max-width:600px;margin:20px auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.15)">
+  <div style="background:#C62828;padding:32px 24px;text-align:center">
+    <div style="font-size:60px;margin-bottom:8px">🚨</div>
+    <h1 style="margin:0;color:white;font-size:28px;font-weight:900">EMERGENCY SOS ALERT</h1>
+    <p style="margin:8px 0 0;color:rgba(255,255,255,0.9);font-size:16px">Immediate action required</p>
+  </div>
+  <div style="background:#FFEBEE;border-left:6px solid #C62828;padding:16px 24px;font-size:15px;color:#B71C1C;font-weight:700">
+    ⚠️ {pax_name} has triggered an emergency SOS. Please contact them immediately!
+  </div>
+  <div style="padding:28px">
+    <table style="width:100%;border-collapse:collapse;font-size:15px;margin-bottom:8px">
+      <tr style="background:#FFF8E1"><td style="padding:13px 16px;font-weight:bold;color:#555;width:38%">👤 Passenger</td><td style="padding:13px 16px;font-weight:700">{pax_name}</td></tr>
+      <tr><td style="padding:13px 16px;font-weight:bold;color:#555">📱 Phone</td><td style="padding:13px 16px"><a href="tel:{pax_phone}" style="color:#1565C0;font-weight:700;text-decoration:none">{pax_phone or 'Not provided'}</a></td></tr>
+      <tr style="background:#FFF8E1"><td style="padding:13px 16px;font-weight:bold;color:#555">🚗 Driver</td><td style="padding:13px 16px">{driver_name}{(' — ' + driver_mobile) if driver_mobile else ''}</td></tr>
+      <tr><td style="padding:13px 16px;font-weight:bold;color:#555">🚘 Vehicle</td><td style="padding:13px 16px">{vehicle_number}</td></tr>
+      <tr style="background:#FFF8E1"><td style="padding:13px 16px;font-weight:bold;color:#555">🕐 Alert Time</td><td style="padding:13px 16px">{alert_time}</td></tr>
+      <tr><td style="padding:13px 16px;font-weight:bold;color:#555">📍 GPS</td><td style="padding:13px 16px;font-family:monospace;color:#C62828;font-weight:700">{loc_text}</td></tr>
+    </table>
+    {map_button}
+    <div style="background:#FFEBEE;border:2px solid #C62828;border-radius:10px;padding:18px;margin-top:16px">
+      <p style="margin:0 0 8px;color:#C62828;font-weight:900;font-size:16px">🆘 IMMEDIATE ACTIONS:</p>
+      <ol style="margin:0;padding-left:20px;color:#B71C1C;font-size:14px;line-height:2">
+        <li>Call <strong>{pax_name}</strong> at <strong>{pax_phone or 'number not available'}</strong></li>
+        <li>If no answer, call emergency services: <strong>112</strong></li>
+        {'<li>Share the Google Maps link above with police/ambulance</li>' if has_location else ''}
+      </ol>
     </div>
-    <div style="background:#FFEBEE;border-left:4px solid #C62828;padding:14px;border-radius:6px">
-      <p style="margin:0;color:#C62828;font-weight:bold">⚠️ Please contact {pax_name} immediately or call emergency services (112).</p>
-    </div>
-    <p style="margin-top:16px;color:#999;font-size:12px;text-align:center">
+    <p style="margin-top:20px;color:#999;font-size:12px;text-align:center">
       Automated SOS from RakshaRide Safety System • {alert_time}
     </p>
   </div>
-</div>"""
+</div>
+</body></html>"""
 
         sent_to = []
 
-        # SOS is critical — try synchronous send first, then async backup
+        # Send to emergency email — synchronous (critical path)
         if em_email:
             ok = _smtp_send(em_email, subject, html_body)
+            sent_to.append(em_email)
             if ok:
-                sent_to.append(em_email)
-                print(f"[SOS] ✅ Alert sent to {em_email}")
+                print(f"[SOS] ✅ Sent to {em_email}")
             else:
-                # Retry async as backup
-                send_email_async(em_email, subject, html_body)
-                sent_to.append(em_email)
-                print(f"[SOS] ⚠️ Sync failed, async retry queued for {em_email}")
+                send_email_async(em_email, subject, html_body)  # async retry
+                print(f"[SOS] ⚠️ Sync failed, async retry for {em_email}")
 
         # Confirmation to passenger's own email
-        if pax_email:
-            confirm_body = f"""
+        if pax_email and pax_email != em_email:
+            confirm_html = f"""
 <div style="font-family:Arial,sans-serif;padding:24px;max-width:500px;margin:0 auto">
   <div style="background:#C62828;color:white;padding:20px;border-radius:10px;text-align:center;margin-bottom:20px">
     <h2 style="margin:0">🚨 Your SOS Alert Was Sent</h2>
   </div>
-  <p>Your emergency alert was dispatched to: <strong>{em_name or em_email or em_mobile}</strong></p>
-  <p><strong>📍 Location:</strong><br>
-     <a href="{maps_link}" style="color:#C62828">{maps_link}</a></p>
+  <p>Alert dispatched to: <strong>{em_name or em_email or em_mobile}</strong></p>
+  {'<p><strong>📍 Location shared:</strong><br><a href="' + maps_link + '" style="color:#C62828;font-weight:700">' + maps_link + '</a></p>' if has_location else '<p style="color:#C62828">⚠️ GPS location was not available. Enable location permission for better SOS.</p>'}
   <p><strong>🕐 Time:</strong> {alert_time}</p>
   <p style="color:#666;font-size:13px">Stay safe. Call 112 if in immediate danger.</p>
 </div>"""
-            send_email_async(pax_email, "✅ [SOS Sent] Your emergency alert was dispatched", confirm_body)
+            send_email_async(pax_email, "✅ [SOS Sent] Your emergency alert was dispatched", confirm_html)
 
         # Log to DB
         try:
@@ -4969,14 +4973,16 @@ def api_sos_alert():
         contact_display = em_name or em_email or em_mobile or 'emergency contact'
         return jsonify({
             "success": True,
-            "message": f"SOS alert sent to {contact_display}! Check your email for confirmation.",
+            "message": f"SOS alert sent to {contact_display}!",
             "sent_to": sent_to,
-            "maps_link": maps_link,
-            "contact": contact_display
+            "maps_link": maps_link or "Location unavailable",
+            "contact": contact_display,
+            "location_shared": has_location
         })
 
     except Exception as e:
         print(f"[SOS] Error: {e}")
+        import traceback; traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
 
 # ============================================================================
