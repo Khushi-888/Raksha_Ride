@@ -2321,9 +2321,9 @@ def update_upi_id():
 def start_ride():
     """Start a new ride — supports both session and JWT auth"""
     try:
-        current_user = get_current_user()
-        if not current_user or current_user.get('user_type') != 'passenger':
-            return jsonify({"success": False, "message": "Passenger authentication required"}), 401
+        pid, err = _require_passenger()
+        if err: return err
+        passenger_id = pid
 
         data = request.get_json()
         driver_id = data.get('driver_id')
@@ -2334,8 +2334,6 @@ def start_ride():
 
         if not driver_id:
             return jsonify({"success": False, "message": "Driver ID required"}), 400
-
-        passenger_id = current_user['user_id']
 
         conn = get_db_conn()
         c = conn.cursor()
@@ -3830,16 +3828,14 @@ def api_driver_profile():
 
 @app.route('/api/passenger_profile')
 def api_passenger_profile():
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({"success": False, "message": "Not authenticated — please login", "code": "AUTH_REQUIRED"}), 401
+    pid, err = _require_passenger()
+    if err: return err
     try:
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
         c.execute("""SELECT id, name, phone, email, total_rides, total_spent,
                      emergency_name, emergency_mobile, emergency_email
-                     FROM passengers WHERE id = ?""",
-                  (current_user['user_id'],))
+                     FROM passengers WHERE id = ?""", (pid,))
         row = c.fetchone()
         conn.close()
         if not row:
@@ -3886,9 +3882,8 @@ def api_update_driver_profile():
 
 @app.route('/api/update_passenger_profile', methods=['POST'])
 def api_update_passenger_profile():
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({"success": False, "message": "Not authenticated — please login", "code": "AUTH_REQUIRED"}), 401
+    pid, err = _require_passenger()
+    if err: return err
     try:
         data = request.get_json()
         name  = (data.get('name') or '').strip()
@@ -3897,8 +3892,7 @@ def api_update_passenger_profile():
             return jsonify({"success": False, "message": "Name is required"}), 400
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
-        c.execute("UPDATE passengers SET name=?, phone=? WHERE id=?",
-                  (name, phone, current_user['user_id']))
+        c.execute("UPDATE passengers SET name=?, phone=? WHERE id=?", (name, phone, pid))
         conn.commit()
         conn.close()
         return jsonify({"success": True, "message": "Profile updated successfully!"})
@@ -4635,11 +4629,10 @@ def api_db_verify_driver(driver_id):
 
 @app.route('/api/update_emergency_contact', methods=['POST'])
 def api_update_emergency_contact():
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({"success": False, "message": "Not authenticated — please login", "code": "AUTH_REQUIRED"}), 401
+    pid, err = _require_passenger()
+    if err: return err
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         emergency_name   = (data.get('emergency_name') or '').strip()
         emergency_mobile = (data.get('emergency_mobile') or '').strip()
         emergency_email  = (data.get('emergency_email') or '').strip()
@@ -4649,7 +4642,7 @@ def api_update_emergency_contact():
         c = conn.cursor()
         c.execute("""UPDATE passengers SET emergency_name=?, emergency_mobile=?, emergency_email=?
                      WHERE id=?""",
-                  (emergency_name, emergency_mobile, emergency_email, current_user['user_id']))
+                  (emergency_name, emergency_mobile, emergency_email, pid))
         rows_updated = c.rowcount
         conn.commit()
         conn.close()
@@ -4662,16 +4655,15 @@ def api_update_emergency_contact():
 @app.route('/api/sos_alert', methods=['POST'])
 def api_sos_alert():
     """Send SOS emergency alert — emails emergency contact with live GPS location."""
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({"success": False, "message": "Not authenticated", "code": "AUTH_REQUIRED"}), 401
+    pid, err = _require_passenger()
+    if err: return err
 
     try:
         data    = request.get_json() or {}
         lat     = data.get('lat')
         lng     = data.get('lng')
         ride_id = data.get('ride_id')
-        uid     = current_user['user_id']
+        uid     = pid
 
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
