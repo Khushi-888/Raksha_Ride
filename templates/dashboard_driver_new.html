@@ -293,7 +293,26 @@
             <div style="background:var(--bg2);border-radius:10px;padding:12px"><div style="font-size:1.3rem;font-weight:800" id="sum-time">0 min</div><div style="font-size:0.75rem;color:var(--text2)">Duration</div></div>
           </div>
           <div id="sum-qr" style="margin-bottom:16px"></div>
-          <button class="btn btn-yellow" onclick="document.getElementById('rideSummary').style.display='none';loadDriverData()">✅ Done</button>
+          <!-- Payment confirmation from driver -->
+          <div id="paymentConfirmSection" style="background:linear-gradient(135deg,#E8F5E9,#E3F2FD);border:2px solid #4CAF50;border-radius:12px;padding:20px;margin-bottom:16px">
+            <div style="font-size:28px;margin-bottom:8px">💳</div>
+            <div style="font-weight:700;margin-bottom:4px">Did you receive the payment?</div>
+            <div style="font-size:0.85rem;color:var(--text2);margin-bottom:16px">Passenger has confirmed payment. Please verify and confirm.</div>
+            <button class="btn btn-yellow btn-full" onclick="driverConfirmPayment()" id="driverConfirmBtn">✅ Yes, I Received Payment</button>
+          </div>
+          <button class="btn btn-outline" onclick="document.getElementById('rideSummary').style.display='none';loadDriverData()">Close</button>
+        </div>
+      </div>
+
+      <!-- Payment notification banner (shown when passenger confirms) -->
+      <div id="paymentNotifBanner" style="display:none;background:linear-gradient(135deg,#E8F5E9,#FFF8E1);border:2px solid #4CAF50;border-radius:14px;padding:18px;margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:32px">💳</span>
+            <div><div style="font-weight:700">Passenger Confirmed Payment!</div>
+              <div style="font-size:0.85rem;color:var(--text2)" id="paymentNotifInfo">Fare: ₹0</div></div>
+          </div>
+          <button class="btn btn-yellow" onclick="driverConfirmPayment()" id="driverConfirmBannerBtn">✅ Yes, Confirm Received</button>
         </div>
       </div>
     </div>
@@ -814,28 +833,79 @@ async function completeRide() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ride_id: activeRideId, distance_km: totalDistance, duration_minutes: elapsedMin })
     });
+    if (!r) { showToast('Network error', 'error'); return; }
     const d = await r.json();
     if (d.success) {
       const rideData = d.ride || d;
       const fare = rideData.fare || Math.round(totalDistance * 10);
-      showToast('Ride completed! Fare: ₹' + fare, 'success');
+      showToast('Ride completed! Waiting for passenger payment...', 'success');
       document.getElementById('activeRideBanner').classList.add('hidden');
       document.getElementById('completeRideBtn').classList.add('hidden');
       document.getElementById('fareBreakdown').style.display = 'none';
-      activeRideId = null;
-      // Show ride summary
+      // Show ride summary with payment confirmation
       document.getElementById('rideSummary').style.display = 'block';
       document.getElementById('sum-fare').textContent = '₹' + fare;
       document.getElementById('sum-dist').textContent = totalDistance.toFixed(2) + ' km';
       document.getElementById('sum-time').textContent = elapsedMin + ' min';
       if (rideData.payment_qr) {
         document.getElementById('sum-qr').innerHTML =
-          `<div style="font-size:0.85rem;color:var(--text2);margin-bottom:8px">Payment QR for passenger:</div>
+          `<div style="font-size:0.85rem;color:var(--text2);margin-bottom:8px">Show this QR to passenger for payment:</div>
            <img src="${rideData.payment_qr}" style="max-width:180px;border-radius:10px;border:2px solid var(--border)">`;
       }
-      loadDriverData();
+      // Start polling for passenger payment confirmation (every 5s)
+      startPaymentPolling(activeRideId, fare);
+      activeRideId = null;
     } else showToast(d.message, 'error');
   } catch (e) { showToast('Failed to complete ride', 'error'); }
+}
+
+let _paymentPollInterval = null;
+let _pendingRideId = null;
+
+function startPaymentPolling(rideId, fare) {
+  _pendingRideId = rideId;
+  if (_paymentPollInterval) clearInterval(_paymentPollInterval);
+  _paymentPollInterval = setInterval(async () => {
+    if (!_pendingRideId) { clearInterval(_paymentPollInterval); return; }
+    try {
+      const r = await authFetch('/api/check_payment_status?ride_id=' + _pendingRideId);
+      if (!r) return;
+      const d = await r.json();
+      if (d.payment_status === 'passenger_confirmed') {
+        clearInterval(_paymentPollInterval);
+        document.getElementById('paymentNotifBanner').style.display = 'block';
+        document.getElementById('paymentNotifInfo').textContent = `Fare: ₹${fare} — Passenger confirmed payment`;
+        showToast('💳 Passenger confirmed payment! Please verify and confirm.', 'success');
+      }
+    } catch (e) {}
+  }, 5000);
+}
+
+async function driverConfirmPayment() {
+  const rideId = _pendingRideId;
+  if (!rideId) { showToast('No pending ride', 'warn'); return; }
+  const btns = ['driverConfirmBtn', 'driverConfirmBannerBtn'];
+  btns.forEach(id => { const b = document.getElementById(id); if (b) { b.disabled = true; b.textContent = '⏳ Confirming...'; } });
+  try {
+    const r = await authFetch('/api/driver_confirm_payment', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ride_id: rideId })
+    });
+    if (!r) { showToast('Network error', 'error'); return; }
+    const d = await r.json();
+    if (d.success) {
+      clearInterval(_paymentPollInterval);
+      _pendingRideId = null;
+      showToast('✅ Payment confirmed! Ride fully complete. ₹' + d.fare + ' earned.', 'success');
+      document.getElementById('paymentNotifBanner').style.display = 'none';
+      document.getElementById('paymentConfirmSection').innerHTML =
+        `<div style="text-align:center;padding:16px"><div style="font-size:40px">✅</div><div style="font-weight:700;color:#2E7D32;margin-top:8px">Ride Complete!</div><div style="color:#555">₹${d.fare} confirmed received.</div></div>`;
+      loadDriverData();
+    } else showToast(d.message, 'error');
+  } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  finally {
+    btns.forEach(id => { const b = document.getElementById(id); if (b) { b.disabled = false; b.textContent = '✅ Yes, I Received Payment'; } });
+  }
 }
 
 // ── GPS TRACKING ──────────────────────────────────────────────────────────────

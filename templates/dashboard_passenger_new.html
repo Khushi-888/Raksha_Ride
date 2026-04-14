@@ -253,15 +253,21 @@
         <div style="display:flex;flex-direction:column;gap:10px">
           <div style="display:flex;align-items:center;gap:10px">
             <div style="width:12px;height:12px;border-radius:50%;background:#4CAF50;flex-shrink:0"></div>
-            <input class="form-input" id="pickupInput" placeholder="📍 Pickup location" style="flex:1">
+            <input class="form-input" id="pickupInput" placeholder="📍 Pickup location" style="flex:1" oninput="checkRouteReady()">
             <button class="btn btn-sm btn-outline" onclick="useCurrentAsPickup()" title="Use my current location">📍 My Location</button>
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <div style="width:12px;height:12px;border-radius:50%;background:#C62828;flex-shrink:0"></div>
-            <input class="form-input" id="dropoffInput" placeholder="🏁 Where do you want to go?">
+            <input class="form-input" id="dropoffInput" placeholder="🏁 Where do you want to go?" oninput="checkRouteReady()">
           </div>
         </div>
         <div style="font-size:0.78rem;color:var(--text2);margin-top:8px">💡 Tap on the map to set pickup (green) or dropoff (red) point</div>
+        <!-- Start Ride button — shown only when both fields filled AND driver connected -->
+        <div id="startRideContainer" style="display:none;margin-top:14px">
+          <button class="btn btn-yellow btn-full btn-lg" onclick="startRideFromRoute()" id="startRideRouteBtn">
+            🚦 Start Ride
+          </button>
+        </div>
       </div>
       <!-- Map Legend -->
       <div style="display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap;font-size:0.82rem">
@@ -309,7 +315,7 @@
           </div>
           <p style="color:var(--text2);margin-bottom:16px">Scan the driver's payment QR to pay</p>
           <div id="paymentQRDisplay" style="margin-bottom:20px"></div>
-          <button class="btn btn-yellow btn-lg" onclick="confirmPayment()">✅ Payment Done</button>
+          <button class="btn btn-yellow btn-lg" onclick="confirmPayment(event)">✅ Payment Done</button>
         </div>
       </div>
       <!-- SOS Panel -->
@@ -717,6 +723,7 @@ function initPassengerMap() {
       mapClickMode = 'pickup';
       showToast('Route set! Confirm driver to start ride.', 'success');
     }
+    checkRouteReady();
   });
 
   if (activeRideId) {
@@ -748,7 +755,82 @@ function useCurrentAsPickup() {
     }
     mapClickMode = 'dropoff';
     showToast('Pickup set to your current location! Now tap map for dropoff.', 'success');
+    checkRouteReady();
   }, () => showToast('Could not get location', 'error'), { enableHighAccuracy: true, timeout: 8000 });
+}
+
+function checkRouteReady() {
+  const pickup  = (document.getElementById('pickupInput')?.value || '').trim();
+  const dropoff = (document.getElementById('dropoffInput')?.value || '').trim();
+  const container = document.getElementById('startRideContainer');
+  if (!container) return;
+  // Show Start Ride button only when both fields filled AND we have a connected driver
+  if (pickup && dropoff && activeRideId) {
+    container.style.display = 'block';
+  } else if (pickup && dropoff && selectedDriver) {
+    // Driver selected but ride not started yet — show "Confirm & Start"
+    container.style.display = 'block';
+    document.getElementById('startRideRouteBtn').textContent = '🚦 Confirm & Start Ride';
+  } else {
+    container.style.display = 'none';
+  }
+}
+
+async function startRideFromRoute() {
+  const pickup  = document.getElementById('pickupInput')?.value?.trim();
+  const dropoff = document.getElementById('dropoffInput')?.value?.trim();
+  if (!pickup || !dropoff) { showToast('Please enter both pickup and dropoff locations', 'warn'); return; }
+
+  if (activeRideId) {
+    // Ride already started — just update tracking
+    showToast('Ride is active! Tracking your journey.', 'success');
+    startPassengerTracking();
+    return;
+  }
+
+  if (!selectedDriver) { showToast('Please scan a driver QR first', 'warn'); showSection('scanner'); return; }
+
+  // Start the ride with the route
+  const btn = document.getElementById('startRideRouteBtn');
+  btn.disabled = true; btn.textContent = '⏳ Starting...';
+
+  let lat = null, lng = null;
+  try {
+    const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
+    lat = pos.coords.latitude; lng = pos.coords.longitude;
+  } catch (e) { if (lastPos) { lat = lastPos.lat; lng = lastPos.lng; } }
+
+  try {
+    const r = await authFetch('/api/start_ride', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        driver_id: selectedDriver.id,
+        latitude: lat, longitude: lng,
+        pickup_location: pickup,
+        dropoff_location: dropoff
+      })
+    });
+    if (!r) { showToast('Network error', 'error'); return; }
+    const d = await r.json();
+    if (d.success) {
+      activeRideId = d.ride_id || d.ride?.id;
+      showToast('🚦 Ride started! GPS tracking active.', 'success');
+      document.getElementById('activeRideBanner').classList.remove('hidden');
+      document.getElementById('rideStatusBadge').classList.remove('hidden');
+      document.getElementById('activeRideInfo').textContent = `Driver: ${selectedDriver.name} | ${pickup} → ${dropoff}`;
+      document.getElementById('endRideBtn').style.display = 'inline-flex';
+      document.getElementById('sosBtn').classList.remove('hidden');
+      document.getElementById('sosPanelTracking').style.display = 'block';
+      document.getElementById('t-driver').textContent = selectedDriver.name || 'Connected';
+      document.getElementById('startRideContainer').style.display = 'none';
+      startPassengerTracking();
+      startDriverTracking(selectedDriver.id);
+    } else {
+      showToast(d.message || 'Failed to start ride', 'error');
+    }
+  } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = '🚦 Start Ride'; }
 }
 
 function startPassengerTracking() {
@@ -891,9 +973,35 @@ async function endRide() {
 }
 
 async function confirmPayment() {
-  showToast('Payment confirmed! Thank you for riding with RakshaRide.', 'success');
-  document.getElementById('paymentSection').style.display = 'none';
-  loadPassengerData();
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Confirming...'; }
+  try {
+    const r = await authFetch('/api/confirm_payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ride_id: activeRideId, fare: parseInt(document.getElementById('finalFare')?.textContent?.replace('₹','') || 0) })
+    });
+    if (!r) { showToast('Network error', 'error'); return; }
+    const d = await r.json();
+    if (d.success) {
+      showToast('✅ Payment confirmed! Driver has been notified.', 'success');
+      document.getElementById('paymentSection').style.display = 'none';
+      // Show success message
+      const successDiv = document.createElement('div');
+      successDiv.style.cssText = 'background:linear-gradient(135deg,#E8F5E9,#E3F2FD);border:2px solid #4CAF50;border-radius:16px;padding:24px;text-align:center;margin-top:20px';
+      successDiv.innerHTML = `
+        <div style="font-size:48px;margin-bottom:12px">🎉</div>
+        <h3 style="color:#2E7D32;margin-bottom:8px">Ride Complete!</h3>
+        <p style="color:#555">Payment of <strong>${document.getElementById('finalFare')?.textContent || '₹0'}</strong> confirmed.</p>
+        <p style="color:#777;font-size:0.85rem;margin-top:8px">Driver has been notified. Thank you for riding with RakshaRide!</p>
+        <button class="btn btn-yellow" style="margin-top:16px" onclick="loadPassengerData();showSection('overview')">🏠 Back to Home</button>`;
+      document.getElementById('section-tracking').appendChild(successDiv);
+      loadPassengerData();
+    } else {
+      showToast(d.message || 'Failed to confirm', 'error');
+    }
+  } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '✅ Payment Done'; } }
 }
 
 // ── PROFILE ────────────────────────────────────────────────────────────────────

@@ -2718,6 +2718,171 @@ def process_payment():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
+
+@app.route('/api/confirm_payment', methods=['POST'])
+def api_confirm_payment():
+    """
+    Passenger confirms payment done.
+    → Marks ride payment_status='passenger_confirmed'
+    → Sends email + in-app notification to driver
+    → Driver must click 'Yes, Confirm' to fully complete
+    """
+    pid, err = _require_passenger()
+    if err: return err
+    try:
+        data    = request.get_json() or {}
+        ride_id = data.get('ride_id')
+        fare    = data.get('fare', 0)
+
+        if not ride_id:
+            return jsonify({"success": False, "message": "ride_id required"}), 400
+
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+
+        # Verify ride belongs to this passenger
+        c.execute("""SELECT r.id, r.driver_id, r.driver_name, r.fare, r.distance_km,
+                            d.email AS driver_email, d.name AS driver_name_full
+                     FROM rides r
+                     JOIN drivers d ON r.driver_id = d.id
+                     WHERE r.id = ? AND r.passenger_id = ?""", (ride_id, pid))
+        ride = c.fetchone()
+        if not ride:
+            conn.close()
+            return jsonify({"success": False, "message": "Ride not found"}), 404
+
+        actual_fare = fare or ride['fare'] or 0
+
+        # Mark as passenger_confirmed
+        c.execute("UPDATE rides SET payment_status='passenger_confirmed' WHERE id=?", (ride_id,))
+        conn.commit()
+
+        driver_email = ride['driver_email']
+        driver_name  = ride['driver_name_full']
+        pax_name     = passengerData_name = ""
+        c.execute("SELECT name FROM passengers WHERE id=?", (pid,))
+        pax_row = c.fetchone()
+        if pax_row: pax_name = pax_row[0]
+
+        conn.close()
+
+        # Email to driver
+        subject = f"💳 Payment Received — ₹{actual_fare} from {pax_name}"
+        html = f"""
+<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+  <div style="background:linear-gradient(135deg,#FFC107,#1565C0);padding:24px;border-radius:12px 12px 0 0;text-align:center">
+    <h2 style="color:white;margin:0">💳 Payment Received!</h2>
+    <p style="color:rgba(255,255,255,0.9);margin:6px 0 0">RakshaRide — Ride #{ride_id}</p>
+  </div>
+  <div style="background:#fff;border:1px solid #e0e0e0;padding:28px;border-radius:0 0 12px 12px">
+    <p>Hi <strong>{driver_name}</strong>,</p>
+    <p>Your passenger <strong>{pax_name}</strong> has confirmed payment of <strong>₹{actual_fare}</strong>.</p>
+    <div style="background:#E8F5E9;border:2px solid #4CAF50;border-radius:10px;padding:20px;text-align:center;margin:20px 0">
+      <div style="font-size:2rem;font-weight:900;color:#2E7D32">₹{actual_fare}</div>
+      <div style="color:#388E3C;font-weight:600">Payment Confirmed by Passenger</div>
+    </div>
+    <p style="color:#555">Please log in to your RakshaRide driver dashboard and click <strong>"✅ Confirm Payment Received"</strong> to complete the ride.</p>
+    <div style="text-align:center;margin-top:20px">
+      <a href="https://raksharide.onrender.com/dashboard/driver" style="background:linear-gradient(135deg,#FFC107,#1565C0);color:white;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:700;font-size:1rem">
+        Open Driver Dashboard →
+      </a>
+    </div>
+    <p style="color:#999;font-size:12px;margin-top:20px;text-align:center">RakshaRide • Ride #{ride_id}</p>
+  </div>
+</div>"""
+        _smtp_send(driver_email, subject, html)
+
+        return jsonify({
+            "success": True,
+            "message": "Payment confirmed! Driver has been notified.",
+            "ride_id": ride_id,
+            "fare": actual_fare
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/driver_confirm_payment', methods=['POST'])
+def api_driver_confirm_payment():
+    """
+    Driver confirms they received payment.
+    → Marks ride as fully 'completed' with payment_status='completed'
+    → Sends confirmation email to passenger
+    """
+    did, err = _require_driver()
+    if err: return err
+    try:
+        data    = request.get_json() or {}
+        ride_id = data.get('ride_id')
+
+        if not ride_id:
+            return jsonify({"success": False, "message": "ride_id required"}), 400
+
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+
+        c.execute("""SELECT r.id, r.passenger_id, r.passenger_name, r.fare, r.distance_km,
+                            p.email AS pax_email, p.name AS pax_name_full
+                     FROM rides r
+                     JOIN passengers p ON r.passenger_id = p.id
+                     WHERE r.id = ? AND r.driver_id = ?""", (ride_id, did))
+        ride = c.fetchone()
+        if not ride:
+            conn.close()
+            return jsonify({"success": False, "message": "Ride not found"}), 404
+
+        fare = ride['fare'] or 0
+
+        # Fully complete the ride
+        c.execute("""UPDATE rides SET status='completed', payment_status='completed'
+                     WHERE id=?""", (ride_id,))
+        c.execute("UPDATE drivers SET is_available=1, total_rides=total_rides+1, total_earned=total_earned+? WHERE id=?",
+                  (fare, did))
+        c.execute("UPDATE passengers SET total_rides=total_rides+1, total_spent=total_spent+? WHERE id=?",
+                  (fare, ride['passenger_id']))
+        conn.commit()
+
+        pax_email = ride['pax_email']
+        pax_name  = ride['pax_name_full']
+
+        # Get driver name
+        c.execute("SELECT name FROM drivers WHERE id=?", (did,))
+        drv_row = c.fetchone()
+        driver_name = drv_row[0] if drv_row else "Driver"
+        conn.close()
+
+        # Email to passenger
+        subject = f"✅ Ride Complete — ₹{fare} paid to {driver_name}"
+        html = f"""
+<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+  <div style="background:linear-gradient(135deg,#4CAF50,#1565C0);padding:24px;border-radius:12px 12px 0 0;text-align:center">
+    <h2 style="color:white;margin:0">✅ Ride Completed!</h2>
+    <p style="color:rgba(255,255,255,0.9);margin:6px 0 0">Payment confirmed by driver</p>
+  </div>
+  <div style="background:#fff;border:1px solid #e0e0e0;padding:28px;border-radius:0 0 12px 12px">
+    <p>Hi <strong>{pax_name}</strong>,</p>
+    <p>Your ride with <strong>{driver_name}</strong> is now fully complete.</p>
+    <div style="background:#E8F5E9;border:2px solid #4CAF50;border-radius:10px;padding:20px;text-align:center;margin:20px 0">
+      <div style="font-size:2rem;font-weight:900;color:#2E7D32">₹{fare}</div>
+      <div style="color:#388E3C;font-weight:600">✅ Payment Confirmed by Driver</div>
+      <div style="color:#555;font-size:0.9rem;margin-top:4px">Distance: {ride['distance_km'] or 0:.2f} km</div>
+    </div>
+    <p style="color:#555">Thank you for riding with RakshaRide. Stay safe!</p>
+    <p style="color:#999;font-size:12px;margin-top:20px;text-align:center">RakshaRide • Ride #{ride_id}</p>
+  </div>
+</div>"""
+        send_email_async(pax_email, subject, html)
+
+        return jsonify({
+            "success": True,
+            "message": "Payment confirmed! Ride is now complete.",
+            "fare": fare
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
 @app.route('/api/get_profile', methods=['GET'])
 def get_profile():
     """Get user profile"""
@@ -4754,13 +4919,19 @@ def api_sos_alert():
 
         sent_to = []
 
-        # Send to emergency contact email
+        # SOS is critical — try synchronous send first, then async backup
         if em_email:
-            send_email_async(em_email, subject, html_body)
-            sent_to.append(em_email)
-            print(f"[SOS] Alert sent to emergency email: {em_email}")
+            ok = _smtp_send(em_email, subject, html_body)
+            if ok:
+                sent_to.append(em_email)
+                print(f"[SOS] ✅ Alert sent to {em_email}")
+            else:
+                # Retry async as backup
+                send_email_async(em_email, subject, html_body)
+                sent_to.append(em_email)
+                print(f"[SOS] ⚠️ Sync failed, async retry queued for {em_email}")
 
-        # Send confirmation to passenger's own email
+        # Confirmation to passenger's own email
         if pax_email:
             confirm_body = f"""
 <div style="font-family:Arial,sans-serif;padding:24px;max-width:500px;margin:0 auto">
@@ -4768,10 +4939,10 @@ def api_sos_alert():
     <h2 style="margin:0">🚨 Your SOS Alert Was Sent</h2>
   </div>
   <p>Your emergency alert was dispatched to: <strong>{em_name or em_email or em_mobile}</strong></p>
-  <p><strong>📍 Location shared:</strong><br>
+  <p><strong>📍 Location:</strong><br>
      <a href="{maps_link}" style="color:#C62828">{maps_link}</a></p>
   <p><strong>🕐 Time:</strong> {alert_time}</p>
-  <p style="color:#666;font-size:13px">Stay safe. Help is on the way. Call 112 if in immediate danger.</p>
+  <p style="color:#666;font-size:13px">Stay safe. Call 112 if in immediate danger.</p>
 </div>"""
             send_email_async(pax_email, "✅ [SOS Sent] Your emergency alert was dispatched", confirm_body)
 
@@ -4983,6 +5154,27 @@ def api_reset_password():
         conn.close()
         print(f"[RESET] Password updated for {email} ({user_type})")
         return jsonify({"success": True, "message": "Password reset successfully! You can now login."})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/check_payment_status')
+def api_check_payment_status():
+    """Driver polls this to check if passenger confirmed payment."""
+    did, err = _require_driver()
+    if err: return err
+    try:
+        ride_id = request.args.get('ride_id')
+        if not ride_id:
+            return jsonify({"success": False, "message": "ride_id required"}), 400
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("SELECT payment_status, fare FROM rides WHERE id=? AND driver_id=?", (ride_id, did))
+        row = c.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({"success": False, "message": "Ride not found"}), 404
+        return jsonify({"success": True, "payment_status": row[0], "fare": row[1]})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
