@@ -231,47 +231,59 @@
     <div id="section-tracking" class="hidden">
       <div class="dash-header">
         <div class="dash-title">📍 GPS Tracking</div>
-        <div style="display:flex;gap:10px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn btn-yellow" onclick="startTracking()" id="startTrackBtn">▶ Start GPS</button>
           <button class="btn btn-outline" onclick="stopTracking()" id="stopTrackBtn" style="display:none">⏹ Stop GPS</button>
-          <button class="btn btn-blue hidden" onclick="completeRide()" id="completeRideBtn">✅ Complete Ride</button>
+          <button class="btn btn-blue" onclick="completeRide()" id="completeRideBtn" style="display:none">✅ Complete Ride</button>
         </div>
       </div>
-      <!-- Live Stats Bar -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
-        <div class="section-card" style="text-align:center;padding:16px;margin-bottom:0">
-          <div style="font-size:1.4rem;font-weight:800;color:var(--yellow-dark)" id="t-speed">0</div>
-          <div style="font-size:0.72rem;color:var(--text2);font-weight:600">km/h</div>
+
+      <!-- Map Legend -->
+      <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;font-size:0.82rem">
+        <div style="display:flex;align-items:center;gap:6px"><div style="width:14px;height:14px;border-radius:50%;background:#FFC107;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div><span>You (Driver)</span></div>
+        <div style="display:flex;align-items:center;gap:6px"><div style="width:14px;height:14px;border-radius:50%;background:#1565C0;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div><span>Passenger</span></div>
+        <div style="display:flex;align-items:center;gap:6px"><div style="width:14px;height:14px;border-radius:50%;background:#4CAF50;border:2px solid #fff"></div><span>Pickup Point</span></div>
+      </div>
+
+      <!-- Live Stats -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+        <div class="section-card" style="text-align:center;padding:14px;margin-bottom:0">
+          <div style="font-size:1.3rem;font-weight:800;color:var(--yellow-dark)" id="t-speed">0</div>
+          <div style="font-size:0.7rem;color:var(--text2);font-weight:600">km/h Speed</div>
         </div>
-        <div class="section-card" style="text-align:center;padding:16px;margin-bottom:0">
-          <div style="font-size:1.4rem;font-weight:800;color:var(--blue)" id="t-dist">0.00</div>
-          <div style="font-size:0.72rem;color:var(--text2);font-weight:600">km</div>
+        <div class="section-card" style="text-align:center;padding:14px;margin-bottom:0">
+          <div style="font-size:1.3rem;font-weight:800;color:var(--blue)" id="t-dist">0.00</div>
+          <div style="font-size:0.7rem;color:var(--text2);font-weight:600">km Distance</div>
         </div>
-        <div class="section-card" style="text-align:center;padding:16px;margin-bottom:0">
-          <div style="font-size:1.4rem;font-weight:800;color:#4CAF50" id="t-fare">₹25</div>
-          <div style="font-size:0.72rem;color:var(--text2);font-weight:600">Est. Fare</div>
+        <div class="section-card" style="text-align:center;padding:14px;margin-bottom:0">
+          <div style="font-size:1.3rem;font-weight:800;color:#4CAF50" id="t-fare">₹25</div>
+          <div style="font-size:0.7rem;color:var(--text2);font-weight:600">Est. Fare</div>
         </div>
-        <div class="section-card" style="text-align:center;padding:16px;margin-bottom:0">
-          <div style="font-size:1.4rem;font-weight:800" id="t-time">0</div>
-          <div style="font-size:0.72rem;color:var(--text2);font-weight:600">min</div>
+        <div class="section-card" style="text-align:center;padding:14px;margin-bottom:0">
+          <div style="font-size:1.3rem;font-weight:800" id="t-time">0</div>
+          <div style="font-size:0.7rem;color:var(--text2);font-weight:600">min Duration</div>
         </div>
       </div>
+
       <!-- Fare Breakdown (shown during ride) -->
-      <div id="fareBreakdown" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;font-size:0.85rem">
-        <div style="font-weight:700;margin-bottom:8px">💰 Fare Breakdown</div>
+      <div id="fareBreakdown" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px;font-size:0.85rem">
+        <div style="font-weight:700;margin-bottom:8px">💰 Live Fare Breakdown</div>
         <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Base fare</span><span>₹25.00</span></div>
         <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Distance (<span id="fb-dist">0</span> km × ₹12)</span><span id="fb-dist-charge">₹0</span></div>
         <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Time (<span id="fb-time">0</span> min × ₹1)</span><span id="fb-time-charge">₹0</span></div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:800;font-size:1rem"><span>Total</span><span style="color:var(--yellow-dark)" id="fb-total">₹25</span></div>
       </div>
+
       <!-- Map -->
-      <div style="position:relative;height:450px;border-radius:16px;overflow:hidden;border:2px solid var(--border)">
-        <div style="position:absolute;top:12px;left:12px;z-index:1000;display:flex;flex-direction:column;gap:6px">
-          <div style="background:rgba(0,0,0,0.75);color:white;padding:6px 14px;border-radius:20px;font-size:0.8rem;font-weight:600">📍 <span id="mapStatus">Click Start GPS</span></div>
-          <div id="passengerBadge" style="display:none;background:rgba(21,101,192,0.9);color:white;padding:6px 14px;border-radius:20px;font-size:0.8rem;font-weight:600">👤 Passenger Connected</div>
+      <div style="position:relative;border-radius:16px;overflow:hidden;border:2px solid var(--border)">
+        <!-- Status overlay -->
+        <div style="position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none">
+          <div style="background:rgba(0,0,0,0.78);color:white;padding:7px 18px;border-radius:24px;font-size:0.82rem;font-weight:700;white-space:nowrap">📍 <span id="mapStatus">Press ▶ Start GPS to begin</span></div>
+          <div id="passengerBadge" style="display:none;background:rgba(21,101,192,0.92);color:white;padding:6px 16px;border-radius:24px;font-size:0.8rem;font-weight:700">👤 Passenger Connected — tracking live</div>
         </div>
-        <div id="driverMap" style="height:100%;width:100%"></div>
+        <div id="driverMap" style="height:460px;width:100%"></div>
       </div>
+
       <!-- Ride Summary (shown after complete) -->
       <div id="rideSummary" style="display:none;margin-top:20px">
         <div class="section-card" style="text-align:center">
@@ -816,10 +828,27 @@ async function completeRide() {
 // ── GPS TRACKING ──────────────────────────────────────────────────────────────
 function initDriverMap() {
   if (driverMap) { setTimeout(() => driverMap.invalidateSize(), 100); return; }
-  driverMap = L.map('driverMap').setView([20.5937, 78.9629], 13);
+  // Start at India center, then immediately jump to real location
+  driverMap = L.map('driverMap', { zoomControl: true }).setView([20.5937, 78.9629], 5);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap', maxZoom: 19
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>', maxZoom: 19
   }).addTo(driverMap);
+
+  // Auto-center on current location immediately
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      driverMap.setView([lat, lng], 15);
+      // Show "You are here" marker before GPS starts
+      if (!driverMarker) {
+        driverMarker = L.marker([lat, lng], { icon: makeIcon('#FFC107', '🚗') })
+          .addTo(driverMap).bindPopup('<b>📍 Your Location</b><br>Press Start GPS to begin tracking').openPopup();
+      }
+      document.getElementById('mapStatus').textContent = '📍 Location found — press Start GPS';
+    }, () => {
+      document.getElementById('mapStatus').textContent = '⚠️ Enable location permission';
+    }, { enableHighAccuracy: true, timeout: 8000 });
+  }
 }
 
 function startTracking() {
@@ -830,11 +859,11 @@ function startTracking() {
   document.getElementById('startTrackBtn').style.display = 'none';
   document.getElementById('stopTrackBtn').style.display = 'inline-flex';
   if (activeRideId) {
-    document.getElementById('completeRideBtn').classList.remove('hidden');
+    document.getElementById('completeRideBtn').style.display = 'inline-flex';
     const fb = document.getElementById('fareBreakdown');
     if (fb) fb.style.display = 'block';
   }
-  document.getElementById('mapStatus').textContent = '🟢 GPS Active';
+  document.getElementById('mapStatus').textContent = '🟢 GPS Active — tracking your location';
   showToast('GPS tracking started', 'success');
 
   gpsWatchId = navigator.geolocation.watchPosition(
@@ -842,6 +871,16 @@ function startTracking() {
     err => { if (err.code !== 3) showToast('GPS: ' + err.message, 'warn'); },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 }
   );
+}
+
+// Coloured dot icon with emoji label
+function makeIcon(color, emoji) {
+  return L.divIcon({
+    html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+             <div style="background:${color};border:3px solid #fff;border-radius:50%;width:22px;height:22px;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:11px">${emoji}</div>
+           </div>`,
+    className: '', iconSize: [22, 22], iconAnchor: [11, 11]
+  });
 }
 
 function stopTracking() {
@@ -858,11 +897,8 @@ function onGPSUpdate(pos) {
 
   // Smooth dot marker
   if (!driverMarker) {
-    const icon = L.divIcon({
-      html: '<div style="background:#FFC107;border:3px solid #fff;border-radius:50%;width:20px;height:20px;box-shadow:0 2px 8px rgba(0,0,0,0.4)"></div>',
-      className: '', iconSize: [20, 20], iconAnchor: [10, 10]
-    });
-    driverMarker = L.marker([lat, lng], { icon }).addTo(driverMap).bindPopup('🚗 You (Driver)');
+    driverMarker = L.marker([lat, lng], { icon: makeIcon('#FFC107', '🚗') })
+      .addTo(driverMap).bindPopup('<b>🚗 You (Driver)</b>');
   } else {
     driverMarker.setLatLng([lat, lng]);
   }
@@ -920,15 +956,17 @@ async function pollPassengerLocation() {
   if (!activeRideId || !driverMap) return;
   try {
     const r = await authFetch('/api/get_passenger_location?ride_id=' + activeRideId);
+    if (!r) return;
     const d = await r.json();
     if (d.success && d.lat && d.lng) {
-      const icon = L.divIcon({
-        html: '<div style="background:#1565C0;border:3px solid #fff;border-radius:50%;width:18px;height:18px;box-shadow:0 2px 8px rgba(0,0,0,0.4)"></div>',
-        className: '', iconSize: [18, 18], iconAnchor: [9, 9]
-      });
       if (!passengerMarker) {
-        passengerMarker = L.marker([d.lat, d.lng], { icon }).addTo(driverMap).bindPopup('👤 Passenger');
+        passengerMarker = L.marker([d.lat, d.lng], { icon: makeIcon('#1565C0', '👤') })
+          .addTo(driverMap).bindPopup('<b>👤 Passenger</b><br>Live location').openPopup();
         document.getElementById('passengerBadge').style.display = 'flex';
+        // Fit both markers in view
+        if (driverMarker) {
+          driverMap.fitBounds([driverMarker.getLatLng(), passengerMarker.getLatLng()], { padding: [40, 40] });
+        }
       } else {
         passengerMarker.setLatLng([d.lat, d.lng]);
       }
