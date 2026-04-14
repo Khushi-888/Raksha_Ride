@@ -291,11 +291,8 @@ def save_uploaded_file(file, target_dir, prefix=""):
 # â”€â”€ CORE UTILITY FUNCTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def calculate_fare(duration_mins, distance_km):
-    """Alias — kept for backward compat. See full version below."""
-    BASE_FARE = 25.0
-    per_km    = 12.0
-    per_min   = 1.0
-    return round(BASE_FARE + (distance_km * per_km) + (duration_mins * per_min), 2)
+    """Fare = ₹10 per km only. No base fare, no time charge."""
+    return round(distance_km * 10.0, 2)
 
 def generate_payment_qr_code(ride_id, amount, driver_name, upi_id):
     """Generates a UPI payment URL for scanning"""
@@ -682,12 +679,8 @@ def generate_payment_qr_code(ride_id, amount, driver_name, upi_id=None):
         return None
 
 def calculate_fare(duration_minutes, distance_km=0):
-    """Calculate ride fare — distance-based pricing (₹25 base + ₹12/km + ₹1/min)"""
-    BASE_FARE      = 25.0
-    PER_KM_RATE    = 12.0
-    PER_MINUTE_RATE = 1.0
-    fare = BASE_FARE + (distance_km * PER_KM_RATE) + (duration_minutes * PER_MINUTE_RATE)
-    return round(fare, 2)
+    """Fare = ₹10 per km only. No base fare, no time charge."""
+    return round(distance_km * 10.0, 2)
 
 def send_email_otp(to_email, otp):
     """Send OTP via direct SMTP — works on Render."""
@@ -5003,9 +4996,10 @@ def api_fare_estimate():
         mins = request.args.get('duration_minutes', 0, type=float)
         fare = calculate_fare(mins, dist)
         breakdown = {
-            "base_fare": 25.0,
-            "distance_charge": round(dist * 12.0, 2),
-            "time_charge": round(mins * 1.0, 2),
+            "base_fare": 0,
+            "rate": "₹10 per km",
+            "distance_charge": round(dist * 10.0, 2),
+            "time_charge": 0,
             "total": fare,
             "distance_km": round(dist, 2),
             "duration_minutes": round(mins, 1)

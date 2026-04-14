@@ -256,7 +256,7 @@
           <div style="font-size:0.7rem;color:var(--text2);font-weight:600">km Distance</div>
         </div>
         <div class="section-card" style="text-align:center;padding:14px;margin-bottom:0">
-          <div style="font-size:1.3rem;font-weight:800;color:#4CAF50" id="t-fare">₹25</div>
+          <div style="font-size:1.3rem;font-weight:800;color:#4CAF50" id="t-fare">₹0</div>
           <div style="font-size:0.7rem;color:var(--text2);font-weight:600">Est. Fare</div>
         </div>
         <div class="section-card" style="text-align:center;padding:14px;margin-bottom:0">
@@ -268,10 +268,8 @@
       <!-- Fare Breakdown (shown during ride) -->
       <div id="fareBreakdown" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px;font-size:0.85rem">
         <div style="font-weight:700;margin-bottom:8px">💰 Live Fare Breakdown</div>
-        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Base fare</span><span>₹25.00</span></div>
-        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Distance (<span id="fb-dist">0</span> km × ₹12)</span><span id="fb-dist-charge">₹0</span></div>
-        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Time (<span id="fb-time">0</span> min × ₹1)</span><span id="fb-time-charge">₹0</span></div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:800;font-size:1rem"><span>Total</span><span style="color:var(--yellow-dark)" id="fb-total">₹25</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Distance (<span id="fb-dist">0.00</span> km × ₹10)</span><span id="fb-dist-charge">₹0</span></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:800;font-size:1rem"><span>Total</span><span style="color:var(--yellow-dark)" id="fb-total">₹0</span></div>
       </div>
 
       <!-- Map -->
@@ -819,7 +817,7 @@ async function completeRide() {
     const d = await r.json();
     if (d.success) {
       const rideData = d.ride || d;
-      const fare = rideData.fare || Math.round(25 + totalDistance * 12 + elapsedMin);
+      const fare = rideData.fare || Math.round(totalDistance * 10);
       showToast('Ride completed! Fare: ₹' + fare, 'success');
       document.getElementById('activeRideBanner').classList.add('hidden');
       document.getElementById('completeRideBtn').classList.add('hidden');
@@ -927,9 +925,8 @@ function onGPSUpdate(pos) {
   lastPos = { lat, lng };
 
   const elapsedMin = (Date.now() - rideStartTime) / 60000;
-  const distCharge = totalDistance * 12;
-  const timeCharge = elapsedMin * 1;
-  const fare = Math.round(25 + distCharge + timeCharge);
+  const distCharge = totalDistance * 10;
+  const fare = Math.round(distCharge);
 
   // Update stats
   document.getElementById('t-speed').textContent = speedKmh;
@@ -943,8 +940,6 @@ function onGPSUpdate(pos) {
   if (fbDist) {
     fbDist.textContent = totalDistance.toFixed(2);
     document.getElementById('fb-dist-charge').textContent = '₹' + distCharge.toFixed(2);
-    document.getElementById('fb-time').textContent = Math.round(elapsedMin);
-    document.getElementById('fb-time-charge').textContent = '₹' + timeCharge.toFixed(2);
     document.getElementById('fb-total').textContent = '₹' + fare;
   }
 
