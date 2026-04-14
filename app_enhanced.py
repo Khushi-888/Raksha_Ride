@@ -993,6 +993,10 @@ def send_otp():
         conn.commit()
         conn.close()
 
+        # Also store in session as backup (survives DB resets on Render)
+        session[f'otp_{email}'] = {'otp': otp, 'expiry': expiry_time.isoformat()}
+        session.permanent = True
+
         # Send email in background thread — response returns immediately
         html = (
             "<div style='font-family:Arial;padding:20px;max-width:500px'>"
@@ -1042,8 +1046,29 @@ def verify_otp():
         result = c.fetchone()
         
         if not result:
+            # Fallback: check session-stored OTP (handles Render DB resets)
+            session_otp_data = session.get(f'otp_{email}')
+            if session_otp_data:
+                stored_otp = session_otp_data.get('otp')
+                expiry_str = session_otp_data.get('expiry')
+                try:
+                    expiry_time = datetime.fromisoformat(expiry_str)
+                except Exception:
+                    conn.close()
+                    return jsonify({"success": False, "message": "OTP expired. Please request a new one."}), 400
+                if datetime.now() > expiry_time:
+                    session.pop(f'otp_{email}', None)
+                    conn.close()
+                    return jsonify({"success": False, "message": "OTP expired. Please request a new one."}), 400
+                if otp != stored_otp:
+                    conn.close()
+                    return jsonify({"success": False, "message": "Invalid OTP. Please check and try again."}), 400
+                # Valid — clear session OTP
+                session.pop(f'otp_{email}', None)
+                conn.close()
+                return jsonify({"success": True, "message": "OTP verified successfully"})
             conn.close()
-            return jsonify({"success": False, "message": "OTP not found"}), 404
+            return jsonify({"success": False, "message": "OTP not found or expired. Please request a new OTP."}), 404
         
         stored_otp, expiry_time_str, attempts = result
         
@@ -1731,6 +1756,10 @@ def login_passenger():
                   (email, otp, expiry_time))
         conn.commit()
         conn.close()
+
+        # Session backup for Render DB resets
+        session[f'otp_{email}'] = {'otp': otp, 'expiry': expiry_time.isoformat()}
+        session.permanent = True
 
         html = (
             "<div style='font-family:Arial;padding:20px'>"

@@ -115,8 +115,20 @@
 
                 if (data.success) {
                     document.getElementById('otp-verify-section').classList.remove('hidden');
-                    showAlert("Verification code sent! Check your email inbox.", "success");
-                    // Never show OTP on screen in production
+                    showAlert("Verification code sent! Check your email inbox (and spam folder).", "success");
+                    // Reset button with resend countdown
+                    let countdown = 60;
+                    btn.innerText = `Resend in ${countdown}s`;
+                    const timer = setInterval(() => {
+                        countdown--;
+                        if (countdown <= 0) {
+                            clearInterval(timer);
+                            btn.disabled = false;
+                            btn.innerText = "Resend OTP";
+                        } else {
+                            btn.innerText = `Resend in ${countdown}s`;
+                        }
+                    }, 1000);
                 } else {
                     showAlert(data.message || "Failed to send OTP. Please try again.");
                     btn.disabled = false;
@@ -130,9 +142,13 @@
         }
 
         async function handleVerifyOTP() {
-            const email = document.getElementById('email').value;
-            const otp = document.getElementById('otp').value;
-            if (otp.length < 6) { showAlert("Full 6-digit token required."); return; }
+            const email = document.getElementById('email').value.trim();
+            const otp = document.getElementById('otp').value.trim();
+            if (otp.length < 6) { showAlert("Please enter the full 6-digit OTP."); return; }
+            if (!email) { showAlert("Email is required."); return; }
+
+            const verifyBtn = document.querySelector('[onclick="handleVerifyOTP()"]');
+            if (verifyBtn) { verifyBtn.disabled = true; verifyBtn.innerText = 'Verifying...'; }
 
             try {
                 const res = await fetch('/api/verify_otp', {
@@ -144,11 +160,16 @@
                 if (data.success) {
                     document.getElementById('otp-init-section').classList.add('hidden');
                     document.getElementById('main-form').classList.remove('hidden');
-                    showAlert("Identity Confirmed. Access Granted.", "success");
+                    showAlert("✅ OTP Verified! Please fill in your details below.", "success");
                 } else {
-                    showAlert(data.message || "Invalid Token provided.");
+                    const msg = data.message || "Invalid OTP.";
+                    showAlert(msg + (msg.includes('not found') ? ' Please click Get OTP to request a new one.' : ''));
                 }
-            } catch (err) { showAlert("Verification Server Error."); }
+            } catch (err) {
+                showAlert("Connection error. Please check your internet and try again.");
+            } finally {
+                if (verifyBtn) { verifyBtn.disabled = false; verifyBtn.innerText = 'Verify Identity'; }
+            }
         }
 
         document.getElementById('enrollmentForm').addEventListener('submit', async (e) => {
