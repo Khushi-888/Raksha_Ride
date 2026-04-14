@@ -41,6 +41,9 @@
                 <input type="password" id="password" class="form-input" placeholder="••••••••" required>
             </div>
             <button class="btn btn-primary" style="width: 100%;" onclick="handleStep1()">Verify & Proceed</button>
+            <div style="text-align:center;margin-top:12px">
+                <a href="javascript:void(0)" onclick="showForgotPassword()" style="font-size:0.82rem;color:var(--accent);text-decoration:none;font-weight:600">🔑 Forgot Password?</a>
+            </div>
             <div class="footer-text mt-3 text-center">
                 New on board? 
                 {% if type == 'driver' %}
@@ -48,6 +51,40 @@
                 {% else %}
                     <a href="/register/passenger" style="font-weight: 700; color: var(--accent); padding: 8px 16px; border: 2px solid var(--accent); border-radius: 8px; display: inline-block; margin-left: 10px; transition: all 0.3s ease;">Passenger Enrollment</a>
                 {% endif %}
+            </div>
+        </div>
+
+        <!-- FORGOT PASSWORD SECTION -->
+        <div id="forgot-section" class="hidden">
+            <div style="text-align:center;margin-bottom:20px">
+                <div style="font-size:40px;margin-bottom:8px">🔑</div>
+                <h3 style="margin:0;color:var(--primary)">Reset Password</h3>
+                <p style="font-size:0.82rem;color:var(--text-muted);margin-top:4px">Enter your registered email to receive an OTP</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Registered Email</label>
+                <div style="display:flex;gap:8px">
+                    <input type="email" id="forgot-email" class="form-input" placeholder="your@email.com" style="flex:1">
+                    <button class="btn btn-primary" id="forgot-send-btn" onclick="sendForgotOTP()" style="white-space:nowrap;padding:0 16px">Send OTP</button>
+                </div>
+            </div>
+            <div id="forgot-otp-section" class="hidden">
+                <div class="form-group" style="margin-top:16px">
+                    <label class="form-label">Enter OTP from Email</label>
+                    <input type="text" id="forgot-otp" class="form-input" placeholder="6-digit OTP" maxlength="6" style="letter-spacing:6px;font-size:1.2rem;font-weight:800;text-align:center">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">New Password</label>
+                    <input type="password" id="new-password" class="form-input" placeholder="Minimum 6 characters">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirm New Password</label>
+                    <input type="password" id="confirm-password" class="form-input" placeholder="Re-enter new password">
+                </div>
+                <button class="btn btn-primary" style="width:100%;font-weight:800" onclick="resetPassword()">✅ Reset Password</button>
+            </div>
+            <div style="text-align:center;margin-top:16px">
+                <a href="javascript:void(0)" onclick="showLogin()" style="font-size:0.82rem;color:var(--accent);font-weight:600">← Back to Login</a>
             </div>
         </div>
 
@@ -197,6 +234,94 @@
         document.addEventListener('DOMContentLoaded', () => {
             if (window.lucide) lucide.createIcons();
         });
+
+        // ── FORGOT PASSWORD ──────────────────────────────────────────────────
+        function showForgotPassword() {
+            document.getElementById('password-section').classList.add('hidden');
+            document.getElementById('otp-section').classList.add('hidden');
+            document.getElementById('forgot-section').classList.remove('hidden');
+            document.getElementById('login-title').innerText = 'Reset Password';
+            document.getElementById('login-subtitle').innerText = 'Verify your identity to set a new password';
+            document.getElementById('alert-box').classList.add('hidden');
+        }
+
+        function showLogin() {
+            document.getElementById('forgot-section').classList.add('hidden');
+            document.getElementById('password-section').classList.remove('hidden');
+            document.getElementById('login-title').innerText = userType.charAt(0).toUpperCase() + userType.slice(1) + ' Access';
+            document.getElementById('login-subtitle').innerText = 'Secure Portal Authentication';
+            document.getElementById('alert-box').classList.add('hidden');
+        }
+
+        async function sendForgotOTP() {
+            const email = document.getElementById('forgot-email').value.trim();
+            if (!email) { showAlert('Please enter your registered email'); return; }
+
+            const btn = document.getElementById('forgot-send-btn');
+            btn.disabled = true; btn.innerText = 'Sending...';
+
+            try {
+                const res = await fetch('/api/forgot_password_otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, user_type: userType })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('forgot-otp-section').classList.remove('hidden');
+                    showAlert('OTP sent to ' + email + '. Check your inbox.', 'success');
+                    // Countdown resend
+                    let cd = 60;
+                    const timer = setInterval(() => {
+                        cd--;
+                        if (cd <= 0) { clearInterval(timer); btn.disabled = false; btn.innerText = 'Resend OTP'; }
+                        else btn.innerText = `Resend in ${cd}s`;
+                    }, 1000);
+                } else {
+                    showAlert(data.message || 'Failed to send OTP');
+                    btn.disabled = false; btn.innerText = 'Send OTP';
+                }
+            } catch (e) {
+                showAlert('Connection error. Please try again.');
+                btn.disabled = false; btn.innerText = 'Send OTP';
+            }
+        }
+
+        async function resetPassword() {
+            const email    = document.getElementById('forgot-email').value.trim();
+            const otp      = document.getElementById('forgot-otp').value.trim();
+            const newPwd   = document.getElementById('new-password').value;
+            const confPwd  = document.getElementById('confirm-password').value;
+
+            if (!otp || otp.length < 6) { showAlert('Enter the 6-digit OTP'); return; }
+            if (!newPwd || newPwd.length < 6) { showAlert('Password must be at least 6 characters'); return; }
+            if (newPwd !== confPwd) { showAlert('Passwords do not match'); return; }
+
+            const btn = event.target;
+            btn.disabled = true; btn.innerText = 'Resetting...';
+
+            try {
+                const res = await fetch('/api/reset_password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, otp, new_password: newPwd, user_type: userType })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showAlert('✅ Password reset successfully! Redirecting to login...', 'success');
+                    setTimeout(() => {
+                        showLogin();
+                        document.getElementById('email').value = email;
+                    }, 2000);
+                } else {
+                    showAlert(data.message || 'Reset failed. Please try again.');
+                }
+            } catch (e) {
+                showAlert('Connection error. Please try again.');
+            } finally {
+                btn.disabled = false; btn.innerText = '✅ Reset Password';
+            }
+        }
     </script>
 </body>
 </html>

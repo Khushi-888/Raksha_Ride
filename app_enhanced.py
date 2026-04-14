@@ -4856,6 +4856,144 @@ def handle_exception(e):
 # Missing API routes needed by dashboards
 # ============================================================================
 
+# ── FORGOT PASSWORD ───────────────────────────────────────────────────────────
+@app.route('/api/forgot_password_otp', methods=['POST'])
+def api_forgot_password_otp():
+    """Send OTP to registered email for password reset."""
+    try:
+        data      = request.get_json() or {}
+        email     = (data.get('email') or '').strip().lower()
+        user_type = (data.get('user_type') or 'driver').strip()
+
+        if not email or not is_valid_email(email):
+            return jsonify({"success": False, "message": "Valid email required"}), 400
+
+        if not rate_limit(f"forgot_{email}", limit=3, window=300):
+            return jsonify({"success": False, "message": "Too many requests. Wait 5 minutes."}), 429
+
+        conn = get_db_conn()
+        c = conn.cursor()
+
+        # Check email exists for the given user type
+        if user_type == 'driver':
+            c.execute("SELECT id, name FROM drivers WHERE email = ?", (email,))
+        else:
+            c.execute("SELECT id, name FROM passengers WHERE email = ?", (email,))
+        row = c.fetchone()
+
+        if not row:
+            conn.close()
+            # Don't reveal if email exists — generic message
+            return jsonify({"success": True, "message": "If this email is registered, an OTP has been sent."})
+
+        user_name = row[1]
+
+        # Generate OTP
+        otp = generate_otp()
+        expiry = datetime.now() + timedelta(minutes=10)
+        c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+        c.execute("INSERT INTO otp_verification (email, otp, expiry_time, attempts) VALUES (?, ?, ?, 0)",
+                  (email, otp, expiry))
+        conn.commit()
+        conn.close()
+
+        # Session backup
+        session[f'otp_{email}'] = {'otp': otp, 'expiry': expiry.isoformat()}
+        session.permanent = True
+
+        html = f"""
+<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto">
+  <div style="background:linear-gradient(135deg,#FFC107,#1565C0);padding:24px;border-radius:12px 12px 0 0;text-align:center">
+    <h2 style="color:white;margin:0">🔑 Password Reset</h2>
+    <p style="color:rgba(255,255,255,0.9);margin:6px 0 0">RakshaRide Account Recovery</p>
+  </div>
+  <div style="background:#fff;border:1px solid #e0e0e0;padding:28px;border-radius:0 0 12px 12px">
+    <p style="color:#333">Hi <strong>{user_name}</strong>,</p>
+    <p style="color:#555">Your password reset OTP is:</p>
+    <div style="background:#f5f5f5;border:2px dashed #FFC107;border-radius:10px;padding:20px;text-align:center;margin:20px 0">
+      <span style="font-size:36px;font-weight:900;letter-spacing:10px;color:#1565C0">{otp}</span>
+    </div>
+    <p style="color:#666;font-size:14px">Valid for <strong>10 minutes</strong>. Do not share this code.</p>
+    <p style="color:#999;font-size:12px;margin-top:16px">If you didn't request this, ignore this email. Your password remains unchanged.</p>
+  </div>
+</div>"""
+
+        send_email_async(email, "RakshaRide — Password Reset OTP", html,
+                         f"Your password reset OTP: {otp} (valid 10 min)")
+        print(f"[FORGOT] OTP sent to {email} for {user_type}")
+
+        return jsonify({"success": True, "message": f"OTP sent to {email}"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/reset_password', methods=['POST'])
+def api_reset_password():
+    """Verify OTP and set new password."""
+    try:
+        data         = request.get_json() or {}
+        email        = (data.get('email') or '').strip().lower()
+        otp          = (data.get('otp') or '').strip()
+        new_password = (data.get('new_password') or '').strip()
+        user_type    = (data.get('user_type') or 'driver').strip()
+
+        if not email or not otp or not new_password:
+            return jsonify({"success": False, "message": "Email, OTP and new password required"}), 400
+        if len(new_password) < 6:
+            return jsonify({"success": False, "message": "Password must be at least 6 characters"}), 400
+
+        # Verify OTP — check DB first, then session backup
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("SELECT otp, expiry_time FROM otp_verification WHERE email = ?", (email,))
+        row = c.fetchone()
+
+        verified = False
+        if row:
+            stored_otp, expiry_str = row
+            try:
+                expiry = datetime.fromisoformat(expiry_str.replace(' ', 'T'))
+            except Exception:
+                expiry = datetime.strptime(expiry_str, '%Y-%m-%d %H:%M:%S.%f')
+            if datetime.now() <= expiry and otp == stored_otp:
+                verified = True
+                c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
+                conn.commit()
+        else:
+            # Session fallback
+            sess_data = session.get(f'otp_{email}')
+            if sess_data:
+                try:
+                    expiry = datetime.fromisoformat(sess_data['expiry'])
+                    if datetime.now() <= expiry and otp == sess_data['otp']:
+                        verified = True
+                        session.pop(f'otp_{email}', None)
+                except Exception:
+                    pass
+
+        if not verified:
+            conn.close()
+            return jsonify({"success": False, "message": "Invalid or expired OTP. Please request a new one."}), 400
+
+        # Update password
+        hashed = hash_password(new_password)
+        if user_type == 'driver':
+            c.execute("UPDATE drivers SET password=?, first_login=0 WHERE email=?", (hashed, email))
+        else:
+            c.execute("UPDATE passengers SET password=? WHERE email=?", (hashed, email))
+
+        if c.rowcount == 0:
+            conn.close()
+            return jsonify({"success": False, "message": "Account not found"}), 404
+
+        conn.commit()
+        conn.close()
+        print(f"[RESET] Password updated for {email} ({user_type})")
+        return jsonify({"success": True, "message": "Password reset successfully! You can now login."})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 # ── FARE ESTIMATE (live preview during ride) ──────────────────────────────────
 @app.route('/api/fare_estimate')
 def api_fare_estimate():
