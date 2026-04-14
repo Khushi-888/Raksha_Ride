@@ -920,33 +920,51 @@ async function saveEmergencyContact() {
 
 // ── SOS ────────────────────────────────────────────────────────────────────────
 async function triggerSOS() {
-  if (!confirm('🚨 SEND SOS ALERT?\n\nThis will immediately alert your emergency contact with your location.\n\nPress OK to confirm.')) return;
+  if (!confirm('🚨 SEND SOS ALERT?\n\nThis will immediately alert your emergency contact with your live location.\n\nPress OK to confirm.')) return;
+
   const btn = document.getElementById('sosBtn');
   if (btn) { btn.textContent = '📡 Sending...'; btn.disabled = true; }
+
+  // Get GPS — 5s timeout, fall back to last known tracking position
   let lat = null, lng = null;
   try {
-    const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 })
+    );
     lat = pos.coords.latitude; lng = pos.coords.longitude;
-  } catch (e) {}
+  } catch (e) {
+    if (lastPos) { lat = lastPos.lat; lng = lastPos.lng; }
+    showToast('Using last known location for SOS', 'warn');
+  }
+
   try {
     const r = await authFetch('/api/sos_alert', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lat, lng, ride_id: activeRideId })
     });
+    if (!r) { showToast('Network error — SOS could not be sent', 'error'); return; }
     const d = await r.json();
     if (d.success) {
-      showToast('🚨 SOS SENT! ' + d.message, 'success');
+      showToast('🚨 SOS SENT to ' + (d.contact || 'emergency contact') + '!', 'success');
       const overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(198,40,40,0.95);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;color:white;text-align:center;padding:24px';
-      overlay.innerHTML = `<div style="font-size:80px">🚨</div><h1 style="font-size:2rem;margin:0">SOS ALERT SENT!</h1>
-        <p style="font-size:1.1rem;opacity:0.9;max-width:400px">${d.message}</p>
-        ${d.maps_link ? `<a href="${d.maps_link}" target="_blank" style="background:white;color:#C62828;padding:12px 28px;border-radius:8px;font-weight:700;text-decoration:none">📍 View Your Location</a>` : ''}
-        <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.2);border:2px solid white;color:white;padding:10px 28px;border-radius:8px;cursor:pointer;font-weight:600">✕ Close</button>`;
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(198,40,40,0.96);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;color:white;text-align:center;padding:24px';
+      overlay.innerHTML = `
+        <div style="font-size:80px">🚨</div>
+        <h1 style="font-size:2rem;margin:0;font-weight:900">SOS ALERT SENT!</h1>
+        <p style="font-size:1.1rem;opacity:0.95;max-width:400px">${d.message}</p>
+        <p style="font-size:0.85rem;opacity:0.8">Emergency contact notified with your location.</p>
+        ${d.maps_link && d.maps_link !== 'Location unavailable'
+          ? `<a href="${d.maps_link}" target="_blank" style="background:white;color:#C62828;padding:14px 32px;border-radius:10px;font-weight:900;text-decoration:none;font-size:1rem">📍 View Your Location</a>`
+          : '<p style="opacity:0.7;font-size:0.9rem">Location data not available</p>'}
+        <p style="font-size:0.85rem;opacity:0.7">Call 112 if in immediate danger</p>
+        <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.2);border:2px solid white;color:white;padding:12px 32px;border-radius:10px;cursor:pointer;font-weight:700;font-size:1rem;margin-top:8px">✕ Close</button>`;
       document.body.appendChild(overlay);
-      setTimeout(() => overlay.remove(), 15000);
+      setTimeout(() => overlay.remove(), 20000);
     } else {
-      showToast('SOS failed: ' + (d.message || 'No emergency contact set'), 'error');
-      showToast('Go to Profile → Add Emergency Contact first', 'warn');
+      showToast('SOS failed: ' + (d.message || 'Unknown error'), 'error');
+      if (d.message && d.message.includes('No emergency contact')) {
+        showToast('Go to Profile → Emergency Contact to add one first', 'warn');
+      }
     }
   } catch (e) { showToast('SOS failed: ' + e.message, 'error'); }
   finally { if (btn) { btn.textContent = '🚨 SOS'; btn.disabled = false; } }

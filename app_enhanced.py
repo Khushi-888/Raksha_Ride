@@ -4632,18 +4632,22 @@ def api_update_emergency_contact():
 
 @app.route('/api/sos_alert', methods=['POST'])
 def api_sos_alert():
+    """Send SOS emergency alert — emails emergency contact with live GPS location."""
     current_user = get_current_user()
     if not current_user:
-        return jsonify({"success": False, "message": "Not authenticated — please login", "code": "AUTH_REQUIRED"}), 401
+        return jsonify({"success": False, "message": "Not authenticated", "code": "AUTH_REQUIRED"}), 401
+
     try:
-        data = request.get_json()
-        lat  = data.get('lat')
-        lng  = data.get('lng')
+        data    = request.get_json() or {}
+        lat     = data.get('lat')
+        lng     = data.get('lng')
         ride_id = data.get('ride_id')
-        uid = current_user['user_id']
+        uid     = current_user['user_id']
 
         conn = sqlite3.connect('database_enhanced.db')
         c = conn.cursor()
+
+        # Get passenger + emergency contact
         c.execute("""SELECT name, phone, email, emergency_name, emergency_mobile, emergency_email
                      FROM passengers WHERE id=?""", (uid,))
         pax = c.fetchone()
@@ -4660,195 +4664,134 @@ def api_sos_alert():
                 "message": "No emergency contact set. Go to Profile → Emergency Contact and add one first."
             }), 400
 
+        # Get driver info from active ride
         driver_name, vehicle_number = "Unknown", "Unknown"
         if ride_id:
             c.execute("SELECT driver_name, driver_vehicle FROM rides WHERE id=? AND passenger_id=?",
                       (ride_id, uid))
             ride_row = c.fetchone()
             if ride_row:
-                driver_name, vehicle_number = ride_row
+                driver_name = ride_row[0] or "Unknown"
+                vehicle_number = ride_row[1] or "Unknown"
+
+        # If no lat/lng from frontend, try last known location from DB
+        if not lat or not lng:
+            c.execute("SELECT latitude, longitude FROM live_locations WHERE user_id=? AND role='passenger'", (uid,))
+            loc_row = c.fetchone()
+            if loc_row and loc_row[0]:
+                lat, lng = loc_row[0], loc_row[1]
+
         conn.close()
 
-        maps_link = f"https://maps.google.com/?q={lat},{lng}" if lat and lng else "Location unavailable"
+        maps_link  = f"https://maps.google.com/?q={lat},{lng}" if lat and lng else "Location unavailable"
         alert_time = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
-        subject = f"🚨 SOS EMERGENCY ALERT — {pax_name} needs help!"
+        # ── Build email ────────────────────────────────────────────────────────
+        subject = f"🚨 SOS EMERGENCY — {pax_name} needs help NOW!"
         html_body = f"""
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <div style="background:#C62828;color:white;padding:24px;border-radius:12px 12px 0 0;text-align:center">
-            <h1 style="margin:0;font-size:28px">🚨 EMERGENCY SOS ALERT</h1>
-            <p style="margin:8px 0 0;opacity:0.9">Immediate attention required</p>
-          </div>
-          <div style="background:#fff;border:2px solid #C62828;padding:24px;border-radius:0 0 12px 12px">
-            <table style="width:100%;border-collapse:collapse">
-              <tr><td style="padding:10px;background:#FFF8E1;font-weight:bold">👤 Passenger</td>
-                  <td style="padding:10px">{pax_name} ({pax_phone})</td></tr>
-              <tr><td style="padding:10px;font-weight:bold">🚗 Driver</td>
-                  <td style="padding:10px">{driver_name}</td></tr>
-              <tr><td style="padding:10px;background:#FFF8E1;font-weight:bold">🚘 Vehicle</td>
-                  <td style="padding:10px">{vehicle_number}</td></tr>
-              <tr><td style="padding:10px;font-weight:bold">🕐 Time</td>
-                  <td style="padding:10px">{alert_time}</td></tr>
-            </table>
-            <div style="margin-top:20px;text-align:center">
-              <a href="{maps_link}" style="display:inline-block;background:#C62828;color:white;
-                 padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">
-                📍 View Live Location on Google Maps
-              </a>
-            </div>
-            <p style="margin-top:20px;color:#666;font-size:13px;text-align:center">
-              Automated emergency alert from RakshaRide Safety System.
-            </p>
-          </div>
-        </div>"""
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#C62828;color:white;padding:28px;border-radius:12px 12px 0 0;text-align:center">
+    <div style="font-size:48px;margin-bottom:8px">🚨</div>
+    <h1 style="margin:0;font-size:26px;font-weight:900">EMERGENCY SOS ALERT</h1>
+    <p style="margin:8px 0 0;opacity:0.9;font-size:15px">Someone needs immediate help</p>
+  </div>
+  <div style="background:#fff;border:2px solid #C62828;border-top:none;padding:28px;border-radius:0 0 12px 12px">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+      <tr style="background:#FFF8E1">
+        <td style="padding:12px 16px;font-weight:bold;width:40%">👤 Passenger</td>
+        <td style="padding:12px 16px">{pax_name}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px;font-weight:bold">📱 Phone</td>
+        <td style="padding:12px 16px">{pax_phone or 'Not provided'}</td>
+      </tr>
+      <tr style="background:#FFF8E1">
+        <td style="padding:12px 16px;font-weight:bold">🚗 Driver</td>
+        <td style="padding:12px 16px">{driver_name}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px;font-weight:bold">🚘 Vehicle</td>
+        <td style="padding:12px 16px">{vehicle_number}</td>
+      </tr>
+      <tr style="background:#FFF8E1">
+        <td style="padding:12px 16px;font-weight:bold">🕐 Alert Time</td>
+        <td style="padding:12px 16px">{alert_time}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px;font-weight:bold">📍 Location</td>
+        <td style="padding:12px 16px">{f'Lat: {lat:.5f}, Lng: {lng:.5f}' if lat else 'Not available'}</td>
+      </tr>
+    </table>
+    <div style="text-align:center;margin-bottom:20px">
+      <a href="{maps_link}" style="display:inline-block;background:#C62828;color:white;
+         padding:16px 36px;border-radius:10px;text-decoration:none;font-weight:900;font-size:17px;
+         letter-spacing:0.5px">
+        📍 OPEN LIVE LOCATION IN GOOGLE MAPS
+      </a>
+    </div>
+    <div style="background:#FFEBEE;border-left:4px solid #C62828;padding:14px;border-radius:6px">
+      <p style="margin:0;color:#C62828;font-weight:bold">⚠️ Please contact {pax_name} immediately or call emergency services (112).</p>
+    </div>
+    <p style="margin-top:16px;color:#999;font-size:12px;text-align:center">
+      Automated SOS from RakshaRide Safety System • {alert_time}
+    </p>
+  </div>
+</div>"""
 
         sent_to = []
+
+        # Send to emergency contact email
         if em_email:
             send_email_async(em_email, subject, html_body)
             sent_to.append(em_email)
+            print(f"[SOS] Alert sent to emergency email: {em_email}")
 
-        send_email_async(pax_email, f"[SOS Sent] Your emergency alert was dispatched", f"""
-        <div style="font-family:Arial,sans-serif;padding:20px">
-          <h2 style="color:#C62828">🚨 Your SOS Alert Was Sent</h2>
-          <p>Your emergency alert has been dispatched to: <strong>{em_name or em_email}</strong></p>
-          <p><strong>Location:</strong> <a href="{maps_link}">{maps_link}</a></p>
-          <p><strong>Time:</strong> {alert_time}</p>
-        </div>""")
+        # Send confirmation to passenger's own email
+        if pax_email:
+            confirm_body = f"""
+<div style="font-family:Arial,sans-serif;padding:24px;max-width:500px;margin:0 auto">
+  <div style="background:#C62828;color:white;padding:20px;border-radius:10px;text-align:center;margin-bottom:20px">
+    <h2 style="margin:0">🚨 Your SOS Alert Was Sent</h2>
+  </div>
+  <p>Your emergency alert was dispatched to: <strong>{em_name or em_email or em_mobile}</strong></p>
+  <p><strong>📍 Location shared:</strong><br>
+     <a href="{maps_link}" style="color:#C62828">{maps_link}</a></p>
+  <p><strong>🕐 Time:</strong> {alert_time}</p>
+  <p style="color:#666;font-size:13px">Stay safe. Help is on the way. Call 112 if in immediate danger.</p>
+</div>"""
+            send_email_async(pax_email, "✅ [SOS Sent] Your emergency alert was dispatched", confirm_body)
 
+        # Log to DB
         try:
             conn2 = sqlite3.connect('database_enhanced.db')
             c2 = conn2.cursor()
             c2.execute("""CREATE TABLE IF NOT EXISTS sos_alerts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 passenger_id INTEGER, ride_id INTEGER,
-                lat REAL, lng REAL, alert_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                lat REAL, lng REAL,
+                alert_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 sent_to TEXT, driver_name TEXT, vehicle_number TEXT
             )""")
-            c2.execute("INSERT INTO sos_alerts (passenger_id,ride_id,lat,lng,sent_to,driver_name,vehicle_number) VALUES (?,?,?,?,?,?,?)",
+            c2.execute("""INSERT INTO sos_alerts
+                          (passenger_id, ride_id, lat, lng, sent_to, driver_name, vehicle_number)
+                          VALUES (?,?,?,?,?,?,?)""",
                        (uid, ride_id, lat, lng, ','.join(sent_to), driver_name, vehicle_number))
             conn2.commit()
             conn2.close()
-        except Exception:
-            pass
+        except Exception as db_err:
+            print(f"[SOS] DB log failed (non-fatal): {db_err}")
 
+        contact_display = em_name or em_email or em_mobile or 'emergency contact'
         return jsonify({
             "success": True,
-            "message": f"SOS alert sent to {em_name or em_email}!",
+            "message": f"SOS alert sent to {contact_display}! Check your email for confirmation.",
             "sent_to": sent_to,
-            "maps_link": maps_link
-        })
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-    try:
-        data = request.get_json()
-        lat  = data.get('lat')
-        lng  = data.get('lng')
-        ride_id = data.get('ride_id')
-
-        conn = sqlite3.connect('database_enhanced.db')
-        c = conn.cursor()
-
-        # Get passenger info + emergency contacts
-        c.execute("""SELECT name, phone, email, emergency_name, emergency_mobile, emergency_email
-                     FROM passengers WHERE id=?""", (session['user_id'],))
-        pax = c.fetchone()
-        if not pax:
-            conn.close()
-            return jsonify({"success": False, "message": "Passenger not found"}), 404
-
-        pax_name, pax_phone, pax_email, em_name, em_mobile, em_email = pax
-
-        # Get active ride / driver info
-        driver_name, vehicle_number = "Unknown", "Unknown"
-        if ride_id:
-            c.execute("""SELECT driver_name, driver_vehicle FROM rides WHERE id=? AND passenger_id=?""",
-                      (ride_id, session['user_id']))
-            ride_row = c.fetchone()
-            if ride_row:
-                driver_name, vehicle_number = ride_row
-        conn.close()
-
-        # Build location link
-        maps_link = f"https://maps.google.com/?q={lat},{lng}" if lat and lng else "Location unavailable"
-        alert_time = datetime.now().strftime("%d %b %Y, %I:%M %p")
-
-        subject = f"🚨 SOS EMERGENCY ALERT — {pax_name} needs help!"
-        html_body = f"""
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <div style="background:#C62828;color:white;padding:24px;border-radius:12px 12px 0 0;text-align:center">
-            <h1 style="margin:0;font-size:28px">🚨 EMERGENCY SOS ALERT</h1>
-            <p style="margin:8px 0 0;opacity:0.9">Immediate attention required</p>
-          </div>
-          <div style="background:#fff;border:2px solid #C62828;padding:24px;border-radius:0 0 12px 12px">
-            <table style="width:100%;border-collapse:collapse">
-              <tr><td style="padding:10px;background:#FFF8E1;font-weight:bold;border-radius:6px">👤 Passenger</td>
-                  <td style="padding:10px">{pax_name} ({pax_phone})</td></tr>
-              <tr><td style="padding:10px;font-weight:bold">🚗 Driver</td>
-                  <td style="padding:10px">{driver_name}</td></tr>
-              <tr><td style="padding:10px;background:#FFF8E1;font-weight:bold;border-radius:6px">🚘 Vehicle</td>
-                  <td style="padding:10px">{vehicle_number}</td></tr>
-              <tr><td style="padding:10px;font-weight:bold">🕐 Time</td>
-                  <td style="padding:10px">{alert_time}</td></tr>
-            </table>
-            <div style="margin-top:20px;text-align:center">
-              <a href="{maps_link}" style="display:inline-block;background:#C62828;color:white;
-                 padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">
-                📍 View Live Location on Google Maps
-              </a>
-            </div>
-            <p style="margin-top:20px;color:#666;font-size:13px;text-align:center">
-              This is an automated emergency alert from RakshaRide Safety System.<br>
-              Please contact the passenger immediately or call emergency services.
-            </p>
-          </div>
-        </div>"""
-
-        sent_to = []
-        errors  = []
-
-        # Send to emergency email
-        if em_email:
-            ok, msg = send_email_otp.__wrapped__(em_email, "SOS") if hasattr(send_email_otp, '__wrapped__') else (False, "")
-            # Use send_email_async directly
-            send_email_async(em_email, subject, html_body)
-            sent_to.append(f"email:{em_email}")
-
-        # Also send to passenger's own email as confirmation
-        send_email_async(pax_email, f"[SOS Sent] Your emergency alert was dispatched", f"""
-        <div style="font-family:Arial,sans-serif;padding:20px">
-          <h2 style="color:#C62828">🚨 Your SOS Alert Was Sent</h2>
-          <p>Your emergency alert has been dispatched to your emergency contact.</p>
-          <p><strong>Location shared:</strong> <a href="{maps_link}">{maps_link}</a></p>
-          <p><strong>Time:</strong> {alert_time}</p>
-          <p style="color:#666;font-size:13px">Stay safe. Help is on the way.</p>
-        </div>""")
-
-        # Log SOS in database (create sos_alerts table if needed)
-        try:
-            conn2 = sqlite3.connect('database_enhanced.db')
-            c2 = conn2.cursor()
-            c2.execute("""CREATE TABLE IF NOT EXISTS sos_alerts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                passenger_id INTEGER, ride_id INTEGER,
-                lat REAL, lng REAL, alert_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                sent_to TEXT, driver_name TEXT, vehicle_number TEXT
-            )""")
-            c2.execute("""INSERT INTO sos_alerts (passenger_id, ride_id, lat, lng, sent_to, driver_name, vehicle_number)
-                          VALUES (?,?,?,?,?,?,?)""",
-                       (session['user_id'], ride_id, lat, lng, ','.join(sent_to), driver_name, vehicle_number))
-            conn2.commit()
-            conn2.close()
-        except Exception:
-            pass
-
-        return jsonify({
-            "success": True,
-            "message": f"SOS alert sent to {em_name or 'emergency contact'} ({em_email or em_mobile})",
-            "sent_to": sent_to,
-            "maps_link": maps_link
+            "maps_link": maps_link,
+            "contact": contact_display
         })
 
     except Exception as e:
+        print(f"[SOS] Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
 # ============================================================================
