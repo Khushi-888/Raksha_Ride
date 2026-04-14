@@ -384,11 +384,25 @@ function showSection(name) {
   if (name === 'nearby') initNearbyMap();
   if (name === 'tracking') initPassengerMap();
   if (name === 'history') loadRideHistory();
-  document.getElementById('mainSidebar').classList.remove('open');
+  // Close mobile sidebar
+  const sidebar = document.getElementById('mainSidebar');
+  sidebar.classList.remove('open');
+  const overlay = document.getElementById('sidebarOverlay');
+  if (overlay) overlay.classList.remove('open');
 }
 
 function toggleMobileSidebar() {
-  document.getElementById('mainSidebar').classList.toggle('open');
+  const sidebar = document.getElementById('mainSidebar');
+  sidebar.classList.toggle('open');
+  let overlay = document.getElementById('sidebarOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'sidebarOverlay';
+    overlay.className = 'sidebar-overlay';
+    overlay.onclick = () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); };
+    document.body.appendChild(overlay);
+  }
+  overlay.classList.toggle('open', sidebar.classList.contains('open'));
 }
 
 // ── LOAD DATA ──────────────────────────────────────────────────────────────────
@@ -815,6 +829,8 @@ function startPassengerGPS() {
   if (!navigator.geolocation || _paxGpsId) return;
   _paxGpsId = navigator.geolocation.watchPosition(pos => {
     const now = Date.now();
+    // Always update lastPos for SOS fallback
+    lastPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     if (now - _paxLastGps < 5000) return;
     _paxLastGps = now;
     const token = localStorage.getItem('rr_token') || '';
@@ -925,21 +941,33 @@ async function triggerSOS() {
   const btn = document.getElementById('sosBtn');
   if (btn) { btn.textContent = '📡 Sending...'; btn.disabled = true; }
 
-  // Get GPS — 5s timeout, fall back to last known tracking position
-  let lat = null, lng = null;
+  // Get GPS immediately — no waiting, use last known if GPS slow
+  let lat = lastPos?.lat || null;
+  let lng = lastPos?.lng || null;
+
+  // Try to get fresh location with short timeout (3s)
   try {
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 })
-    );
-    lat = pos.coords.latitude; lng = pos.coords.longitude;
+    const pos = await Promise.race([
+      new Promise((res, rej) =>
+        navigator.geolocation.getCurrentPosition(res, rej,
+          { enableHighAccuracy: true, timeout: 3000, maximumAge: 5000 })
+      ),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3500))
+    ]);
+    lat = pos.coords.latitude;
+    lng = pos.coords.longitude;
+    // Update lastPos for future use
+    lastPos = { lat, lng };
   } catch (e) {
-    if (lastPos) { lat = lastPos.lat; lng = lastPos.lng; }
-    showToast('Using last known location for SOS', 'warn');
+    // Use lastPos already set above — silent fallback
+    if (!lat) showToast('Using last known location for SOS', 'warn');
   }
 
+  // Send SOS immediately — don't wait for GPS if we have lastPos
   try {
     const r = await authFetch('/api/sos_alert', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lat, lng, ride_id: activeRideId })
     });
     if (!r) { showToast('Network error — SOS could not be sent', 'error'); return; }
@@ -949,15 +977,15 @@ async function triggerSOS() {
       const overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(198,40,40,0.96);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;color:white;text-align:center;padding:24px';
       overlay.innerHTML = `
-        <div style="font-size:80px">🚨</div>
-        <h1 style="font-size:2rem;margin:0;font-weight:900">SOS ALERT SENT!</h1>
-        <p style="font-size:1.1rem;opacity:0.95;max-width:400px">${d.message}</p>
+        <div style="font-size:72px">🚨</div>
+        <h1 style="font-size:1.8rem;margin:0;font-weight:900">SOS ALERT SENT!</h1>
+        <p style="font-size:1rem;opacity:0.95;max-width:360px">${d.message}</p>
         <p style="font-size:0.85rem;opacity:0.8">Emergency contact notified with your location.</p>
         ${d.maps_link && d.maps_link !== 'Location unavailable'
-          ? `<a href="${d.maps_link}" target="_blank" style="background:white;color:#C62828;padding:14px 32px;border-radius:10px;font-weight:900;text-decoration:none;font-size:1rem">📍 View Your Location</a>`
-          : '<p style="opacity:0.7;font-size:0.9rem">Location data not available</p>'}
-        <p style="font-size:0.85rem;opacity:0.7">Call 112 if in immediate danger</p>
-        <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.2);border:2px solid white;color:white;padding:12px 32px;border-radius:10px;cursor:pointer;font-weight:700;font-size:1rem;margin-top:8px">✕ Close</button>`;
+          ? `<a href="${d.maps_link}" target="_blank" style="background:white;color:#C62828;padding:14px 28px;border-radius:10px;font-weight:900;text-decoration:none;font-size:0.95rem;display:block;width:100%;max-width:280px;text-align:center">📍 View Your Location on Maps</a>`
+          : '<p style="opacity:0.7;font-size:0.85rem">Location data not available</p>'}
+        <p style="font-size:0.82rem;opacity:0.7">Call 112 if in immediate danger</p>
+        <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.2);border:2px solid white;color:white;padding:12px 28px;border-radius:10px;cursor:pointer;font-weight:700;font-size:0.95rem;width:100%;max-width:280px">✕ Close</button>`;
       document.body.appendChild(overlay);
       setTimeout(() => overlay.remove(), 20000);
     } else {
@@ -966,8 +994,11 @@ async function triggerSOS() {
         showToast('Go to Profile → Emergency Contact to add one first', 'warn');
       }
     }
-  } catch (e) { showToast('SOS failed: ' + e.message, 'error'); }
-  finally { if (btn) { btn.textContent = '🚨 SOS'; btn.disabled = false; } }
+  } catch (e) {
+    showToast('SOS failed: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.textContent = '🚨 SOS'; btn.disabled = false; }
+  }
 }
 
 // ── LOGOUT ─────────────────────────────────────────────────────────────────────

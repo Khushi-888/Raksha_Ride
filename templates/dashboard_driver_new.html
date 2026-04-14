@@ -376,11 +376,26 @@ function showSection(name) {
   if (name === 'tracking') initDriverMap();
   if (name === 'history') loadRideHistory();
   if (name === 'myqr') populateQR();
-  document.getElementById('mainSidebar').classList.remove('open');
+  // Close mobile sidebar
+  const sidebar = document.getElementById('mainSidebar');
+  sidebar.classList.remove('open');
+  const overlay = document.getElementById('sidebarOverlay');
+  if (overlay) overlay.classList.remove('open');
 }
 
 function toggleMobileSidebar() {
-  document.getElementById('mainSidebar').classList.toggle('open');
+  const sidebar = document.getElementById('mainSidebar');
+  sidebar.classList.toggle('open');
+  // Create/toggle overlay
+  let overlay = document.getElementById('sidebarOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'sidebarOverlay';
+    overlay.className = 'sidebar-overlay';
+    overlay.onclick = () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); };
+    document.body.appendChild(overlay);
+  }
+  overlay.classList.toggle('open', sidebar.classList.contains('open'));
 }
 
 // ── LOAD DRIVER DATA ──────────────────────────────────────────────────────────
