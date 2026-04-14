@@ -4618,7 +4618,9 @@ def db_viewer_page():
 
 @app.route('/api/db/tables')
 def api_db_tables():
-    """Get all table names and row counts"""
+    """Get all table names and row counts — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Admin access required"}), 403
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -4637,7 +4639,9 @@ def api_db_tables():
 
 @app.route('/api/db/table/<table_name>')
 def api_db_table_data(table_name):
-    """Get table data with pagination"""
+    """Get table data with pagination — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Admin access required"}), 403
     # Whitelist tables for security
     allowed = ['passengers','drivers','rides','payments','driver_documents',
                'renter_requests','ratings','otp_verification','admins','sos_alerts']
@@ -4690,7 +4694,9 @@ def api_db_table_data(table_name):
 
 @app.route('/api/db/stats')
 def api_db_stats():
-    """Get live database statistics"""
+    """Get live database statistics — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Admin access required"}), 403
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
