@@ -1116,6 +1116,8 @@ async function logout() {
     }
   } catch (e) {}
   loadDriverData();
+  // Keep Render awake — ping every 14 minutes
+  setInterval(() => fetch('/ping').catch(() => {}), 14 * 60 * 1000);
 })();
 </script>
 </body>

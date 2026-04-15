@@ -106,8 +106,17 @@ app.secret_key = os.environ.get('SECRET_KEY', 'raksha-ride-enhanced-secret-key-2
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
-# Performance: compress responses
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # 1 year cache for static files
+app.config['JSON_SORT_KEYS'] = False  # Faster JSON serialization
+
+# Enable gzip compression for all responses
+try:
+    from flask_compress import Compress
+    Compress(app)
+    print("[OK] Response compression enabled")
+except ImportError:
+    print("[WARN] flask-compress not installed — responses uncompressed")
+
 CORS(app, supports_credentials=True, origins="*")
 
 # Base URL
@@ -781,6 +790,16 @@ def is_valid_email(email):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/ping')
+def ping():
+    """Keep-alive endpoint — call every 14 minutes to prevent Render cold starts."""
+    return jsonify({"status": "ok", "time": datetime.now().isoformat()}), 200
+
+@app.route('/health')
+def health():
+    """Fast health check — no DB query."""
+    return jsonify({"status": "healthy", "service": "RakshaRide"}), 200
 
 @app.route('/scanner')
 def scanner_view():
@@ -3938,54 +3957,57 @@ def api_driver_profile():
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        # Exclude large blobs (payment_qr_image) from main profile — load separately
         c.execute("""SELECT id, name, age, mobile, email, vehicle_number, vehicle_type,
                      rc_number, license_number, aadhaar_number, role, owner_id,
                      unique_id, verification_status, rating, total_rides, total_earned,
-                     is_available, qr_code, payment_qr_image, upi_id
+                     is_available, qr_code, upi_id
                      FROM drivers WHERE id = ?""", (did,))
         row = c.fetchone()
-        conn.close()
         if not row:
+            conn.close()
             return jsonify({"success": False, "message": "Driver not found"}), 404
         cols = ['id','name','age','mobile','email','vehicle_number','vehicle_type',
                 'rc_number','license_number','aadhaar_number','role','owner_id',
                 'unique_id','verification_status','rating','total_rides','total_earned',
-                'is_available','qr_code','payment_qr_image','upi_id']
+                'is_available','qr_code','upi_id']
         driver = dict(zip(cols, row))
-        # qr_code stores the base64 PNG directly (generated in-memory, no file path)
-        if driver.get('qr_code'):
-            qc = driver['qr_code']
-            if qc.startswith('data:image/'):
-                # Already a rendered PNG — use directly
-                driver['qr_image'] = qc
-            else:
-                # Legacy: raw QR data string — regenerate PNG
-                try:
-                    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=4)
-                    qr.add_data(qc)
-                    qr.make(fit=True)
-                    img = qr.make_image(fill_color="#1565C0", back_color="white")
-                    buf = io.BytesIO()
-                    img.save(buf, format="PNG")
-                    driver['qr_image'] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
-                except Exception as qr_err:
-                    print(f"[WARN] QR regen failed: {qr_err}")
-                    driver['qr_image'] = None
-        else:
-            # No QR stored yet — generate fresh one
+
+        # QR image — use stored value directly if it's already a PNG
+        qc = driver.get('qr_code') or ''
+        if qc.startswith('data:image/'):
+            driver['qr_image'] = qc
+        elif qc:
+            # Legacy raw string — regenerate once and save
             try:
-                qr_img, qr_data = generate_driver_qr_code(
-                    driver['id'], driver['name'], driver['vehicle_number'], driver['mobile'])
-                if qr_img:
-                    driver['qr_image'] = qr_img
-                    # Save it so we don't regenerate every time
-                    conn2 = sqlite3.connect(DB_PATH)
-                    conn2.execute("UPDATE drivers SET qr_code=? WHERE id=?", (qr_img, driver['id']))
-                    conn2.commit(); conn2.close()
-                else:
-                    driver['qr_image'] = None
+                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=6, border=3)
+                qr.add_data(qc)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="#1565C0", back_color="white")
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                qr_b64 = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+                driver['qr_image'] = qr_b64
+                # Save so we never regenerate again
+                c.execute("UPDATE drivers SET qr_code=? WHERE id=?", (qr_b64, did))
+                conn.commit()
             except Exception:
                 driver['qr_image'] = None
+        else:
+            # Generate fresh QR and save
+            try:
+                qr_img, _ = generate_driver_qr_code(did, driver['name'], driver['vehicle_number'], driver['mobile'])
+                driver['qr_image'] = qr_img
+                if qr_img:
+                    c.execute("UPDATE drivers SET qr_code=? WHERE id=?", (qr_img, did))
+                    conn.commit()
+            except Exception:
+                driver['qr_image'] = None
+
+        # Don't send raw qr_code blob in response (already in qr_image)
+        driver.pop('qr_code', None)
+        conn.close()
+
         return jsonify({"success": True, "driver": driver})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
