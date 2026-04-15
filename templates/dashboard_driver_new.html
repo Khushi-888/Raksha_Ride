@@ -395,6 +395,8 @@ function showSection(name) {
   if (name === 'myqr') populateQR();
   closeMobileSidebar();
 }
+
+function toggleMobileSidebar() {
   const sidebar = document.getElementById('mainSidebar');
   const isOpen = sidebar.classList.toggle('open');
   let overlay = document.getElementById('sidebarOverlay');
@@ -523,7 +525,8 @@ async function checkActiveRide() {
       activeRideId = d.ride.id;
       document.getElementById('activeRideBanner').classList.remove('hidden');
       document.getElementById('activeRideInfo').textContent = `Passenger: ${d.ride.passenger_name || 'Connected'}`;
-      document.getElementById('t-passenger').textContent = d.ride.passenger_name || 'Connected';
+      const tPax = document.getElementById('t-passenger');
+      if (tPax) tPax.textContent = d.ride.passenger_name || 'Connected';
       document.getElementById('passengerBadge').style.display = 'flex';
     }
   } catch (e) {}
