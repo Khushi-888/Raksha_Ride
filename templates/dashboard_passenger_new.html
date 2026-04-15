@@ -969,7 +969,17 @@ async function endRide() {
       document.getElementById('pay-dist-charge').textContent = '₹' + distCharge;
       if (rideData.payment_qr) {
         document.getElementById('paymentQRDisplay').innerHTML =
-          `<img src="${rideData.payment_qr}" style="max-width:200px;border-radius:10px;border:2px solid var(--border)">`;
+          `<div style="text-align:center">
+             <p style="font-size:0.85rem;color:var(--text2);margin-bottom:8px">Scan this QR to pay the driver:</p>
+             <img src="${rideData.payment_qr}" style="max-width:220px;width:100%;border-radius:12px;border:3px solid var(--yellow);box-shadow:0 4px 16px rgba(0,0,0,0.15)">
+             ${rideData.upi_id ? `<p style="margin-top:8px;font-size:0.85rem;color:var(--text2)">UPI: <strong>${rideData.upi_id}</strong></p>` : ''}
+           </div>`;
+      } else {
+        document.getElementById('paymentQRDisplay').innerHTML =
+          `<div style="background:#FFF8E1;border:2px dashed #FFC107;border-radius:10px;padding:16px;text-align:center;color:#7B5800">
+             ⚠️ Driver has not uploaded a payment QR yet.<br>
+             <small>Please pay cash or ask driver for UPI details.</small>
+           </div>`;
       }
       activeRideId = null;
     } else showToast(d.message, 'error');
@@ -1043,61 +1053,63 @@ async function saveEmergencyContact() {
 
 // ── SOS ────────────────────────────────────────────────────────────────────────
 async function triggerSOS() {
-  if (!confirm('🚨 SEND SOS ALERT?\n\nThis will immediately alert your emergency contact with your live location.\n\nPress OK to confirm.')) return;
+  // Check if emergency contact is set
+  const emEmail = passengerData?.emergency_email || '';
+  const emMobile = passengerData?.emergency_mobile || '';
 
+  if (!emEmail && !emMobile) {
+    // No contact saved — prompt for email right now
+    const emailInput = prompt('🚨 SOS EMERGENCY\n\nNo emergency contact saved.\nEnter an email address to send the alert to:');
+    if (!emailInput || !emailInput.includes('@')) {
+      showToast('SOS cancelled. Go to Profile → Emergency Contact to save one.', 'warn');
+      return;
+    }
+    await _doSendSOS(emailInput);
+    return;
+  }
+
+  if (!confirm('🚨 SEND SOS ALERT?\n\nThis will immediately alert your emergency contact with your live location.\n\nPress OK to confirm.')) return;
+  await _doSendSOS(null);
+}
+
+async function _doSendSOS(overrideEmail) {
   const btn = document.getElementById('sosBtn');
   if (btn) { btn.textContent = '📡 Sending...'; btn.disabled = true; }
 
-  // Use cached lastPos immediately — don't wait for GPS
   let lat = lastPos?.lat || null;
   let lng = lastPos?.lng || null;
 
-  // Send SOS RIGHT NOW with whatever location we have
-  const sendSOS = async (sendLat, sendLng) => {
+  const callAPI = async (sendLat, sendLng) => {
     try {
+      const body = { lat: sendLat, lng: sendLng, ride_id: activeRideId };
+      if (overrideEmail) body.override_email = overrideEmail;
       const r = await authFetch('/api/sos_alert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lat: sendLat, lng: sendLng, ride_id: activeRideId })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
       });
       if (!r) return null;
       return await r.json();
     } catch (e) { return null; }
   };
 
-  // First send — immediate with cached location
-  let d = await sendSOS(lat, lng);
+  let d = await callAPI(lat, lng);
 
   if (d && d.success) {
     showToast('🚨 SOS SENT to ' + (d.contact || 'emergency contact') + '!', 'success');
     showSOSOverlay(d);
-
-    // If we didn't have GPS, try to get fresh location and send a follow-up
+    // If no GPS yet, get fresh and send follow-up
     if (!d.location_shared) {
-      showToast('Getting your GPS location for follow-up alert...', 'info');
       try {
         const pos = await new Promise((res, rej) =>
-          navigator.geolocation.getCurrentPosition(res, rej,
-            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 })
+          navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 })
         );
-        const freshLat = pos.coords.latitude;
-        const freshLng = pos.coords.longitude;
-        lastPos = { lat: freshLat, lng: freshLng };
-        // Send follow-up with actual location
-        const d2 = await sendSOS(freshLat, freshLng);
-        if (d2 && d2.success && d2.location_shared) {
-          showToast('📍 Location update sent to emergency contact!', 'success');
-        }
-      } catch (e) {
-        showToast('⚠️ Could not get GPS. Enable location permission for better SOS.', 'warn');
-      }
+        lastPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const d2 = await callAPI(lastPos.lat, lastPos.lng);
+        if (d2?.success && d2.location_shared) showToast('📍 Location update sent!', 'success');
+      } catch (e) { showToast('⚠️ Enable GPS for location sharing', 'warn'); }
     }
   } else {
-    const msg = d?.message || 'SOS failed — check your emergency contact settings';
-    showToast('❌ ' + msg, 'error');
-    if (msg.includes('No emergency contact')) {
-      showToast('Go to Profile → Emergency Contact to add one', 'warn');
-    }
+    showToast('❌ ' + (d?.message || 'SOS failed'), 'error');
   }
 
   if (btn) { btn.textContent = '🚨 SOS'; btn.disabled = false; }

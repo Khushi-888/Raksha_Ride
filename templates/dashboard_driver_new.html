@@ -92,7 +92,7 @@
         </div>
         <div style="display:flex;gap:10px">
           <button class="btn btn-yellow" onclick="showSection('tracking')">📍 View Map</button>
-          <button class="btn btn-blue" onclick="completeRide()">✅ Complete Ride</button>
+          <span style="background:#E8F5E9;color:#2E7D32;padding:8px 14px;border-radius:8px;font-size:0.85rem;font-weight:600">🚦 Ride Active</span>
         </div>
       </div>
       <div class="section-card">
@@ -234,7 +234,7 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn btn-yellow" onclick="startTracking()" id="startTrackBtn">▶ Start GPS</button>
           <button class="btn btn-outline" onclick="stopTracking()" id="stopTrackBtn" style="display:none">⏹ Stop GPS</button>
-          <button class="btn btn-blue" onclick="completeRide()" id="completeRideBtn" style="display:none">✅ Complete Ride</button>
+          <span id="rideActiveInfo" style="display:none;background:#E8F5E9;color:#2E7D32;padding:8px 14px;border-radius:8px;font-size:0.85rem;font-weight:600">🚦 Passenger ends ride</span>
         </div>
       </div>
 
@@ -945,7 +945,8 @@ function startTracking() {
   document.getElementById('startTrackBtn').style.display = 'none';
   document.getElementById('stopTrackBtn').style.display = 'inline-flex';
   if (activeRideId) {
-    document.getElementById('completeRideBtn').style.display = 'inline-flex';
+    const rideInfo = document.getElementById('rideActiveInfo');
+    if (rideInfo) rideInfo.style.display = 'inline-flex';
     const fb = document.getElementById('fareBreakdown');
     if (fb) fb.style.display = 'block';
   }

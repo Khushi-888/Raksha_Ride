@@ -2446,101 +2446,83 @@ def toggle_availability():
 
 @app.route('/api/complete_ride', methods=['POST'])
 def complete_ride():
-    """Complete a ride — supports JWT + session auth"""
+    """Complete a ride — PASSENGER ONLY"""
+    pid, err = _require_passenger()
+    if err: return err
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({"success": False, "message": "Not authenticated"}), 401
         data = request.get_json()
         ride_id = data.get('ride_id')
-        distance_km = data.get('distance_km', 5.0)  # Default 5km if not provided
-        
+        distance_km = float(data.get('distance_km') or 0)
+
         if not ride_id:
             return jsonify({"success": False, "message": "Ride ID required"}), 400
-        
+
         conn = get_db_conn()
         c = conn.cursor()
-        
-        # Get ride details
-        c.execute("""SELECT passenger_id, driver_id, start_time, status 
-                     FROM rides WHERE id = ?""", (ride_id,))
+
+        # Verify ride belongs to this passenger
+        c.execute("SELECT passenger_id, driver_id, start_time, status FROM rides WHERE id = ?", (ride_id,))
         result = c.fetchone()
-        
         if not result:
             conn.close()
             return jsonify({"success": False, "message": "Ride not found"}), 404
-        
+
         passenger_id, driver_id, start_time_str, status = result
-        
+
+        if str(passenger_id) != str(pid):
+            conn.close()
+            return jsonify({"success": False, "message": "Not your ride"}), 403
+
         if status != 'active':
             conn.close()
             return jsonify({"success": False, "message": "Ride is not active"}), 400
-        
-        # Calculate duration and fare
+
+        # Calculate fare
         start_time = datetime.fromisoformat(start_time_str.replace(' ', 'T'))
         end_time = datetime.now()
-        duration = end_time - start_time
-        duration_minutes = int(duration.total_seconds() / 60)
-        
+        duration_minutes = int((end_time - start_time).total_seconds() / 60)
         fare = calculate_fare(duration_minutes, distance_km)
-        
-        route_coordinates = data.get('route_coordinates', '[]')
-        
-        # Update ride
-        end_lat = data.get('latitude')
-        end_lng = data.get('longitude')
-        
-        c.execute("""UPDATE rides SET end_time = ?, duration_minutes = ?, distance_km = ?, 
-                     fare = ?, route_coordinates = ?, end_lat = ?, end_lng = ?, status = 'completed' WHERE id = ?""",
-                   (end_time, duration_minutes, distance_km, fare, route_coordinates, end_lat, end_lng, ride_id))
-        
-        # Update driver availability and stats
-        c.execute("""UPDATE drivers SET is_available = 1, total_rides = total_rides + 1, 
-                     total_earned = total_earned + ? WHERE id = ?""", (fare, driver_id))
-        
+
+        # Update ride to completed
+        c.execute("""UPDATE rides SET end_time=?, duration_minutes=?, distance_km=?,
+                     fare=?, status='completed', payment_status='pending' WHERE id=?""",
+                  (end_time, duration_minutes, distance_km, fare, ride_id))
+
+        # Update driver — mark available again
+        c.execute("UPDATE drivers SET is_available=1 WHERE id=?", (driver_id,))
+
         # Update passenger stats
-        c.execute("""UPDATE passengers SET total_rides = total_rides + 1, 
-                     total_spent = total_spent + ? WHERE id = ?""", (fare, passenger_id))
-        
-        # Create payment record
-        c.execute("""INSERT INTO payments (ride_id, passenger_id, driver_id, amount, status) 
-                     VALUES (?, ?, ?, ?, 'pending')""", (ride_id, passenger_id, driver_id, fare))
-        payment_id = c.lastrowid
-        
-        # Get driver name and UPI ID for payment QR
-        c.execute("SELECT name, upi_id FROM drivers WHERE id = ?", (driver_id,))
-        drv_result = c.fetchone()
-        driver_name = drv_result[0]
-        upi_id = drv_result[1]
-        
-        # Generate payment QR
-        payment_qr = generate_payment_qr_code(ride_id, fare, driver_name, upi_id)
-        c.execute("UPDATE payments SET payment_qr = ? WHERE id = ?", (payment_qr, payment_id))
-        
+        c.execute("UPDATE passengers SET total_rides=total_rides+1, total_spent=total_spent+? WHERE id=?",
+                  (fare, passenger_id))
+
+        # Get driver's uploaded payment QR image (what driver uploaded in Payment section)
+        c.execute("SELECT payment_qr_image, upi_id, name FROM drivers WHERE id=?", (driver_id,))
+        drv = c.fetchone()
+        driver_payment_qr = drv[0] if drv and drv[0] else None
+        upi_id = drv[1] if drv else None
+        driver_name = drv[2] if drv else "Driver"
+
+        # If driver has no uploaded QR, generate a UPI QR as fallback
+        if not driver_payment_qr:
+            driver_payment_qr = generate_payment_qr_code(ride_id, fare, driver_name, upi_id)
+
         conn.commit()
         conn.close()
-        
-        print(f"\n{'='*60}")
-        print(f"âœ… RIDE COMPLETED")
-        print(f"Ride ID: {ride_id}")
-        print(f"Duration: {duration_minutes} minutes")
-        print(f"Distance: {distance_km} km")
-        print(f"Fare: â‚¹{fare}")
-        print(f"{'='*60}\n")
-        
+
+        print(f"[RIDE COMPLETE] Ride {ride_id} | Dist: {distance_km}km | Fare: ₹{fare}")
+
         return jsonify({
             "success": True,
-            "message": "Ride completed successfully!",
+            "message": "Ride completed!",
             "ride": {
                 "id": ride_id,
                 "duration_minutes": duration_minutes,
                 "distance_km": distance_km,
                 "fare": fare,
-                "payment_qr": payment_qr,
-                "payment_id": payment_id
+                "payment_qr": driver_payment_qr,
+                "upi_id": upi_id
             }
         })
-        
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
@@ -4855,6 +4837,7 @@ def api_sos_alert():
         lat     = data.get('lat')
         lng     = data.get('lng')
         ride_id = data.get('ride_id')
+        override_email = (data.get('override_email') or '').strip()
         uid     = pid
 
         conn = sqlite3.connect(DB_PATH)
@@ -4871,11 +4854,16 @@ def api_sos_alert():
         pax_name, pax_phone, pax_email, em_name, em_mobile, em_email = pax
 
         if not em_email and not em_mobile:
-            conn.close()
-            return jsonify({
-                "success": False,
-                "message": "No emergency contact set. Go to Profile → Emergency Contact and add one first."
-            }), 400
+            # Check for override email from frontend prompt
+            if override_email and '@' in override_email:
+                em_email = override_email
+                em_name = "Emergency Contact"
+            else:
+                conn.close()
+                return jsonify({
+                    "success": False,
+                    "message": "No emergency contact set. Go to Profile → Emergency Contact and add one first."
+                }), 400
 
         # Get driver info — try ride_id first, then latest active ride
         driver_name, vehicle_number, driver_mobile = "Unknown", "Unknown", ""
