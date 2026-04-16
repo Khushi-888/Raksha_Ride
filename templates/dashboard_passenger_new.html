@@ -1081,29 +1081,83 @@ async function saveEmergencyContact() {
 
 // ── SOS ────────────────────────────────────────────────────────────────────────
 async function triggerSOS() {
-  // Check if emergency contact is set
-  const emEmail = passengerData?.emergency_email || '';
+  const emEmail  = passengerData?.emergency_email  || '';
   const emMobile = passengerData?.emergency_mobile || '';
+  const emName   = passengerData?.emergency_name   || '';
+
+  let targetEmail = emEmail;
 
   if (!emEmail && !emMobile) {
-    // No contact saved — prompt for email right now
-    const emailInput = prompt('🚨 SOS EMERGENCY\n\nNo emergency contact saved.\nEnter an email address to send the alert to:');
-    if (!emailInput || !emailInput.includes('@')) {
-      showToast('SOS cancelled. Go to Profile → Emergency Contact to save one.', 'warn');
+    // No contact saved — show modal to enter email
+    targetEmail = await showSOSEmailPrompt();
+    if (!targetEmail) {
+      showToast('SOS cancelled. Add emergency contact in Profile.', 'warn');
       return;
     }
-    await _doSendSOS(emailInput);
+    await _doSendSOS(targetEmail);
     return;
   }
 
-  if (!confirm('🚨 SEND SOS ALERT?\n\nThis will immediately alert your emergency contact with your live location.\n\nPress OK to confirm.')) return;
+  const contactInfo = emName ? `${emName} (${emEmail || emMobile})` : (emEmail || emMobile);
+  if (!confirm(`🚨 SEND SOS ALERT?\n\nAlert will be sent to:\n${contactInfo}\n\nWith your current GPS location.\n\nPress OK to confirm.`)) return;
   await _doSendSOS(null);
+}
+
+function showSOSEmailPrompt() {
+  return new Promise(resolve => {
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML = `
+      <div style="background:white;border-radius:16px;padding:28px;max-width:360px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.4)">
+        <div style="font-size:52px;margin-bottom:10px">🚨</div>
+        <h3 style="color:#C62828;margin:0 0 8px">SOS Emergency Alert</h3>
+        <p style="color:#555;font-size:0.88rem;margin-bottom:18px">No emergency contact saved.<br>Enter the email to send the alert to:</p>
+        <input type="email" id="sosEmailInput" placeholder="emergency@email.com"
+          style="width:100%;padding:13px;border:2px solid #C62828;border-radius:10px;font-size:1rem;margin-bottom:14px;box-sizing:border-box;text-align:center;outline:none">
+        <div style="display:flex;gap:10px">
+          <button id="sosModalCancel"
+            style="flex:1;padding:12px;border:2px solid #ccc;border-radius:10px;background:white;cursor:pointer;font-weight:600;font-size:0.9rem">Cancel</button>
+          <button id="sosModalSend"
+            style="flex:2;padding:12px;background:#C62828;color:white;border:none;border-radius:10px;cursor:pointer;font-weight:900;font-size:1rem">
+            🚨 Send SOS Now
+          </button>
+        </div>
+        <p style="margin-top:12px;font-size:0.75rem;color:#999">Save permanently: Profile → Emergency Contact</p>
+      </div>`;
+    document.body.appendChild(modal);
+
+    const input = modal.querySelector('#sosEmailInput');
+    input.focus();
+
+    modal.querySelector('#sosModalSend').onclick = () => {
+      const email = input.value.trim();
+      if (!email || !email.includes('@')) {
+        input.style.borderColor = '#C62828';
+        input.style.background = '#FFEBEE';
+        input.placeholder = 'Enter a valid email address!';
+        input.focus();
+        return;
+      }
+      modal.remove();
+      resolve(email);
+    };
+
+    modal.querySelector('#sosModalCancel').onclick = () => {
+      modal.remove();
+      resolve(null);
+    };
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') modal.querySelector('#sosModalSend').click();
+    });
+  });
 }
 
 async function _doSendSOS(overrideEmail) {
   const btn = document.getElementById('sosBtn');
   if (btn) { btn.textContent = '📡 Sending...'; btn.disabled = true; }
 
+  // Use cached GPS immediately — no waiting
   let lat = lastPos?.lat || null;
   let lng = lastPos?.lng || null;
 
@@ -1120,24 +1174,34 @@ async function _doSendSOS(overrideEmail) {
     } catch (e) { return null; }
   };
 
+  // Send immediately with cached location
   let d = await callAPI(lat, lng);
 
   if (d && d.success) {
     showToast('🚨 SOS SENT to ' + (d.contact || 'emergency contact') + '!', 'success');
     showSOSOverlay(d);
-    // If no GPS yet, get fresh and send follow-up
+    // If no GPS yet, get fresh and send follow-up with location
     if (!d.location_shared) {
       try {
         const pos = await new Promise((res, rej) =>
-          navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 })
+          navigator.geolocation.getCurrentPosition(res, rej,
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 })
         );
         lastPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         const d2 = await callAPI(lastPos.lat, lastPos.lng);
-        if (d2?.success && d2.location_shared) showToast('📍 Location update sent!', 'success');
-      } catch (e) { showToast('⚠️ Enable GPS for location sharing', 'warn'); }
+        if (d2?.success && d2.location_shared) {
+          showToast('📍 Location update sent to emergency contact!', 'success');
+        }
+      } catch (e) {
+        showToast('⚠️ Enable GPS for location sharing', 'warn');
+      }
     }
   } else {
-    showToast('❌ ' + (d?.message || 'SOS failed'), 'error');
+    const msg = d?.message || 'SOS failed — check internet connection';
+    showToast('❌ ' + msg, 'error');
+    if (msg.includes('No emergency contact')) {
+      showToast('Add emergency contact in Profile section', 'warn');
+    }
   }
 
   if (btn) { btn.textContent = '🚨 SOS'; btn.disabled = false; }
