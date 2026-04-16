@@ -1085,11 +1085,9 @@ async function triggerSOS() {
   const emMobile = passengerData?.emergency_mobile || '';
   const emName   = passengerData?.emergency_name   || '';
 
-  let targetEmail = emEmail;
-
+  // If no emergency contact saved — show modal to enter email first
   if (!emEmail && !emMobile) {
-    // No contact saved — show modal to enter email
-    targetEmail = await showSOSEmailPrompt();
+    const targetEmail = await showSOSEmailPrompt();
     if (!targetEmail) {
       showToast('SOS cancelled. Add emergency contact in Profile.', 'warn');
       return;
@@ -1098,8 +1096,7 @@ async function triggerSOS() {
     return;
   }
 
-  const contactInfo = emName ? `${emName} (${emEmail || emMobile})` : (emEmail || emMobile);
-  if (!confirm(`🚨 SEND SOS ALERT?\n\nAlert will be sent to:\n${contactInfo}\n\nWith your current GPS location.\n\nPress OK to confirm.`)) return;
+  // Emergency contact IS saved — send INSTANTLY, no confirm dialog
   await _doSendSOS(null);
 }
 
