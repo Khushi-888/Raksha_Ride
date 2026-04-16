@@ -846,17 +846,24 @@ function startPassengerTracking() {
 
 function updatePassengerLocation() {
   navigator.geolocation.getCurrentPosition(pos => {
-    const lat = pos.coords.latitude, lng = pos.coords.longitude;
-    if (lastPos) {
+    const lat      = pos.coords.latitude;
+    const lng      = pos.coords.longitude;
+    const accuracy = pos.coords.accuracy || 50;
+    const speedMs  = pos.coords.speed || 0;
+
+    // Only accumulate distance if GPS is accurate enough
+    if (lastPos && accuracy < 80) {
       const dist = haversine(lastPos.lat, lastPos.lng, lat, lng);
-      if (dist < 0.5) totalDistance += dist;
+      if (dist > 0.002 && dist < 0.5) totalDistance += dist;
     }
     lastPos = { lat, lng };
+
     const elapsedMin = (Date.now() - rideStartTime) / 60000;
     const fare = Math.round(totalDistance * 10);
     document.getElementById('t-dist').textContent = totalDistance.toFixed(2);
     document.getElementById('t-time').textContent = Math.round(elapsedMin);
     document.getElementById('t-fare').textContent = '₹' + fare;
+
     if (passengerMap) {
       if (!passengerMarker) {
         passengerMarker = L.marker([lat, lng], { icon: makePaxIcon('#1565C0', '👤') })
@@ -864,13 +871,15 @@ function updatePassengerLocation() {
       } else passengerMarker.setLatLng([lat, lng]);
       passengerMap.setView([lat, lng], 15);
     }
-    document.getElementById('trackStatus').textContent = '📍 ' + totalDistance.toFixed(2) + ' km';
+    document.getElementById('trackStatus').textContent =
+      '📍 ' + totalDistance.toFixed(2) + ' km' + (accuracy > 50 ? ' ⚠️GPS weak' : '');
+
     const token = localStorage.getItem('rr_token') || '';
     fetch('/api/update_location', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       credentials: 'include',
-      body: JSON.stringify({ lat, lng, type: 'passenger', ride_id: activeRideId })
+      body: JSON.stringify({ lat, lng, accuracy, speed: speedMs, type: 'passenger', ride_id: activeRideId })
     }).catch(() => {});
   }, () => {}, { enableHighAccuracy: true, timeout: 10000 });
 }

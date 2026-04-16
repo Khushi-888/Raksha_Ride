@@ -979,10 +979,13 @@ function stopTracking() {
 }
 
 function onGPSUpdate(pos) {
-  const lat = pos.coords.latitude, lng = pos.coords.longitude;
-  const speedKmh = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(1) : 0;
+  const lat      = pos.coords.latitude;
+  const lng      = pos.coords.longitude;
+  const accuracy = pos.coords.accuracy || 50;
+  const speedMs  = pos.coords.speed || 0;
+  const speedKmh = (speedMs * 3.6).toFixed(1);
 
-  // Smooth dot marker
+  // Update marker
   if (!driverMarker) {
     driverMarker = L.marker([lat, lng], { icon: makeIcon('#FFC107', '🚗') })
       .addTo(driverMap).bindPopup('<b>🚗 You (Driver)</b>');
@@ -991,48 +994,49 @@ function onGPSUpdate(pos) {
   }
   driverMap.setView([lat, lng], 15);
 
-  // Haversine distance — ignore GPS jumps > 500m
-  if (lastPos) {
+  // Distance: only accumulate if GPS accuracy < 80m AND movement < 500m (no jumps)
+  if (lastPos && accuracy < 80) {
     const d = haversine(lastPos.lat, lastPos.lng, lat, lng);
-    if (d < 0.5) totalDistance += d;
+    if (d > 0.002 && d < 0.5) totalDistance += d; // min 2m movement, max 500m jump
   }
   lastPos = { lat, lng };
 
   const elapsedMin = (Date.now() - rideStartTime) / 60000;
-  const distCharge = totalDistance * 10;
-  const fare = Math.round(distCharge);
+  const fare = Math.round(totalDistance * 10);
 
   // Update stats
   document.getElementById('t-speed').textContent = speedKmh;
   document.getElementById('t-dist').textContent = totalDistance.toFixed(2);
   document.getElementById('t-fare').textContent = '₹' + fare;
   document.getElementById('t-time').textContent = Math.round(elapsedMin);
-  document.getElementById('mapStatus').textContent = '🟢 Live — ' + totalDistance.toFixed(2) + ' km';
+  document.getElementById('mapStatus').textContent =
+    '🟢 ' + totalDistance.toFixed(2) + ' km' + (accuracy > 50 ? ' ⚠️GPS weak' : '');
 
-  // Fare breakdown panel
+  // Fare breakdown
   const fbDist = document.getElementById('fb-dist');
   if (fbDist) {
     fbDist.textContent = totalDistance.toFixed(2);
-    document.getElementById('fb-dist-charge').textContent = '₹' + distCharge.toFixed(2);
+    document.getElementById('fb-dist-charge').textContent = '₹' + (totalDistance * 10).toFixed(2);
     document.getElementById('fb-total').textContent = '₹' + fare;
   }
 
-  // Throttle server sends to every 5s
+  // Adaptive sampling: fast when moving, slow when idle
   const now = Date.now();
-  if (now - _lastGpsSend >= 5000) {
+  const sendInterval = speedMs > 5 ? 3000 : speedMs > 1 ? 5000 : 10000;
+  if (now - _lastGpsSend >= sendInterval) {
     _lastGpsSend = now;
-    sendLocationToServer(lat, lng);
+    sendLocationToServer(lat, lng, accuracy, speedMs);
     if (activeRideId) pollPassengerLocation();
   }
 }
 
-function sendLocationToServer(lat, lng) {
+function sendLocationToServer(lat, lng, accuracy, speed) {
   const token = localStorage.getItem('rr_token') || '';
   fetch('/api/update_location', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
     credentials: 'include',
-    body: JSON.stringify({ lat, lng, type: 'driver' })
+    body: JSON.stringify({ lat, lng, accuracy: accuracy || 50, speed: speed || 0, type: 'driver' })
   }).catch(() => {});
 }
 
@@ -1066,7 +1070,8 @@ function startAutoGPS() {
       const now = Date.now();
       if (now - _lastGpsSend < 5000) return;
       _lastGpsSend = now;
-      sendLocationToServer(pos.coords.latitude, pos.coords.longitude);
+      sendLocationToServer(pos.coords.latitude, pos.coords.longitude,
+        pos.coords.accuracy, pos.coords.speed || 0);
     },
     () => {},
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 4000 }

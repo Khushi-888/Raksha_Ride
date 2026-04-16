@@ -514,6 +514,9 @@ def init_db():
         ('rides', 'share_token',            'TEXT'),
         ('rides', 'share_token_active',     'INTEGER DEFAULT 0'),
         ('drivers', 'first_login',          'INTEGER DEFAULT 0'),
+        # GPS Kalman filter columns
+        ('live_locations', 'accuracy',      'REAL DEFAULT 50'),
+        ('live_locations', 'speed',         'REAL DEFAULT 0'),
     ]
     for table, col, coltype in migrations:
         try:
@@ -587,6 +590,8 @@ def init_db():
         role TEXT NOT NULL DEFAULT 'driver',
         latitude REAL,
         longitude REAL,
+        accuracy REAL DEFAULT 50,
+        speed REAL DEFAULT 0,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     conn.commit()
@@ -4281,16 +4286,18 @@ def api_get_payment_qr():
 
 @app.route('/api/update_location', methods=['POST'])
 def api_update_location():
-    """Update live GPS location — upsert pattern, no DB spam."""
+    """Update live GPS location with Kalman filtering + adaptive sampling."""
     current_user = get_current_user()
     if not current_user:
         return jsonify({"success": False}), 401
     try:
         data = request.get_json()
-        lat  = data.get('lat') or data.get('latitude')
-        lng  = data.get('lng') or data.get('longitude')
-        role = data.get('type') or data.get('role', 'driver')
-        uid  = current_user['user_id']
+        lat      = float(data.get('lat') or data.get('latitude') or 0)
+        lng      = float(data.get('lng') or data.get('longitude') or 0)
+        accuracy = float(data.get('accuracy') or 50)   # GPS accuracy in meters
+        speed    = float(data.get('speed') or 0)       # m/s from device
+        role     = data.get('type') or data.get('role', 'driver')
+        uid      = current_user['user_id']
 
         if not lat or not lng:
             return jsonify({"success": False, "message": "lat/lng required"}), 400
@@ -4298,24 +4305,99 @@ def api_update_location():
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
 
-        # Upsert into live_locations (single row per user — no duplicates)
-        c.execute("""INSERT INTO live_locations (user_id, role, latitude, longitude, updated_at)
-                     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        # ── Kalman Filter (1D applied to lat and lng separately) ──────────────
+        # Get previous filtered position
+        c.execute("SELECT latitude, longitude, accuracy FROM live_locations WHERE user_id=?", (uid,))
+        prev = c.fetchone()
+
+        if prev and prev[0] and prev[1]:
+            prev_lat, prev_lng, prev_acc = prev
+            prev_acc = float(prev_acc or 50)
+
+            # Kalman gain: weight new reading vs prediction
+            # High accuracy (small number) = trust new reading more
+            process_noise = 1.0   # how much we expect position to change
+            k_lat = (prev_acc ** 2) / (prev_acc ** 2 + accuracy ** 2 + process_noise)
+            k_lng = k_lat
+
+            # Filtered position = prediction + gain * (measurement - prediction)
+            filtered_lat = prev_lat + k_lat * (lat - prev_lat)
+            filtered_lng = prev_lng + k_lng * (lng - prev_lng)
+
+            # Updated accuracy estimate
+            new_acc = (1 - k_lat) * prev_acc + process_noise
+            new_acc = max(5.0, min(new_acc, 100.0))  # clamp 5–100m
+
+            # Reject GPS jumps > 500m (impossible movement)
+            dist_jump = _haversine_m(prev_lat, prev_lng, lat, lng)
+            if dist_jump > 500:
+                # Ignore this reading — GPS glitch
+                conn.close()
+                return jsonify({"success": True, "filtered": False, "reason": "jump_rejected"})
+        else:
+            filtered_lat, filtered_lng, new_acc = lat, lng, accuracy
+
+        # ── Upsert filtered position ──────────────────────────────────────────
+        c.execute("""INSERT INTO live_locations (user_id, role, latitude, longitude, accuracy, speed, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                      ON CONFLICT(user_id) DO UPDATE SET
                          latitude=excluded.latitude,
                          longitude=excluded.longitude,
+                         accuracy=excluded.accuracy,
+                         speed=excluded.speed,
                          updated_at=CURRENT_TIMESTAMP""",
-                  (uid, role, lat, lng))
+                  (uid, role, filtered_lat, filtered_lng, new_acc, speed))
 
-        # Also update drivers table for backward compatibility
         if role == 'driver':
-            c.execute("UPDATE drivers SET latitude=?, longitude=? WHERE id=?", (lat, lng, uid))
+            c.execute("UPDATE drivers SET latitude=?, longitude=? WHERE id=?",
+                      (filtered_lat, filtered_lng, uid))
 
         conn.commit()
+
+        # ── Check proximity for active ride (threshold sync logic) ────────────
+        proximity_result = {}
+        if role in ('driver', 'passenger'):
+            # Find the other party in an active ride
+            if role == 'driver':
+                c.execute("""SELECT r.passenger_id, ll.latitude, ll.longitude
+                             FROM rides r
+                             JOIN live_locations ll ON ll.user_id = r.passenger_id
+                             WHERE r.driver_id=? AND r.status='active' LIMIT 1""", (uid,))
+            else:
+                c.execute("""SELECT r.driver_id, ll.latitude, ll.longitude
+                             FROM rides r
+                             JOIN live_locations ll ON ll.user_id = r.driver_id
+                             WHERE r.passenger_id=? AND r.status='active' LIMIT 1""", (uid,))
+            other = c.fetchone()
+            if other and other[1] and other[2]:
+                dist_m = _haversine_m(filtered_lat, filtered_lng, float(other[1]), float(other[2]))
+                proximity_result = {
+                    "other_lat": other[1],
+                    "other_lng": other[2],
+                    "distance_m": round(dist_m, 1),
+                    "connected": dist_m < 50   # within 50m = "same location"
+                }
+
         conn.close()
-        return jsonify({"success": True})
+        return jsonify({
+            "success": True,
+            "filtered_lat": filtered_lat,
+            "filtered_lng": filtered_lng,
+            "accuracy": round(new_acc, 1),
+            "proximity": proximity_result
+        })
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+def _haversine_m(lat1, lon1, lat2, lon2):
+    """Haversine distance in METERS."""
+    R = 6371000  # Earth radius in meters
+    dLat = math.radians(lat2 - lat1)
+    dLon = math.radians(lon2 - lon1)
+    a = (math.sin(dLat/2)**2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dLon/2)**2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
 @app.route('/api/get_driver_location')
 def api_get_driver_location():
