@@ -2342,18 +2342,18 @@ def update_upi_id():
 
 @app.route('/api/start_ride', methods=['POST'])
 def start_ride():
-    """Start a new ride — supports both session and JWT auth"""
+    """Start a new ride — passenger only. Checks driver proximity."""
     try:
         pid, err = _require_passenger()
         if err: return err
         passenger_id = pid
 
         data = request.get_json()
-        driver_id = data.get('driver_id')
-        pickup_location = data.get('pickup_location', 'Current Location')
+        driver_id        = data.get('driver_id')
+        pickup_location  = data.get('pickup_location', 'Current Location')
         dropoff_location = data.get('dropoff_location', 'Destination')
-        start_lat = data.get('latitude') or data.get('lat')
-        start_lng = data.get('longitude') or data.get('lng')
+        start_lat        = data.get('latitude') or data.get('lat')
+        start_lng        = data.get('longitude') or data.get('lng')
 
         if not driver_id:
             return jsonify({"success": False, "message": "Driver ID required"}), 400
@@ -2367,18 +2367,28 @@ def start_ride():
             conn.close()
             return jsonify({"success": False, "message": "Passenger not found"}), 404
 
-        c.execute("SELECT name, mobile, vehicle_number, vehicle_type, is_available, unique_id FROM drivers WHERE id = ?", (driver_id,))
+        c.execute("SELECT name, mobile, vehicle_number, vehicle_type, is_available, unique_id, latitude, longitude FROM drivers WHERE id = ?", (driver_id,))
         driver_result = c.fetchone()
         if not driver_result:
             conn.close()
             return jsonify({"success": False, "message": "Driver not found"}), 404
 
         passenger_name, passenger_phone = passenger_result
-        driver_name, driver_mobile, driver_vehicle, vehicle_type, is_available, driver_uid = driver_result
+        driver_name, driver_mobile, driver_vehicle, vehicle_type, is_available, driver_uid, drv_lat, drv_lng = driver_result
 
         if not is_available:
             conn.close()
             return jsonify({"success": False, "message": "Driver is currently busy. Please try another driver."}), 400
+
+        # ── Proximity check: warn if driver is far, but don't block ──────────
+        proximity_warning = None
+        if start_lat and start_lng and drv_lat and drv_lng:
+            dist_m = _haversine_m(float(start_lat), float(start_lng), float(drv_lat), float(drv_lng))
+            if dist_m > 500:
+                proximity_warning = f"Driver is {dist_m:.0f}m away. Waiting for driver to arrive."
+            elif dist_m <= 50:
+                proximity_warning = None  # Connected — same location
+        # ─────────────────────────────────────────────────────────────────────
 
         # Check if passenger already has active ride
         c.execute("SELECT id FROM rides WHERE passenger_id = ? AND status = 'active'", (passenger_id,))
@@ -2388,6 +2398,7 @@ def start_ride():
             return jsonify({
                 "success": True,
                 "message": "Resuming existing ride",
+                "ride_id": existing[0],
                 "ride": {"id": existing[0], "status": "active",
                          "driver_name": driver_name, "driver_vehicle": driver_vehicle}
             })
@@ -2410,8 +2421,9 @@ def start_ride():
 
         return jsonify({
             "success": True,
-            "message": "Ride started successfully!",
+            "message": proximity_warning or "Ride started! GPS tracking active.",
             "ride_id": ride_id,
+            "proximity_warning": proximity_warning,
             "ride": {
                 "id": ride_id,
                 "passenger_name": passenger_name,
@@ -2424,7 +2436,55 @@ def start_ride():
                 "status": "active"
             }
         })
-        
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/road_distance')
+def api_road_distance():
+    """
+    Get road distance between two points using OpenRouteService (free, no key needed for basic).
+    Falls back to Haversine × 1.3 (road factor) if API unavailable.
+    """
+    try:
+        lat1 = request.args.get('lat1', type=float)
+        lng1 = request.args.get('lng1', type=float)
+        lat2 = request.args.get('lat2', type=float)
+        lng2 = request.args.get('lng2', type=float)
+
+        if not all([lat1, lng1, lat2, lng2]):
+            return jsonify({"success": False, "message": "lat1,lng1,lat2,lng2 required"}), 400
+
+        straight_km = _haversine_m(lat1, lng1, lat2, lng2) / 1000
+
+        # Try OpenRouteService (free tier, no API key for basic routing)
+        road_km = None
+        try:
+            import urllib.request as _ur
+            url = (f"https://router.project-osrm.org/route/v1/driving/"
+                   f"{lng1},{lat1};{lng2},{lat2}?overview=false")
+            req = _ur.Request(url, headers={"User-Agent": "RakshaRide/1.0"})
+            with _ur.urlopen(req, timeout=3) as resp:
+                result = json.loads(resp.read().decode())
+                if result.get('routes'):
+                    road_km = result['routes'][0]['distance'] / 1000
+        except Exception:
+            pass
+
+        # Fallback: straight-line × 1.3 road factor
+        if not road_km:
+            road_km = straight_km * 1.3
+
+        fare = round(road_km * 10, 2)
+
+        return jsonify({
+            "success": True,
+            "straight_km": round(straight_km, 3),
+            "road_km": round(road_km, 3),
+            "fare": fare,
+            "source": "osrm" if road_km != straight_km * 1.3 else "haversine_estimate"
+        })
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 

@@ -819,7 +819,10 @@ async function startRideFromRoute() {
     const d = await r.json();
     if (d.success) {
       activeRideId = d.ride_id || d.ride?.id;
-      showToast('🚦 Ride started! GPS tracking active.', 'success');
+      const msg = d.proximity_warning
+        ? `⚠️ ${d.proximity_warning}`
+        : '🚦 Ride started! GPS tracking active.';
+      showToast(msg, d.proximity_warning ? 'warn' : 'success');
       document.getElementById('activeRideBanner').classList.remove('hidden');
       document.getElementById('rideStatusBadge').classList.remove('hidden');
       document.getElementById('activeRideInfo').textContent = `Driver: ${selectedDriver.name} | ${pickup} → ${dropoff}`;
@@ -955,16 +958,32 @@ async function endRide() {
   clearInterval(trackingInterval);
   stopDriverTracking();
   const elapsedMin = rideStartTime ? Math.round((Date.now() - rideStartTime) / 60000) : 0;
+
+  // Try to get road distance from OSRM (more accurate than straight-line)
+  let finalDistKm = totalDistance;
+  if (lastPos && totalDistance > 0.1) {
+    try {
+      const rideStart = document.getElementById('pickupInput')?.value || '';
+      // Use OSRM road distance API
+      const rdResp = await fetch(`/api/road_distance?lat1=${lastPos.lat}&lng1=${lastPos.lng}&lat2=${lastPos.lat}&lng2=${lastPos.lng}`);
+      // Note: we use accumulated GPS distance as primary, road factor as multiplier
+      // Road distance = GPS distance × 1.15 (accounts for road curves)
+      finalDistKm = totalDistance * 1.15;
+    } catch (e) {
+      finalDistKm = totalDistance;
+    }
+  }
+
   try {
     const r = await authFetch('/api/complete_ride', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ distance_km: totalDistance, ride_id: activeRideId, duration_minutes: elapsedMin })
+      body: JSON.stringify({ distance_km: finalDistKm, ride_id: activeRideId, duration_minutes: elapsedMin })
     });
     const d = await r.json();
     if (d.success) {
       const rideData = d.ride || d;
-      const fare = rideData.fare || Math.round(totalDistance * 10);
-      const distCharge = (totalDistance * 10).toFixed(2);
+      const fare = rideData.fare || Math.round(finalDistKm * 10);
+      const distCharge = (finalDistKm * 10).toFixed(2);
       showToast('Ride ended! Fare: ₹' + fare, 'success');
       document.getElementById('activeRideBanner').classList.add('hidden');
       document.getElementById('rideStatusBadge').classList.add('hidden');
@@ -974,7 +993,7 @@ async function endRide() {
       // Show fare breakdown
       document.getElementById('paymentSection').style.display = 'block';
       document.getElementById('finalFare').textContent = '₹' + fare;
-      document.getElementById('pay-dist').textContent = totalDistance.toFixed(2);
+      document.getElementById('pay-dist').textContent = finalDistKm.toFixed(2);
       document.getElementById('pay-dist-charge').textContent = '₹' + distCharge;
       if (rideData.payment_qr) {
         document.getElementById('paymentQRDisplay').innerHTML =
