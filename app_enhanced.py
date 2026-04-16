@@ -159,9 +159,9 @@ mail = Mail(app)
 
 def _smtp_send(to_email, subject, html_body, plain_body=None):
     """
-    Send email via HTTP API (Brevo) — works on Render free tier.
-    SMTP is blocked on Render, so we use Brevo's REST API instead.
-    Falls back to Gmail SMTP if Brevo key not set (for local dev).
+    Send email via Brevo HTTP API (works on Render — HTTPS port 443).
+    Falls back to Gmail SMTP for local dev.
+    Timeout reduced to 8s for SOS speed.
     """
     import urllib.request
     import urllib.error
@@ -169,15 +169,15 @@ def _smtp_send(to_email, subject, html_body, plain_body=None):
     gmail_email = os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com')
     brevo_key   = os.environ.get('BREVO_API_KEY', '')
 
-    # ── Brevo HTTP API (works on Render — uses HTTPS port 443) ───────────────
+    # ── Brevo HTTP API ────────────────────────────────────────────────────────
     if brevo_key:
         try:
             payload = json.dumps({
-                "sender": {"name": "RakshaRide", "email": gmail_email},
+                "sender": {"name": "RakshaRide Safety", "email": gmail_email},
                 "to": [{"email": to_email}],
                 "subject": subject,
                 "htmlContent": html_body,
-                "textContent": plain_body or ""
+                "textContent": plain_body or subject
             }).encode('utf-8')
 
             req = urllib.request.Request(
@@ -190,15 +190,53 @@ def _smtp_send(to_email, subject, html_body, plain_body=None):
                 },
                 method="POST"
             )
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=8) as resp:
                 result = json.loads(resp.read().decode())
-                print(f"[EMAIL OK via Brevo] {to_email} — messageId: {result.get('messageId','?')}")
+                print(f"[EMAIL OK Brevo] {to_email} — {result.get('messageId','?')}")
                 return True
         except urllib.error.HTTPError as e:
             body = e.read().decode()
-            print(f"[EMAIL Brevo HTTP Error] {e.code}: {body}")
+            print(f"[EMAIL Brevo HTTP {e.code}] {body[:200]}")
         except Exception as e:
             print(f"[EMAIL Brevo FAIL] {type(e).__name__}: {e}")
+
+    # ── Gmail SMTP fallback ───────────────────────────────────────────────────
+    gmail_pw = os.environ.get('GMAIL_APP_PASSWORD', 'lpuqabvhriyqajqg').replace(' ', '').replace('-', '')
+    from email.mime.multipart import MIMEMultipart as _MM
+    from email.mime.text import MIMEText as _MT
+    import smtplib as _smtp
+
+    def _build_msg():
+        msg = _MM('alternative')
+        msg['From'] = f"RakshaRide <{gmail_email}>"
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(_MT(plain_body or subject, 'plain'))
+        msg.attach(_MT(html_body, 'html'))
+        return msg
+
+    for port, use_ssl in [(587, False), (465, True)]:
+        try:
+            msg = _build_msg()
+            if use_ssl:
+                import ssl as _ssl
+                ctx = _ssl.create_default_context()
+                with _smtp.SMTP_SSL("smtp.gmail.com", port, context=ctx, timeout=15) as s:
+                    s.login(gmail_email, gmail_pw)
+                    s.sendmail(gmail_email, to_email, msg.as_string())
+            else:
+                s = _smtp.SMTP("smtp.gmail.com", port, timeout=15)
+                s.ehlo(); s.starttls(); s.ehlo()
+                s.login(gmail_email, gmail_pw)
+                s.sendmail(gmail_email, to_email, msg.as_string())
+                s.quit()
+            print(f"[EMAIL OK Gmail:{port}] {to_email}")
+            return True
+        except Exception as e:
+            print(f"[EMAIL Gmail:{port} FAIL] {type(e).__name__}: {e}")
+
+    print(f"[EMAIL ALL FAILED] {to_email} — check BREVO_API_KEY env var")
+    return False
 
     # ── Gmail SMTP fallback (works locally, blocked on Render free tier) ──────
     gmail_pw = os.environ.get('GMAIL_APP_PASSWORD', 'lpuqabvhriyqajqg').replace(' ', '').replace('-', '')
@@ -5089,30 +5127,36 @@ def api_sos_alert():
 </body></html>"""
 
         sent_to = []
-
-        # Send to emergency email — synchronous (critical path)
         if em_email:
-            ok = _smtp_send(em_email, subject, html_body)
             sent_to.append(em_email)
-            if ok:
-                print(f"[SOS] ✅ Sent to {em_email}")
-            else:
-                send_email_async(em_email, subject, html_body)  # async retry
-                print(f"[SOS] ⚠️ Sync failed, async retry for {em_email}")
 
-        # Confirmation to passenger's own email
-        if pax_email and pax_email != em_email:
-            confirm_html = f"""
+        # ── Fire-and-forget: send emails in background, return IMMEDIATELY ────
+        import threading as _t
+        _html_body_copy = html_body  # capture for thread closure
+
+        def _send_sos_emails():
+            if em_email:
+                ok = _smtp_send(em_email, subject, _html_body_copy)
+                print(f"[SOS] {'✅' if ok else '⚠️ FAILED'} Emergency email → {em_email}")
+                if not ok:
+                    # Retry once more
+                    import time; time.sleep(2)
+                    ok2 = _smtp_send(em_email, subject, _html_body_copy)
+                    print(f"[SOS] Retry {'✅' if ok2 else '❌ FAILED'} → {em_email}")
+            if pax_email and pax_email != em_email:
+                confirm_html = f"""
 <div style="font-family:Arial,sans-serif;padding:24px;max-width:500px;margin:0 auto">
   <div style="background:#C62828;color:white;padding:20px;border-radius:10px;text-align:center;margin-bottom:20px">
     <h2 style="margin:0">🚨 Your SOS Alert Was Sent</h2>
   </div>
   <p>Alert dispatched to: <strong>{em_name or em_email or em_mobile}</strong></p>
-  {'<p><strong>📍 Location shared:</strong><br><a href="' + maps_link + '" style="color:#C62828;font-weight:700">' + maps_link + '</a></p>' if has_location else '<p style="color:#C62828">⚠️ GPS location was not available. Enable location permission for better SOS.</p>'}
+  {'<p><strong>📍 Location:</strong><br><a href="' + maps_link + '" style="color:#C62828;font-weight:700">' + maps_link + '</a></p>' if has_location else '<p style="color:#C62828">⚠️ GPS location was not available.</p>'}
   <p><strong>🕐 Time:</strong> {alert_time}</p>
   <p style="color:#666;font-size:13px">Stay safe. Call 112 if in immediate danger.</p>
 </div>"""
-            send_email_async(pax_email, "✅ [SOS Sent] Your emergency alert was dispatched", confirm_html)
+                _smtp_send(pax_email, "✅ [SOS Sent] Your emergency alert was dispatched", confirm_html)
+
+        _t.Thread(target=_send_sos_emails, daemon=True).start()
 
         # Log to DB
         try:
@@ -5347,6 +5391,34 @@ def api_check_payment_status():
         return jsonify({"success": True, "payment_status": row[0], "fare": row[1]})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/test_sos')
+def api_test_sos():
+    """Test SOS email — admin only. Usage: /api/test_sos?to=your@email.com"""
+    if not session.get('is_admin'):
+        return jsonify({"error": "Login at /admin first"}), 403
+    to = request.args.get('to', os.environ.get('GMAIL_EMAIL', 'riksharide2026@gmail.com'))
+    alert_time = datetime.now().strftime("%d %b %Y, %I:%M %p")
+    html = f"""
+<div style="font-family:Arial;padding:20px;max-width:500px;margin:0 auto">
+  <div style="background:#C62828;color:white;padding:20px;border-radius:10px;text-align:center">
+    <h2>🚨 SOS TEST ALERT</h2>
+    <p>This is a test of the RakshaRide SOS system</p>
+  </div>
+  <div style="padding:20px;border:2px solid #C62828;border-radius:0 0 10px 10px">
+    <p><strong>Time:</strong> {alert_time}</p>
+    <p><strong>Status:</strong> ✅ SOS email system is working correctly</p>
+    <p><strong>Location test:</strong> <a href="https://maps.google.com/?q=20.5937,78.9629">View test location</a></p>
+  </div>
+</div>"""
+    ok = _smtp_send(to, "🚨 RakshaRide SOS Test — System Check", html)
+    return jsonify({
+        "success": ok,
+        "sent_to": to,
+        "message": "SOS test email sent!" if ok else "Email failed — check BREVO_API_KEY env var",
+        "time": alert_time
+    })
 
 
 # ── FARE ESTIMATE (live preview during ride) ──────────────────────────────────
