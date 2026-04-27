@@ -833,6 +833,13 @@ async function startRideFromRoute() {
       document.getElementById('startRideContainer').style.display = 'none';
       startPassengerTracking();
       startDriverTracking(selectedDriver.id);
+      // Start geofencing with pickup/dropoff coordinates
+      const pickupCoords = _parseCoords(pickup);
+      const dropoffCoords = _parseCoords(dropoff);
+      startGeofencing(activeRideId,
+        pickupCoords?.lat, pickupCoords?.lng,
+        dropoffCoords?.lat, dropoffCoords?.lng
+      );
     } else {
       showToast(d.message || 'Failed to start ride', 'error');
     }
@@ -1221,7 +1228,88 @@ function showSOSOverlay(d) {
   setTimeout(() => overlay.remove(), 25000);
 }
 
-// ── LOGOUT ─────────────────────────────────────────────────────────────────────
+// ── GEOFENCING ─────────────────────────────────────────────────────────────────
+let _geofenceInterval = null;
+
+function startGeofencing(rideId, pickupLat, pickupLng, dropoffLat, dropoffLng) {
+  if (!rideId) return;
+
+  // Set geofence zones on server
+  const body = { ride_id: rideId, radius_m: 100 };
+  if (pickupLat && pickupLng) { body.pickup_lat = pickupLat; body.pickup_lng = pickupLng; }
+  if (dropoffLat && dropoffLng) { body.dropoff_lat = dropoffLat; body.dropoff_lng = dropoffLng; }
+
+  authFetch('/api/set_geofence', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(r => r?.json()).then(d => {
+    if (d?.success) {
+      console.log('[GEOFENCE] Zones set:', d.zones);
+      // Start polling geofence every 5s
+      if (_geofenceInterval) clearInterval(_geofenceInterval);
+      _geofenceInterval = setInterval(() => checkGeofence(rideId), 5000);
+    }
+  }).catch(() => {});
+}
+
+async function checkGeofence(rideId) {
+  if (!lastPos || !rideId) return;
+  try {
+    const r = await authFetch(
+      `/api/check_geofence?ride_id=${rideId}&lat=${lastPos.lat}&lng=${lastPos.lng}&role=passenger`
+    );
+    if (!r) return;
+    const d = await r.json();
+    if (!d.success) return;
+
+    // Handle triggered events
+    for (const evt of (d.events || [])) {
+      if (evt.zone === 'pickup' && evt.event === 'enter') {
+        showToast('📍 You are at the pickup point!', 'success');
+        showGeofenceAlert('📍 Pickup Point Reached', 'You are at the pickup location. Your driver should be nearby.', '#4CAF50');
+      } else if (evt.zone === 'dropoff' && evt.event === 'enter') {
+        showToast('🏁 Approaching your destination!', 'success');
+        showGeofenceAlert('🏁 Destination Reached', 'You have arrived at your dropoff location. You can end the ride now.', '#1565C0');
+      } else if (evt.zone === 'dropoff' && evt.event === 'exit') {
+        showToast('⚠️ You left the dropoff zone', 'warn');
+      }
+    }
+
+    // Show distance to dropoff in tracking status
+    if (d.distances?.dropoff) {
+      const dist = d.distances.dropoff;
+      if (!dist.inside && dist.dist_m < 500) {
+        document.getElementById('trackStatus').textContent =
+          `📍 ${(dist.dist_m).toFixed(0)}m to destination`;
+      } else if (dist.inside) {
+        document.getElementById('trackStatus').textContent = '🏁 At destination!';
+      }
+    }
+  } catch (e) {}
+}
+
+function showGeofenceAlert(title, message, color) {
+  // Non-blocking toast-style alert
+  const alert = document.createElement('div');
+  alert.style.cssText = `position:fixed;top:80px;left:50%;transform:translateX(-50%);
+    background:${color};color:white;padding:16px 24px;border-radius:12px;
+    z-index:9998;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.3);
+    max-width:320px;width:90%;animation:toastIn 0.4s ease`;
+  alert.innerHTML = `<div style="font-size:1.1rem;font-weight:700;margin-bottom:4px">${title}</div>
+    <div style="font-size:0.85rem;opacity:0.9">${message}</div>`;
+  document.body.appendChild(alert);
+  setTimeout(() => alert.remove(), 5000);
+}
+
+function stopGeofencing(rideId) {
+  if (_geofenceInterval) { clearInterval(_geofenceInterval); _geofenceInterval = null; }
+  if (rideId) {
+    authFetch('/api/clear_geofence', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ride_id: rideId })
+    }).catch(() => {});
+  }
+}
 async function logout() {
   try { await authFetch('/api/logout', { method: 'POST' }); } catch (e) {}
   window.location.href = '/';

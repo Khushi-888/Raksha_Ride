@@ -3185,7 +3185,7 @@ def admin_logout():
 
 @app.route('/api/admin/pending_drivers', methods=['GET'])
 def admin_pending_drivers():
-    """List drivers pending verification"""
+    """List ALL drivers for admin"""
     if not session.get('is_admin'):
         return jsonify({"success": False, "message": "Unauthorized"}), 401
     try:
@@ -3193,7 +3193,7 @@ def admin_pending_drivers():
         c = conn.cursor()
         c.execute("""SELECT id, name, age, mobile, email, vehicle_number, vehicle_type,
                             rc_number, unique_id, aadhaar_number, verification_status,
-                            admin_notes, created_at
+                            admin_notes, created_at, role, gender, total_rides, total_earned, is_available
                      FROM drivers
                      ORDER BY CASE verification_status
                          WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
@@ -3208,9 +3208,115 @@ def admin_pending_drivers():
                 "rc_number": r[7], "unique_id": r[8],
                 "aadhaar_masked": mask_aadhaar(r[9] or ''),
                 "verification_status": r[10], "admin_notes": r[11],
-                "registered_at": r[12]
+                "registered_at": r[12], "role": r[13], "gender": r[14],
+                "total_rides": r[15], "total_earned": r[16], "is_available": r[17]
             })
         return jsonify({"success": True, "drivers": drivers})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/admin/passengers')
+def api_admin_passengers():
+    """List all passengers — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""SELECT id, name, phone, email, total_rides, total_spent,
+                            emergency_name, emergency_mobile, emergency_email, created_at
+                     FROM passengers ORDER BY created_at DESC""")
+        rows = c.fetchall()
+        conn.close()
+        cols = ['id','name','phone','email','total_rides','total_spent',
+                'emergency_name','emergency_mobile','emergency_email','created_at']
+        return jsonify({"success": True, "passengers": [dict(zip(cols, r)) for r in rows]})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/admin/rides')
+def api_admin_rides():
+    """List all rides — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""SELECT id, passenger_name, driver_name, driver_vehicle,
+                            pickup_location, dropoff_location, status, fare,
+                            distance_km, payment_status, created_at
+                     FROM rides ORDER BY created_at DESC LIMIT 200""")
+        rows = c.fetchall()
+        conn.close()
+        cols = ['id','passenger_name','driver_name','driver_vehicle',
+                'pickup_location','dropoff_location','status','fare',
+                'distance_km','payment_status','created_at']
+        return jsonify({"success": True, "rides": [dict(zip(cols, r)) for r in rows]})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/admin/sos_alerts')
+def api_admin_sos_alerts():
+    """List all SOS alerts — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("""CREATE TABLE IF NOT EXISTS sos_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            passenger_id INTEGER, ride_id INTEGER,
+            lat REAL, lng REAL,
+            alert_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            sent_to TEXT, driver_name TEXT, vehicle_number TEXT
+        )""")
+        c.execute("""SELECT s.id, p.name, p.phone, s.lat, s.lng,
+                            s.alert_time, s.sent_to, s.driver_name, s.vehicle_number
+                     FROM sos_alerts s
+                     LEFT JOIN passengers p ON s.passenger_id = p.id
+                     ORDER BY s.alert_time DESC LIMIT 100""")
+        rows = c.fetchall()
+        conn.close()
+        cols = ['id','passenger_name','passenger_phone','lat','lng',
+                'alert_time','sent_to','driver_name','vehicle_number']
+        alerts = []
+        for r in rows:
+            a = dict(zip(cols, r))
+            if a['lat'] and a['lng']:
+                a['maps_link'] = f"https://maps.google.com/?q={a['lat']},{a['lng']}"
+            alerts.append(a)
+        return jsonify({"success": True, "alerts": alerts})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/admin/summary')
+def api_admin_summary():
+    """Dashboard summary stats — admin only"""
+    if not session.get('is_admin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        conn = get_db_conn()
+        c = conn.cursor()
+        stats = {}
+        c.execute("SELECT COUNT(*) FROM drivers"); stats['total_drivers'] = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM drivers WHERE verification_status='pending'"); stats['pending_drivers'] = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM drivers WHERE verification_status='verified'"); stats['verified_drivers'] = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM drivers WHERE is_available=1"); stats['available_drivers'] = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM passengers"); stats['total_passengers'] = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM rides"); stats['total_rides'] = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM rides WHERE status='active'"); stats['active_rides'] = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM rides WHERE status='completed'"); stats['completed_rides'] = c.fetchone()[0]
+        c.execute("SELECT COALESCE(SUM(fare),0) FROM rides WHERE status='completed'"); stats['total_revenue'] = round(c.fetchone()[0], 2)
+        try:
+            c.execute("SELECT COUNT(*) FROM sos_alerts"); stats['sos_alerts'] = c.fetchone()[0]
+        except Exception:
+            stats['sos_alerts'] = 0
+        conn.close()
+        return jsonify({"success": True, "stats": stats})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
@@ -4454,6 +4560,129 @@ def _haversine_m(lat1, lon1, lat2, lon2):
     a = (math.sin(dLat/2)**2 +
          math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dLon/2)**2)
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+
+# ── GEOFENCING ────────────────────────────────────────────────────────────────
+# In-memory geofence store: { ride_id: { pickup: {lat,lng,radius}, dropoff: {lat,lng,radius} } }
+_geofences = {}
+
+def _check_geofence(ride_id, lat, lng, role):
+    """
+    Check if a point is inside any geofence for a ride.
+    Returns list of triggered events: [{'zone': 'pickup'|'dropoff', 'event': 'enter'|'exit', 'dist_m': float}]
+    """
+    if ride_id not in _geofences:
+        return []
+    fences = _geofences[ride_id]
+    events = []
+    for zone_name, fence in fences.items():
+        dist_m = _haversine_m(lat, lng, fence['lat'], fence['lng'])
+        radius = fence.get('radius', 100)
+        inside = dist_m <= radius
+        prev_inside = fence.get(f'{role}_inside', None)
+        if prev_inside is None:
+            fence[f'{role}_inside'] = inside
+        elif inside != prev_inside:
+            fence[f'{role}_inside'] = inside
+            events.append({
+                'zone': zone_name,
+                'event': 'enter' if inside else 'exit',
+                'dist_m': round(dist_m, 1),
+                'radius': radius
+            })
+    return events
+
+
+@app.route('/api/set_geofence', methods=['POST'])
+def api_set_geofence():
+    """
+    Set geofence zones for a ride.
+    Body: { ride_id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, radius_m (default 100) }
+    """
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False}), 401
+    try:
+        data = request.get_json() or {}
+        ride_id  = str(data.get('ride_id', ''))
+        radius   = float(data.get('radius_m', 100))
+
+        if not ride_id:
+            return jsonify({"success": False, "message": "ride_id required"}), 400
+
+        fences = {}
+        if data.get('pickup_lat') and data.get('pickup_lng'):
+            fences['pickup'] = {
+                'lat': float(data['pickup_lat']),
+                'lng': float(data['pickup_lng']),
+                'radius': radius
+            }
+        if data.get('dropoff_lat') and data.get('dropoff_lng'):
+            fences['dropoff'] = {
+                'lat': float(data['dropoff_lat']),
+                'lng': float(data['dropoff_lng']),
+                'radius': radius * 1.5  # slightly larger for dropoff
+            }
+
+        _geofences[ride_id] = fences
+        print(f"[GEOFENCE] Set for ride {ride_id}: {list(fences.keys())}")
+        return jsonify({"success": True, "zones": list(fences.keys()), "radius_m": radius})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/check_geofence')
+def api_check_geofence():
+    """
+    Check current position against geofences for a ride.
+    Query: ride_id, lat, lng, role (driver|passenger)
+    Returns triggered events.
+    """
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False}), 401
+    try:
+        ride_id = request.args.get('ride_id', '')
+        lat     = request.args.get('lat', type=float)
+        lng     = request.args.get('lng', type=float)
+        role    = request.args.get('role', 'passenger')
+
+        if not ride_id or not lat or not lng:
+            return jsonify({"success": False, "message": "ride_id, lat, lng required"}), 400
+
+        events = _check_geofence(ride_id, lat, lng, role)
+
+        # Also return current distances to all zones
+        distances = {}
+        if ride_id in _geofences:
+            for zone, fence in _geofences[ride_id].items():
+                dist_m = _haversine_m(lat, lng, fence['lat'], fence['lng'])
+                distances[zone] = {
+                    'dist_m': round(dist_m, 1),
+                    'radius': fence['radius'],
+                    'inside': dist_m <= fence['radius']
+                }
+
+        return jsonify({
+            "success": True,
+            "events": events,
+            "distances": distances,
+            "has_geofence": ride_id in _geofences
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/clear_geofence', methods=['POST'])
+def api_clear_geofence():
+    """Remove geofence when ride ends."""
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"success": False}), 401
+    ride_id = str((request.get_json() or {}).get('ride_id', ''))
+    if ride_id in _geofences:
+        del _geofences[ride_id]
+    return jsonify({"success": True})
 
 @app.route('/api/get_driver_location')
 def api_get_driver_location():
