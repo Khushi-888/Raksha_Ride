@@ -438,10 +438,12 @@ async function loadDriverData() {
     document.getElementById('sidebarRole').textContent = drv.role === 'RENT' ? '🔑 Rent Driver' : '👑 Owner Driver';
     document.getElementById('driverFirstName').textContent = (drv.name || 'Driver').split(' ')[0];
 
-    // Avatar
+    // Avatar — use profile photo doc if available, else generate from name
     const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(drv.name||'D')}&background=FFC107&color=000&size=120`;
     document.getElementById('sidebarAvatar').src = avatarUrl;
     document.getElementById('profileImg').src = avatarUrl;
+    // Load actual profile photo from documents (async, non-blocking)
+    loadProfilePhoto();
 
     // Stats
     document.getElementById('stat-rides').textContent = drv.total_rides || 0;
@@ -467,13 +469,17 @@ async function loadDriverData() {
 
     // Profile info rows
     document.getElementById('profileInfoDisplay').innerHTML = `
+      <div class="info-row"><span class="info-label">Unique ID</span><span class="info-value" style="font-family:monospace">${drv.unique_id || 'N/A'}</span></div>
       <div class="info-row"><span class="info-label">Role</span><span class="info-value">${drv.role === 'RENT' ? '🔑 Rent Driver' : '👑 Owner Driver'}</span></div>
       <div class="info-row"><span class="info-label">Mobile</span><span class="info-value">${drv.mobile || 'N/A'}</span></div>
       <div class="info-row"><span class="info-label">Email</span><span class="info-value">${drv.email || 'N/A'}</span></div>
       <div class="info-row"><span class="info-label">Age</span><span class="info-value">${drv.age || 'N/A'}</span></div>
       <div class="info-row"><span class="info-label">Gender</span><span class="info-value">${drv.gender || 'N/A'}</span></div>
+      <div class="info-row"><span class="info-label">Address</span><span class="info-value">${drv.address || 'N/A'}</span></div>
       <div class="info-row"><span class="info-label">Aadhaar</span><span class="info-value">${drv.aadhaar_number ? 'XXXX-XXXX-' + String(drv.aadhaar_number).slice(-4) : 'N/A'}</span></div>
       <div class="info-row"><span class="info-label">License No.</span><span class="info-value">${drv.license_number || 'N/A'}</span></div>
+      <div class="info-row"><span class="info-label">Total Rides</span><span class="info-value">${drv.total_rides || 0}</span></div>
+      <div class="info-row"><span class="info-label">Total Earned</span><span class="info-value">₹${drv.total_earned || 0}</span></div>
     `;
 
     // Edit fields
@@ -505,6 +511,19 @@ async function loadDriverData() {
   } catch (e) {
     showToast('Failed to load profile: ' + e.message, 'error');
   }
+}
+
+// ── LOAD PROFILE PHOTO ────────────────────────────────────────────────────────
+async function loadProfilePhoto() {
+  try {
+    const r = await authFetch('/api/get_document/photo');
+    if (!r) return;
+    const d = await r.json();
+    if (d.success && d.data) {
+      document.getElementById('profileImg').src = d.data;
+      document.getElementById('sidebarAvatar').src = d.data;
+    }
+  } catch (e) {}
 }
 
 function populateQR() {
@@ -646,6 +665,7 @@ async function loadDocuments() {
           ? `<img src="${doc.preview}" class="doc-thumb" onclick="openDocViewer('${type}','${label}')" alt="${label}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
           : ''}
         <div class="doc-placeholder" style="${doc?.has_preview ? 'display:none' : ''}">📄</div>
+        ${doc?.uploaded_at ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:6px">📅 ${new Date(doc.uploaded_at).toLocaleDateString()}</div>` : ''}
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
           ${doc?.uploaded ? `<button class="btn btn-sm btn-outline" onclick="openDocViewer('${type}','${label}')">👁 View</button>` : ''}
           ${canUpload && doc?.uploaded ? `<button class="btn btn-sm btn-outline" onclick="triggerDocUpdate('${type}')">✏️ Update</button>` : ''}
@@ -808,7 +828,28 @@ async function saveProfile() {
 }
 
 function uploadProfilePhoto(input) {
-  showToast('Profile photo upload coming soon', 'info');
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { showToast('File too large (max 5MB)', 'warn'); return; }
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const r = await authFetch('/api/owner/upload_doc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_type: 'photo', file_data: e.target.result })
+      });
+      if (!r) { showToast('Network error', 'error'); return; }
+      const d = await r.json();
+      if (d.success) {
+        showToast('Profile photo uploaded!', 'success');
+        // Update avatar immediately
+        document.getElementById('profileImg').src = e.target.result;
+        document.getElementById('sidebarAvatar').src = e.target.result;
+      } else showToast(d.message || 'Upload failed', 'error');
+    } catch (err) { showToast('Upload error: ' + err.message, 'error'); }
+  };
+  reader.readAsDataURL(file);
 }
 
 // ── AVAILABILITY ──────────────────────────────────────────────────────────────

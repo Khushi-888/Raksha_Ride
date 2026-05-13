@@ -17,6 +17,10 @@
 .scanner-frame { position:absolute; inset:20%; border:3px solid var(--yellow); border-radius:8px; }
 .scanner-line { position:absolute; left:20%; right:20%; height:2px; background:var(--yellow); animation:scanLine 2s linear infinite; }
 @keyframes scanLine { 0%{top:20%} 100%{top:80%} }
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.info-row:last-child{border-bottom:none}
+.info-label{font-size:0.82rem;color:var(--text2);font-weight:600}
+.info-value{font-weight:700;font-size:0.88rem;text-align:right;max-width:60%}
 </style>
 </head>
 <body>
@@ -117,6 +121,7 @@
         <div>
           <div class="section-card" style="margin-bottom:20px">
             <h3>Personal Information</h3>
+            <div id="profileInfoDisplay" style="margin-bottom:16px"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
               <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="editName" placeholder="Full Name"></div>
               <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="editPhone" placeholder="Phone Number"></div>
@@ -186,6 +191,7 @@
                 <div><span style="color:var(--text2)">Vehicle:</span><div style="font-weight:600" id="foundVehicle"></div></div>
                 <div><span style="color:var(--text2)">Type:</span><div style="font-weight:600" id="foundVehicleType"></div></div>
                 <div><span style="color:var(--text2)">Rating:</span><div style="font-weight:600" id="foundRating"></div></div>
+                <div><span style="color:var(--text2)">Total Rides:</span><div style="font-weight:600" id="foundTotalRides"></div></div>
                 <div><span style="color:var(--text2)">Gender:</span><div style="font-weight:600" id="foundGender"></div></div>
               </div>
             </div>
@@ -421,11 +427,12 @@ async function loadPassengerData() {
     if (!d.success) { window.location.href = '/login/passenger'; return; }
     passengerData = d.passenger;
     const name = passengerData.name || 'Passenger';
+    const uniqueId = 'PAX-' + String(passengerData.id).padStart(5, '0');
     document.getElementById('sidebarName').textContent = name;
-    document.getElementById('sidebarId').textContent = 'PAX-' + passengerData.id;
+    document.getElementById('sidebarId').textContent = uniqueId;
     document.getElementById('passengerFirstName').textContent = name.split(' ')[0];
     document.getElementById('profileName').textContent = name;
-    document.getElementById('profileId').textContent = 'PAX-' + passengerData.id;
+    document.getElementById('profileId').textContent = uniqueId;
     document.getElementById('editName').value = passengerData.name || '';
     document.getElementById('editPhone').value = passengerData.phone || '';
     document.getElementById('editEmail').value = passengerData.email || '';
@@ -437,6 +444,18 @@ async function loadPassengerData() {
     const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1565C0&color=fff&size=120`;
     document.getElementById('sidebarAvatar').src = avatarUrl;
     document.getElementById('profileImg').src = avatarUrl;
+    // Profile info summary
+    const emContact = passengerData.emergency_name
+      ? `${passengerData.emergency_name}${passengerData.emergency_mobile ? ' · ' + passengerData.emergency_mobile : ''}`
+      : 'Not set';
+    document.getElementById('profileInfoDisplay').innerHTML = `
+      <div class="info-row"><span class="info-label">Unique ID</span><span class="info-value" style="font-family:monospace">${uniqueId}</span></div>
+      <div class="info-row"><span class="info-label">Email</span><span class="info-value">${passengerData.email || 'N/A'}</span></div>
+      <div class="info-row"><span class="info-label">Phone</span><span class="info-value">${passengerData.phone || 'N/A'}</span></div>
+      <div class="info-row"><span class="info-label">Total Rides</span><span class="info-value">${passengerData.total_rides || 0}</span></div>
+      <div class="info-row"><span class="info-label">Total Spent</span><span class="info-value">₹${passengerData.total_spent || 0}</span></div>
+      <div class="info-row"><span class="info-label">Emergency Contact</span><span class="info-value" style="font-size:0.82rem">${emContact}</span></div>
+    `;
     checkActiveRide();
     loadRecentRides();
   } catch (e) { showToast('Failed to load profile', 'error'); }
@@ -565,6 +584,7 @@ function showDriverDetails(driver) {
   document.getElementById('foundVehicle').textContent = driver.vehicle_number || 'N/A';
   document.getElementById('foundVehicleType').textContent = driver.vehicle_type || 'N/A';
   document.getElementById('foundRating').textContent = parseFloat(driver.rating || 5).toFixed(1) + ' ⭐';
+  document.getElementById('foundTotalRides').textContent = (driver.total_rides || 0) + ' rides';
   document.getElementById('foundGender').textContent = driver.gender || 'N/A';
   const statusEl = document.getElementById('foundDriverStatus');
   const isVerified = driver.verification_status === 'verified';
