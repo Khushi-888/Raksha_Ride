@@ -105,12 +105,21 @@ async function checkAuth(redirectType = 'passenger') {
         const r = await authFetch('/api/session_check');
         if (!r) return false;
         const d = await r.json();
-        if (!d.logged_in) {
-            clearToken();
-            window.location.href = `/login/${redirectType}`;
-            return false;
+        if (d.logged_in) return true;
+
+        // session_check failed — try token-based fallback
+        const token = getToken();
+        if (token) {
+            const r2 = await authFetch('http://localhost:5001/api/auth/me');
+            if (r2 && r2.ok) {
+                const d2 = await r2.json();
+                if (d2 && d2.user) return true; // token valid, allow access
+            }
         }
-        return true;
+
+        clearToken();
+        window.location.href = `/login/${redirectType}`;
+        return false;
     } catch (e) {
         return false;
     }

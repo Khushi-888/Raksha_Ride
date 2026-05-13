@@ -118,6 +118,10 @@
 
             currentUser = drv;
             currentRole = 'driver';
+            // ── AUTH PERSISTENCE: save session to localStorage ──
+            localStorage.setItem('rr_token', drv._token || '');
+            localStorage.setItem('rr_user', JSON.stringify({ id: drv.id, name: drv.name, role: 'driver', email: drv.email, mobile: drv.mobile, vehicleNumber: drv.vehicleNumber, rcNo: drv.rcNo, pick: drv.pick, rating: drv.rating, totalRides: drv.totalRides, experience: drv.experience, lastInspection: drv.lastInspection, photo: drv.photo, vehicleType: drv.vehicleType, balance: drv.balance || 0 }));
+            localStorage.setItem('rr_user_type', 'driver');
             closeModal('login-modal');
             showDriverDashboard(drv);
 
@@ -136,6 +140,10 @@
 
             currentUser = pax;
             currentRole = 'passenger';
+            // ── AUTH PERSISTENCE: save session to localStorage ──
+            localStorage.setItem('rr_token', pax._token || '');
+            localStorage.setItem('rr_user', JSON.stringify({ id: pax.id, name: pax.name, role: 'passenger', email: pax.email, mobile: pax.mobile, balance: pax.balance || 0, trips: pax.trips || 0, joinedDate: pax.joinedDate, photo: pax.photo }));
+            localStorage.setItem('rr_user_type', 'passenger');
             closeModal('login-modal');
             showPassengerDashboard(pax);
         }
@@ -686,6 +694,10 @@
     /* ── Logout ──────────────────────────────────────────────── */
     function doLogout() {
         currentUser = null; currentRole = null;
+        // ── AUTH PERSISTENCE: clear saved session ──
+        localStorage.removeItem('rr_token');
+        localStorage.removeItem('rr_user');
+        localStorage.removeItem('rr_user_type');
         clearInterval(rideInterval); clearInterval(timerInterval);
         dMap = null; pMap = null;
         hide('driver-dashboard');
@@ -706,5 +718,72 @@
     console.log('%c RakshaRide — Test Credentials ', 'background:#FFB300;color:#000;font-weight:bold;font-size:14px;padding:4px 8px;');
     console.log(`Driver login → Email: ${RIKSHA_DB.drivers[0].email} | Password: ${RIKSHA_DB.drivers[0].password}`);
     console.log(`Passenger login → Mobile: ${RIKSHA_DB.passengers[0].mobile} | Password: ${RIKSHA_DB.passengers[0].password}`);
+
+    /* ── AUTH PERSISTENCE: restore session on page load ─────── */
+    document.addEventListener('DOMContentLoaded', function restoreSession() {
+        var savedToken   = localStorage.getItem('rr_token');
+        var savedUserRaw = localStorage.getItem('rr_user');
+        var savedRole    = localStorage.getItem('rr_user_type');
+
+        // Nothing saved — stay on landing page (default unauthenticated state)
+        if (!savedUserRaw || !savedRole) return;
+
+        // We have a saved user — restore immediately from localStorage
+        // (works even when the Node.js backend is offline)
+        try {
+            var savedUser = JSON.parse(savedUserRaw);
+            currentUser = savedUser;
+            currentRole = savedRole;
+
+            if (savedRole === 'driver') {
+                // Ensure required numeric fields exist to avoid NaN in dashboard
+                savedUser.totalRides    = savedUser.totalRides    || 0;
+                savedUser.rating        = savedUser.rating        || 4.5;
+                savedUser.balance       = savedUser.balance       || 0;
+                savedUser.experience    = savedUser.experience    || '0 Years';
+                savedUser.lastInspection= savedUser.lastInspection|| 'Not yet';
+                savedUser.vehicleType   = savedUser.vehicleType   || 'Electric Eco-Rickshaw';
+                savedUser.photo         = savedUser.photo         || ('https://i.pravatar.cc/300?u=' + savedUser.id);
+                showDriverDashboard(savedUser);
+            } else {
+                savedUser.balance   = savedUser.balance   || 0;
+                savedUser.trips     = savedUser.trips     || 0;
+                savedUser.joinedDate= savedUser.joinedDate|| '';
+                savedUser.photo     = savedUser.photo     || ('https://i.pravatar.cc/300?u=' + savedUser.id);
+                showPassengerDashboard(savedUser);
+            }
+
+            // If a real JWT token exists, silently validate it in the background.
+            // On failure (expired / deleted account) we log out cleanly.
+            if (savedToken) {
+                var API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                    ? 'http://localhost:5000'
+                    : '';   // same origin on Render
+
+                fetch(API_BASE + '/api/auth/me', {
+                    headers: { 'Authorization': 'Bearer ' + savedToken }
+                })
+                .then(function(res) {
+                    if (!res.ok) throw new Error('token_invalid');
+                    return res.json();
+                })
+                .then(function(data) {
+                    if (data && data.user) {
+                        // Merge fresh server data into currentUser (keeps UI in sync)
+                        currentUser = Object.assign(savedUser, data.user);
+                    }
+                })
+                .catch(function() {
+                    // Token expired or account deleted — log out silently
+                    doLogout();
+                });
+            }
+        } catch (e) {
+            // Corrupt localStorage — clear and show landing
+            localStorage.removeItem('rr_token');
+            localStorage.removeItem('rr_user');
+            localStorage.removeItem('rr_user_type');
+        }
+    });
 
 })();

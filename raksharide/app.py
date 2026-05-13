@@ -16,6 +16,7 @@ except ImportError:
 
 app = Flask(__name__)
 app.secret_key = 'raksharide_premium_secret_key'
+app.permanent_session_lifetime = timedelta(days=30)
 
 # --- EMAIL CONFIGURATION# Gmail SMTP Configuration
 SENDER_EMAIL = "riksharide2026@gmail.com"
@@ -190,6 +191,7 @@ def login():
                 flash('Please verify your email first.', 'error')
                 return redirect(url_for('verify_otp'))
             
+            session.permanent = True
             session['user_id'] = user['id']
             session['name'] = user['name']
             session['role'] = role

@@ -101,14 +101,7 @@ try:
 except ImportError:
     def secure_filename(f): return f
 
-import os as _os
-_BASE_DIR = _os.path.dirname(_os.path.abspath(__file__))
-_FRONTEND_DIR = _os.path.join(_os.path.dirname(_BASE_DIR), 'frontend')
-
-app = Flask(__name__,
-    template_folder=_os.path.join(_FRONTEND_DIR, 'templates'),
-    static_folder=_os.path.join(_FRONTEND_DIR, 'static')
-)
+app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'raksha-ride-enhanced-secret-key-2024')
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
@@ -366,9 +359,9 @@ def sign_qr_payload(id, name, vehicle, mobile):
 # On Render: set DB_PATH env var to /var/data/database_enhanced.db
 # (requires a Render Disk mounted at /var/data)
 # Default falls back to local file for development
-_default_db = _os.path.join(_os.path.dirname(_BASE_DIR), 'database', 'database_enhanced.db') \
-    if not _os.environ.get('DB_PATH') else ''
-DB_PATH = _os.environ.get('DB_PATH', _default_db)
+_default_db = os.path.join(os.environ.get('RENDER_DISK_PATH', ''), 'database_enhanced.db') \
+    if os.environ.get('RENDER_DISK_PATH') else 'database_enhanced.db'
+DB_PATH = os.environ.get('DB_PATH', _default_db)
 print(f"[DB] Using database at: {DB_PATH}")
 import threading
 _db_local = threading.local()
