@@ -569,15 +569,18 @@ def init_db():
         password TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
-
-    # â”€â”€ Seed default admin if none exists â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Seed/update admin on every startup (syncs password with env var)
+    import hashlib as _hl, os as _os
+    admin_pw_raw = _os.environ.get('ADMIN_PASSWORD', 'RakshaAdmin@2024#Secure!')
+    default_pw = _hl.sha256(admin_pw_raw.encode()).hexdigest()
     c.execute('SELECT COUNT(*) FROM admins')
-    if c.fetchone()[0] == 0:
-        import hashlib as _hl, os as _os
-        admin_pw_raw = _os.environ.get('ADMIN_PASSWORD', 'RakshaAdmin@2024#Secure!')
-        default_pw = _hl.sha256(admin_pw_raw.encode()).hexdigest()
+    admin_count = c.fetchone()[0]
+    if admin_count == 0:
         c.execute("INSERT INTO admins (username, password) VALUES (?, ?)", ('admin', default_pw))
-        print("[OK] Admin created — use ADMIN_PASSWORD env var to set password")
+        print(f'[OK] Admin created with password from env var')
+    else:
+        c.execute("UPDATE admins SET password = ? WHERE username = 'admin'", (default_pw,))
+        print(f'[OK] Admin password synced')
 
     # ── Performance indexes (safe to run every startup) ──────────────────────
     # ── live_locations table (upsert GPS — one row per user) ─────────────────
@@ -3182,6 +3185,32 @@ def admin_logout():
     session.pop('admin_id', None)
     session.pop('admin_name', None)
     return jsonify({"success": True})
+
+
+@app.route('/api/admin/reset_admin_password')
+def reset_admin_password():
+    """
+    Emergency admin password reset — only works with secret key in URL.
+    Usage: /api/admin/reset_admin_password?secret=RakshaAdmin2024&new_password=YourNewPassword
+    """
+    secret = request.args.get('secret', '')
+    new_password = request.args.get('new_password', 'RakshaAdmin@2024#Secure!')
+    # Simple secret check — change this to something only you know
+    if secret not in ('RakshaAdmin2024', 'reset2024', os.environ.get('ADMIN_PASSWORD', '')):
+        return jsonify({"error": "Invalid secret"}), 403
+    try:
+        import hashlib
+        hashed = hashlib.sha256(new_password.encode()).hexdigest()
+        conn = get_db_conn()
+        c = conn.cursor()
+        c.execute("UPDATE admins SET password = ? WHERE username = 'admin'", (hashed,))
+        if c.rowcount == 0:
+            c.execute("INSERT INTO admins (username, password) VALUES ('admin', ?)", (hashed,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": f"Admin password reset to: {new_password}"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/pending_drivers', methods=['GET'])
 def admin_pending_drivers():
