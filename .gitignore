@@ -1,5 +1,6 @@
-# Database (ephemeral on Render)
+# Database (ephemeral on Render — but backup/ is committed for restore)
 *.db
+!backup/*.db
 *.sqlite
 *.sqlite3
 
