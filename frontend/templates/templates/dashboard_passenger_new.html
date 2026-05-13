@@ -1317,15 +1317,41 @@ async function logout() {
 
 // ── INIT ───────────────────────────────────────────────────────────────────────
 (async function init() {
+  const token = localStorage.getItem('rr_token') || '';
+
+  // If no token at all — go to login immediately
+  if (!token) {
+    window.location.href = '/login/passenger';
+    return;
+  }
+
   try {
     const r = await authFetch('/api/session_check', { credentials: 'include' });
-    const d = await r.json();
-    if (!d.logged_in) {
-      showToast('Session expired — redirecting', 'warn');
-      setTimeout(() => window.location.href = '/login/passenger', 1500);
+    if (!r) {
+      loadPassengerData();
+      startPassengerGPS();
       return;
     }
-  } catch (e) {}
+    const d = await r.json();
+    if (!d.logged_in) {
+      // Token exists but session_check failed — retry once (Render restart scenario)
+      await new Promise(res => setTimeout(res, 500));
+      const r2 = await authFetch('/api/session_check', { credentials: 'include' });
+      if (r2) {
+        const d2 = await r2.json();
+        if (!d2.logged_in) {
+          localStorage.removeItem('rr_token');
+          localStorage.removeItem('rr_user_type');
+          showToast('Session expired — please login again', 'warn');
+          setTimeout(() => window.location.href = '/login/passenger', 1500);
+          return;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Auth] session_check error, proceeding with token:', e.message);
+  }
+
   loadPassengerData();
   startPassengerGPS();
   // Keep Render awake — ping every 14 minutes

@@ -10,7 +10,7 @@ from flask import request, jsonify, session
 
 JWT_SECRET = 'raksharide-jwt-secret-2024-secure'
 JWT_ALGORITHM = 'HS256'
-JWT_EXPIRY_HOURS = 24
+JWT_EXPIRY_HOURS = 720  # 30 days — user stays logged in for a month
 DB_PATH = 'database_enhanced.db'
 
 

@@ -101,7 +101,14 @@ try:
 except ImportError:
     def secure_filename(f): return f
 
-app = Flask(__name__)
+import os as _os
+_BASE_DIR = _os.path.dirname(_os.path.abspath(__file__))
+_FRONTEND_DIR = _os.path.join(_os.path.dirname(_BASE_DIR), 'frontend')
+
+app = Flask(__name__,
+    template_folder=_os.path.join(_FRONTEND_DIR, 'templates'),
+    static_folder=_os.path.join(_FRONTEND_DIR, 'static')
+)
 app.secret_key = os.environ.get('SECRET_KEY', 'raksha-ride-enhanced-secret-key-2024')
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
@@ -359,9 +366,9 @@ def sign_qr_payload(id, name, vehicle, mobile):
 # On Render: set DB_PATH env var to /var/data/database_enhanced.db
 # (requires a Render Disk mounted at /var/data)
 # Default falls back to local file for development
-_default_db = os.path.join(os.environ.get('RENDER_DISK_PATH', ''), 'database_enhanced.db') \
-    if os.environ.get('RENDER_DISK_PATH') else 'database_enhanced.db'
-DB_PATH = os.environ.get('DB_PATH', _default_db)
+_default_db = _os.path.join(_os.path.dirname(_BASE_DIR), 'database', 'database_enhanced.db') \
+    if not _os.environ.get('DB_PATH') else ''
+DB_PATH = _os.environ.get('DB_PATH', _default_db)
 print(f"[DB] Using database at: {DB_PATH}")
 import threading
 _db_local = threading.local()
@@ -4912,20 +4919,30 @@ def api_owner_delete_doc():
 
 @app.route('/api/session_check')
 def api_session_check():
-    """Verify session/token state — used by dashboards on load"""
+    """
+    Verify session/token state — used by dashboards on load.
+    If JWT is valid, also restores Flask session so subsequent
+    session-based routes work (handles Render restart scenario).
+    """
     user = get_current_user()
     if user:
+        # Restore Flask session from JWT so session-based routes work
+        if 'user_id' not in session:
+            session['user_id']   = user.get('user_id')
+            session['user_type'] = user.get('user_type')
+            session['name']      = user.get('name')
+            session.permanent    = True
         return jsonify({
             "logged_in": True,
-            "user_id": user.get('user_id'),
+            "user_id":   user.get('user_id'),
             "user_type": user.get('user_type'),
-            "name": user.get('name')
+            "name":      user.get('name')
         })
     return jsonify({
         "logged_in": False,
-        "user_id": None,
+        "user_id":   None,
         "user_type": None,
-        "name": None
+        "name":      None
     })
 
 @app.route('/api/test_email')
