@@ -474,11 +474,396 @@
             <div class="dot"></div>
         </div>
         <div class="nav-right">
-            <span class="badge-admin">KYC Dashboard</span>
+            <span class="badge-admin">Admin Panel</span>
             <a href="/dbview" style="background:rgba(255,193,7,0.15);border:1px solid rgba(255,193,7,0.4);color:#FFC107;padding:8px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;text-decoration:none;margin-right:8px">🗄️ DB Viewer</a>
             <button class="btn-logout" onclick="doLogout()">Logout</button>
         </div>
     </nav>
+
+    <div class="main">
+        <div class="page-header">
+            <h1>RakshaRide Admin Dashboard</h1>
+            <p>All data — drivers, passengers, rides, SOS alerts</p>
+        </div>
+
+        <!-- Summary Stats -->
+        <div class="stats" id="summaryStats" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+            <div class="stat pending"><div class="label">⏳ Pending Drivers</div><div class="num" id="s-pending">—</div></div>
+            <div class="stat approved"><div class="label">✅ Verified Drivers</div><div class="num" id="s-verified">—</div></div>
+            <div class="stat total"><div class="label">👤 Passengers</div><div class="num" id="s-passengers">—</div></div>
+            <div class="stat total"><div class="label">🚗 Total Rides</div><div class="num" id="s-rides">—</div></div>
+            <div class="stat approved"><div class="label">🚦 Active Rides</div><div class="num" id="s-active">—</div></div>
+            <div class="stat total"><div class="label">💰 Revenue ₹</div><div class="num" id="s-revenue">—</div></div>
+            <div class="stat rejected"><div class="label">🚨 SOS Alerts</div><div class="num" id="s-sos">—</div></div>
+        </div>
+
+        <!-- Section Tabs -->
+        <div class="tabs" style="margin-bottom:20px">
+            <div class="tab active" onclick="showTab('drivers')" id="maintab-drivers">🚗 Drivers</div>
+            <div class="tab" onclick="showTab('passengers')" id="maintab-passengers">👤 Passengers</div>
+            <div class="tab" onclick="showTab('rides')" id="maintab-rides">📜 Rides</div>
+            <div class="tab" onclick="showTab('sos')" id="maintab-sos">🚨 SOS Alerts</div>
+        </div>
+
+        <!-- DRIVERS -->
+        <div id="section-drivers">
+            <div class="tabs">
+                <div class="tab active" id="tab-all" onclick="setFilter('all')">All</div>
+                <div class="tab" id="tab-pending" onclick="setFilter('pending')">⏳ Pending</div>
+                <div class="tab" id="tab-approved" onclick="setFilter('approved')">✅ Approved</div>
+                <div class="tab" id="tab-rejected" onclick="setFilter('rejected')">❌ Rejected</div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Driver</th><th>ID</th><th>Vehicle</th><th>Role</th>
+                        <th>Rides</th><th>Earned</th><th>Status</th><th>Actions</th>
+                    </tr></thead>
+                    <tbody id="driversTable"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PASSENGERS -->
+        <div id="section-passengers" style="display:none">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Name</th><th>Phone</th><th>Email</th>
+                        <th>Rides</th><th>Spent</th><th>Emergency Contact</th><th>Registered</th>
+                    </tr></thead>
+                    <tbody id="passengersTable"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- RIDES -->
+        <div id="section-rides" style="display:none">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>ID</th><th>Passenger</th><th>Driver</th><th>Vehicle</th>
+                        <th>Distance</th><th>Fare</th><th>Status</th><th>Payment</th><th>Date</th>
+                    </tr></thead>
+                    <tbody id="ridesTable"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SOS ALERTS -->
+        <div id="section-sos" style="display:none">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Passenger</th><th>Phone</th><th>Driver</th><th>Vehicle</th>
+                        <th>Location</th><th>Sent To</th><th>Time</th>
+                    </tr></thead>
+                    <tbody id="sosTable"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Review Modal -->
+    <div class="modal-overlay" id="reviewModal">
+        <div class="modal">
+            <h2>👤 Driver Review — <span id="modalDriverName"></span></h2>
+            <div class="doc-tabs">
+                <div class="doc-tab active" id="docTab-aadhaar" onclick="loadDoc('aadhaar')">Aadhaar</div>
+                <div class="doc-tab" id="docTab-rc" onclick="loadDoc('rc')">RC Book</div>
+                <div class="doc-tab" id="docTab-license" onclick="loadDoc('license')">License</div>
+                <div class="doc-tab" id="docTab-photo" onclick="loadDoc('photo')">Photo</div>
+            </div>
+            <div id="docContainer"><div class="no-doc">Loading document…</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0;">
+                <div class="modal-field"><label>Mobile</label><span id="mMobile">—</span></div>
+                <div class="modal-field"><label>Email</label><span id="mEmail">—</span></div>
+                <div class="modal-field"><label>Vehicle</label><span id="mVehicle">—</span></div>
+                <div class="modal-field"><label>Role</label><span id="mRole">—</span></div>
+                <div class="modal-field"><label>Aadhaar</label><span id="mAadhaar">—</span></div>
+                <div class="modal-field"><label>Unique ID</label><span id="mUID">—</span></div>
+                <div class="modal-field"><label>Total Rides</label><span id="mRides">—</span></div>
+                <div class="modal-field"><label>Total Earned</label><span id="mEarned">—</span></div>
+            </div>
+            <div class="modal-field">
+                <label>Admin Notes</label>
+                <textarea class="notes-input" id="adminNotes" placeholder="e.g. Documents clear, RC verified..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-approve" onclick="approveDriver()">✅ Approve</button>
+                <button class="btn-approve" onclick="finalVerify()" style="background:rgba(129,140,248,0.2);border-color:#818cf8;color:#818cf8">🛡️ Verify & Notify</button>
+                <button class="btn-reject" onclick="rejectDriver()">❌ Reject</button>
+                <button class="modal-close" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let allDrivers = [], currentFilter = 'all', currentDriverId = null;
+        let currentTab = 'drivers';
+
+        // ── Tab switching ─────────────────────────────────────────────
+        function showTab(tab) {
+            currentTab = tab;
+            ['drivers','passengers','rides','sos'].forEach(t => {
+                document.getElementById('section-' + t).style.display = t === tab ? 'block' : 'none';
+                document.getElementById('maintab-' + t).classList.toggle('active', t === tab);
+            });
+            if (tab === 'passengers') loadPassengers();
+            if (tab === 'rides') loadRides();
+            if (tab === 'sos') loadSOS();
+        }
+
+        // ── Summary Stats ─────────────────────────────────────────────
+        async function loadSummary() {
+            try {
+                const res = await fetch('/api/admin/summary');
+                const d = await res.json();
+                if (!d.success) return;
+                const s = d.stats;
+                document.getElementById('s-pending').textContent = s.pending_drivers || 0;
+                document.getElementById('s-verified').textContent = s.verified_drivers || 0;
+                document.getElementById('s-passengers').textContent = s.total_passengers || 0;
+                document.getElementById('s-rides').textContent = s.total_rides || 0;
+                document.getElementById('s-active').textContent = s.active_rides || 0;
+                document.getElementById('s-revenue').textContent = s.total_revenue || 0;
+                document.getElementById('s-sos').textContent = s.sos_alerts || 0;
+            } catch (e) {}
+        }
+
+        // ── Drivers ───────────────────────────────────────────────────
+        async function loadDrivers() {
+            try {
+                const res = await fetch('/api/admin/pending_drivers');
+                const d = await res.json();
+                if (!d.success) { showToast('Failed to load drivers: ' + d.message, 'error'); return; }
+                allDrivers = d.drivers;
+                renderDriverTable();
+                loadSummary();
+            } catch (e) { showToast('Network error loading drivers', 'error'); }
+        }
+
+        function renderDriverTable() {
+            const tbody = document.getElementById('driversTable');
+            const filtered = currentFilter === 'all' ? allDrivers : allDrivers.filter(d => d.verification_status === currentFilter);
+            if (!filtered.length) { tbody.innerHTML = `<tr><td colspan="8" class="empty">No drivers found.</td></tr>`; return; }
+            tbody.innerHTML = filtered.map(dr => `
+              <tr>
+                <td><strong>${dr.name}</strong><br><span style="color:rgba(255,255,255,0.4);font-size:12px">${dr.email}</span></td>
+                <td><code style="color:#818cf8;font-size:12px">${dr.unique_id || '—'}</code></td>
+                <td style="font-size:13px">${dr.vehicle_type || '—'} · ${dr.vehicle_number || '—'}</td>
+                <td><span style="font-size:11px;color:#f59e0b">${dr.role || 'OWNER'}</span></td>
+                <td style="text-align:center">${dr.total_rides || 0}</td>
+                <td style="color:#22c55e">₹${dr.total_earned || 0}</td>
+                <td><span class="status-badge status-${dr.verification_status}">${dr.verification_status}</span></td>
+                <td>
+                  <div class="actions">
+                    <button class="btn-view" onclick="openReview(${dr.id})">🔍 Review</button>
+                    ${dr.verification_status !== 'verified' && dr.verification_status !== 'approved' ? `<button class="btn-approve" onclick="quickApprove(${dr.id})">✅</button>` : ''}
+                    ${dr.verification_status !== 'rejected' ? `<button class="btn-reject" onclick="quickReject(${dr.id})">❌</button>` : ''}
+                  </div>
+                </td>
+              </tr>`).join('');
+        }
+
+        function setFilter(f) {
+            currentFilter = f;
+            ['all','pending','approved','rejected'].forEach(t => document.getElementById('tab-'+t).classList.toggle('active', t===f));
+            renderDriverTable();
+        }
+
+        // ── Passengers ────────────────────────────────────────────────
+        async function loadPassengers() {
+            const tbody = document.getElementById('passengersTable');
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+            try {
+                const res = await fetch('/api/admin/passengers');
+                const d = await res.json();
+                if (!d.success || !d.passengers.length) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty">No passengers registered yet.</td></tr>'; return;
+                }
+                tbody.innerHTML = d.passengers.map(p => `
+                  <tr>
+                    <td><strong>${p.name || '—'}</strong></td>
+                    <td>${p.phone || '—'}</td>
+                    <td style="font-size:12px">${p.email || '—'}</td>
+                    <td style="text-align:center">${p.total_rides || 0}</td>
+                    <td style="color:#22c55e">₹${p.total_spent || 0}</td>
+                    <td style="font-size:12px">${p.emergency_name ? p.emergency_name + ' · ' + (p.emergency_mobile || p.emergency_email || '') : '<span style="color:rgba(255,255,255,0.3)">Not set</span>'}</td>
+                    <td style="font-size:12px;color:rgba(255,255,255,0.4)">${p.created_at ? p.created_at.slice(0,10) : '—'}</td>
+                  </tr>`).join('');
+            } catch (e) { tbody.innerHTML = '<tr><td colspan="7" class="empty">Error loading passengers.</td></tr>'; }
+        }
+
+        // ── Rides ─────────────────────────────────────────────────────
+        async function loadRides() {
+            const tbody = document.getElementById('ridesTable');
+            tbody.innerHTML = '<tr><td colspan="9" class="empty">Loading…</td></tr>';
+            try {
+                const res = await fetch('/api/admin/rides');
+                const d = await res.json();
+                if (!d.success || !d.rides.length) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="empty">No rides yet.</td></tr>'; return;
+                }
+                tbody.innerHTML = d.rides.map(r => `
+                  <tr>
+                    <td style="font-size:12px;color:#818cf8">#${r.id}</td>
+                    <td>${r.passenger_name || '—'}</td>
+                    <td>${r.driver_name || '—'}</td>
+                    <td style="font-size:12px">${r.driver_vehicle || '—'}</td>
+                    <td style="text-align:center">${r.distance_km ? r.distance_km.toFixed(2)+' km' : '—'}</td>
+                    <td style="color:#22c55e">₹${r.fare || 0}</td>
+                    <td><span class="status-badge status-${r.status === 'completed' ? 'approved' : r.status === 'active' ? 'pending' : 'rejected'}">${r.status}</span></td>
+                    <td style="font-size:12px">${r.payment_status || 'pending'}</td>
+                    <td style="font-size:12px;color:rgba(255,255,255,0.4)">${r.created_at ? r.created_at.slice(0,10) : '—'}</td>
+                  </tr>`).join('');
+            } catch (e) { tbody.innerHTML = '<tr><td colspan="9" class="empty">Error loading rides.</td></tr>'; }
+        }
+
+        // ── SOS Alerts ────────────────────────────────────────────────
+        async function loadSOS() {
+            const tbody = document.getElementById('sosTable');
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+            try {
+                const res = await fetch('/api/admin/sos_alerts');
+                const d = await res.json();
+                if (!d.success || !d.alerts.length) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty">No SOS alerts yet.</td></tr>'; return;
+                }
+                tbody.innerHTML = d.alerts.map(a => `
+                  <tr>
+                    <td><strong>${a.passenger_name || '—'}</strong></td>
+                    <td>${a.passenger_phone || '—'}</td>
+                    <td>${a.driver_name || '—'}</td>
+                    <td style="font-size:12px">${a.vehicle_number || '—'}</td>
+                    <td>${a.maps_link ? `<a href="${a.maps_link}" target="_blank" style="color:#f59e0b;font-size:12px">📍 View Map</a>` : '<span style="color:rgba(255,255,255,0.3)">No GPS</span>'}</td>
+                    <td style="font-size:12px">${a.sent_to || '—'}</td>
+                    <td style="font-size:12px;color:rgba(255,255,255,0.4)">${a.alert_time ? a.alert_time.slice(0,16) : '—'}</td>
+                  </tr>`).join('');
+            } catch (e) { tbody.innerHTML = '<tr><td colspan="7" class="empty">Error loading SOS alerts.</td></tr>'; }
+        }
+
+        // ── Review Modal ──────────────────────────────────────────────
+        function openReview(driverId) {
+            const dr = allDrivers.find(d => d.id === driverId);
+            if (!dr) return;
+            currentDriverId = driverId;
+            document.getElementById('modalDriverName').textContent = dr.name;
+            document.getElementById('mMobile').textContent = dr.mobile || '—';
+            document.getElementById('mEmail').textContent = dr.email || '—';
+            document.getElementById('mVehicle').textContent = `${dr.vehicle_type || '—'} · ${dr.vehicle_number || '—'}`;
+            document.getElementById('mRole').textContent = dr.role || 'OWNER';
+            document.getElementById('mAadhaar').textContent = dr.aadhaar_masked || '—';
+            document.getElementById('mUID').textContent = dr.unique_id || 'Not assigned';
+            document.getElementById('mRides').textContent = dr.total_rides || 0;
+            document.getElementById('mEarned').textContent = '₹' + (dr.total_earned || 0);
+            document.getElementById('adminNotes').value = dr.admin_notes || '';
+            document.getElementById('reviewModal').classList.add('open');
+            ['aadhaar','rc','license','photo'].forEach(t => {
+                const el = document.getElementById('docTab-' + t);
+                if (el) el.classList.remove('active');
+            });
+            const aadhaarTab = document.getElementById('docTab-aadhaar');
+            if (aadhaarTab) aadhaarTab.classList.add('active');
+            loadDoc('aadhaar');
+        }
+
+        function closeModal() {
+            document.getElementById('reviewModal').classList.remove('open');
+            currentDriverId = null;
+        }
+
+        async function loadDoc(type) {
+            if (!currentDriverId) return;
+            ['aadhaar','rc','license','photo'].forEach(t => {
+                const el = document.getElementById('docTab-' + t);
+                if (el) el.classList.remove('active');
+            });
+            const activeTab = document.getElementById('docTab-' + type);
+            if (activeTab) activeTab.classList.add('active');
+            document.getElementById('docContainer').innerHTML = '<div class="no-doc">⏳ Loading document…</div>';
+            try {
+                const res = await fetch(`/api/get_document/${type}?driver_id=${currentDriverId}`);
+                const d = await res.json();
+                if (!d.success || !d.data) {
+                    // Try admin view_doc endpoint
+                    const res2 = await fetch(`/api/admin/view_doc?driver_id=${currentDriverId}&doc_type=${type}`);
+                    const d2 = await res2.json();
+                    if (!d2.success || !d2.doc) {
+                        document.getElementById('docContainer').innerHTML = '<div class="no-doc">No document uploaded for this type.</div>';
+                        return;
+                    }
+                    document.getElementById('docContainer').innerHTML = `<img src="${d2.doc}" class="doc-img" alt="${type}">`;
+                    return;
+                }
+                const isPdf = d.data.includes('application/pdf');
+                document.getElementById('docContainer').innerHTML = isPdf
+                    ? `<iframe src="${d.data}" style="width:100%;height:400px;border:none;border-radius:8px"></iframe>`
+                    : `<img src="${d.data}" class="doc-img" alt="${type}">`;
+            } catch (e) {
+                document.getElementById('docContainer').innerHTML = '<div class="no-doc">Error loading document.</div>';
+            }
+        }
+
+        // ── Approve / Reject ──────────────────────────────────────────
+        async function approveDriver() {
+            if (!currentDriverId) return;
+            await doVerdict('/api/admin/approve_driver', { driver_id: currentDriverId, notes: document.getElementById('adminNotes').value.trim() }, 'approved');
+            closeModal();
+        }
+        async function rejectDriver() {
+            if (!currentDriverId) return;
+            await doVerdict('/api/admin/reject_driver', { driver_id: currentDriverId, notes: document.getElementById('adminNotes').value.trim() || 'Documents insufficient' }, 'rejected');
+            closeModal();
+        }
+        async function finalVerify() {
+            if (!currentDriverId) return;
+            try {
+                const res = await fetch('/api/admin/final_verification', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ driver_id: currentDriverId }) });
+                const d = await res.json();
+                if (d.success) { showToast(d.message, 'success'); loadDrivers(); closeModal(); }
+                else showToast('Error: ' + d.message, 'error');
+            } catch (e) { showToast('Network error', 'error'); }
+        }
+        async function quickApprove(id) { await doVerdict('/api/admin/approve_driver', { driver_id: id, notes: 'Verified by admin' }, 'approved'); }
+        async function quickReject(id) { await doVerdict('/api/admin/reject_driver', { driver_id: id, notes: 'Documents insufficient' }, 'rejected'); }
+
+        async function doVerdict(url, body, status) {
+            try {
+                const res = await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+                const d = await res.json();
+                if (d.success) {
+                    showToast(d.message, 'success');
+                    const dr = allDrivers.find(dr => dr.id === body.driver_id);
+                    if (dr) { dr.verification_status = status; dr.admin_notes = body.notes; }
+                    renderDriverTable(); loadSummary();
+                } else showToast('Error: ' + d.message, 'error');
+            } catch (e) { showToast('Network error', 'error'); }
+        }
+
+        // ── Toast ─────────────────────────────────────────────────────
+        function showToast(msg, type = 'info') {
+            const t = document.getElementById('toast');
+            t.textContent = (type === 'success' ? '✅ ' : type === 'error' ? '❌ ' : 'ℹ️ ') + msg;
+            t.style.borderColor = type === 'success' ? 'rgba(34,197,94,0.4)' : type === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.12)';
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 3500);
+        }
+
+        async function doLogout() { await fetch('/api/admin/logout', { method: 'POST' }); window.location.href = '/admin'; }
+
+        document.getElementById('reviewModal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+
+        // ── Init ──────────────────────────────────────────────────────
+        loadDrivers();
+        loadSummary();
+        setInterval(() => { loadDrivers(); loadSummary(); }, 30000);
+    </script>
+</body>
+</html>
 
     <!-- Main -->
     <div class="main">
