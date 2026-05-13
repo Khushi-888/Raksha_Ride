@@ -2487,26 +2487,24 @@ def api_road_distance():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route('/api/toggle_availability', methods=['POST'])
-def toggle_availability():
-    """Toggle driver's availability status"""
-    try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-        
-        driver_id = session['user_id']
-        
-        conn = get_db_conn()
-        c = conn.cursor()
-        c.execute("UPDATE drivers SET is_available = 1 - is_available WHERE id = ?", (driver_id,))
-        c.execute("SELECT is_available FROM drivers WHERE id = ?", (driver_id,))
-        is_available = c.fetchone()[0]
-        conn.commit()
-        conn.close()
-        
-        return jsonify({"success": True, "is_available": bool(is_available)})
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+# DUPLICATE REMOVED: /api/toggle_availability — kept the better version (api_toggle_availability) defined later
+# @app.route('/api/toggle_availability', methods=['POST'])
+# def toggle_availability():
+#     """Toggle driver's availability status"""
+#     try:
+#         if 'user_id' not in session or session.get('user_type') != 'driver':
+#             return jsonify({"success": False, "message": "Unauthorized"}), 401
+#         driver_id = session['user_id']
+#         conn = get_db_conn()
+#         c = conn.cursor()
+#         c.execute("UPDATE drivers SET is_available = 1 - is_available WHERE id = ?", (driver_id,))
+#         c.execute("SELECT is_available FROM drivers WHERE id = ?", (driver_id,))
+#         is_available = c.fetchone()[0]
+#         conn.commit()
+#         conn.close()
+#         return jsonify({"success": True, "is_available": bool(is_available)})
+#     except Exception as e:
+#         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/complete_ride', methods=['POST'])
 def complete_ride():
@@ -4302,7 +4300,6 @@ def _resolve_document_preview(file_data):
     return None
 
 
-@app.route('/api/get_driver_documents')
 @app.route('/api/get_driver_documents')
 def api_get_driver_documents():
     # Accept both session auth (dashboard) and JWT token auth
