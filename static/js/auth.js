@@ -103,21 +103,22 @@ async function authFetch(url, options = {}) {
 async function checkAuth(redirectType = 'passenger') {
     try {
         const r = await authFetch('/api/session_check');
-        if (!r) return false;
+        if (!r) {
+            // Network error — if we have a token, allow access
+            return !!getToken();
+        }
         const d = await r.json();
         if (d.logged_in) return true;
 
-        // session_check failed — try token-based fallback
-        const token = getToken();
-        if (token) {
-            const r2 = await authFetch('http://localhost:5001/api/auth/me');
-            if (r2 && r2.ok) {
-                const d2 = await r2.json();
-                if (d2 && d2.user) return true; // token valid, allow access
-            }
-        }
-
+        // session_check failed — clear token and redirect
         clearToken();
+        window.location.href = `/login/${redirectType}`;
+        return false;
+    } catch (e) {
+        // On error, allow if token exists
+        return !!getToken();
+    }
+}
         window.location.href = `/login/${redirectType}`;
         return false;
     } catch (e) {

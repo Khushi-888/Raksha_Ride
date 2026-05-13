@@ -3098,36 +3098,7 @@ def upload_payment_qr():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-
-@app.route('/api/get_payment_qr', methods=['GET'])
-def get_payment_qr():
-    """Get driver's saved payment QR image"""
-    try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-
-        driver_id = session['user_id']
-
-        conn = get_db_conn()
-        c = conn.cursor()
-        c.execute('SELECT payment_qr_image, upi_id, name FROM drivers WHERE id = ?', (driver_id,))
-        result = c.fetchone()
-        conn.close()
-
-        if not result:
-            return jsonify({"success": False, "message": "Driver not found"}), 404
-
-        payment_qr_image, upi_id, name = result
-
-        return jsonify({
-            "success": True,
-            "payment_qr_image": payment_qr_image,
-            "upi_id": upi_id,
-            "driver_name": name
-        })
-
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+# NOTE: /api/get_payment_qr is defined later with better dual-auth — duplicate removed here
 
 
 @app.route('/api/logout', methods=['POST'])
@@ -4077,22 +4048,7 @@ def track_ride(ride_id):
 def register_driver_modern():
     return render_template('register_driver.html')
 
-@app.route('/api/send_otp', methods=['POST'])
-def api_send_otp_modern():
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        otp = f"{secrets.randbelow(899999) + 100000}"
-        expiry = datetime.now() + timedelta(minutes=10)
-        conn = get_db_conn()
-        c = conn.cursor()
-        c.execute("DELETE FROM otp_verification WHERE email = ?", (email,))
-        c.execute("INSERT INTO otp_verification (email, otp, expiry_time) VALUES (?, ?, ?)", (email, otp, expiry))
-        conn.commit()
-        conn.close()
-        send_email_async(email, "RakshaRide Security Code", f"OTP: {otp}")
-        return jsonify({"success": True})
-    except Exception as e: return jsonify({"success": False, "message": str(e)})
+# NOTE: /api/send_otp is defined earlier with full implementation — duplicate removed
 
 @app.route('/api/register_driver_full', methods=['POST'])
 def register_driver_full_modern():
@@ -4868,10 +4824,7 @@ def api_nearby_drivers():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route('/api/logout', methods=['POST'])
-def api_logout():
-    session.clear()
-    return jsonify({"success": True})
+# NOTE: /api/logout is defined earlier — duplicate removed here
 
 # ── OWNER DOCUMENT MANAGEMENT ─────────────────────────────────────────────────
 @app.route('/api/owner/upload_doc', methods=['POST'])
