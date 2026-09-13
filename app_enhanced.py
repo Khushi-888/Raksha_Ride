@@ -994,17 +994,27 @@ def send_otp():
         if not rate_limit(f"otp_{email}", limit=3, window=60):
             return jsonify({"success": False, "message": "Too many requests. Wait 60 seconds."}), 429
 
-        # Check already registered
+        # Check already registered — return a clear redirect hint instead of a hard error
         conn = get_db_conn()
         c = conn.cursor()
         c.execute("SELECT id FROM passengers WHERE email = ?", (email,))
         if c.fetchone():
             conn.close()
-            return jsonify({"success": False, "message": "Email already registered. Please login."}), 400
+            return jsonify({
+                "success": False,
+                "already_registered": True,
+                "redirect": "/login/passenger",
+                "message": "This email is already registered as a passenger. Please login instead."
+            }), 400
         c.execute("SELECT id FROM drivers WHERE email = ?", (email,))
         if c.fetchone():
             conn.close()
-            return jsonify({"success": False, "message": "Email already registered as driver. Please login."}), 400
+            return jsonify({
+                "success": False,
+                "already_registered": True,
+                "redirect": "/login/driver",
+                "message": "This email is already registered as a driver. Please login instead."
+            }), 400
 
         # Generate OTP and save to DB immediately
         otp = generate_otp()
@@ -1721,10 +1731,8 @@ def driver_public_profile(driver_id):
 def get_driver_docs():
     """Fetch documents for dashboard display"""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-        
-        driver_id = session['user_id']
+        driver_id, err = _require_driver()
+        if err: return err
         conn = get_db_conn()
         c = conn.cursor()
         
@@ -1939,8 +1947,8 @@ def change_password_page():
 def update_password():
     """First-time password change for approved drivers"""
     try:
-        if 'user_id' not in session:
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        driver_id, err = _require_driver()
+        if err: return err
             
         data = request.get_json()
         new_password = data.get('new_password', '').strip()
@@ -1955,7 +1963,7 @@ def update_password():
         conn = get_db_conn()
         c = conn.cursor()
         c.execute("UPDATE drivers SET password = ?, first_login = 0 WHERE id = ?",
-                  (hash_password(new_password), session['user_id']))
+                  (hash_password(new_password), driver_id))
         conn.commit()
         conn.close()
         
@@ -1968,10 +1976,8 @@ def update_password():
 def get_driver_overview():
     """Returns summarized stats for the driver intelligence dashboard"""
     try:
-        if 'user_id' not in session or session['user_type'] != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-            
-        driver_id = session['user_id']
+        driver_id, err = _require_driver()
+        if err: return err
         conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
@@ -2021,10 +2027,8 @@ def get_driver_overview():
 def get_driver_ratings():
     """Fetched ratings and reviews for the Trust Score section"""
     try:
-        if 'user_id' not in session or session['user_type'] != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-            
-        driver_id = session['user_id']
+        driver_id, err = _require_driver()
+        if err: return err
         conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
@@ -2050,9 +2054,8 @@ def get_driver_ratings():
 def submit_rating():
     """Allows passengers to rate drivers after a ride"""
     try:
-        if 'user_id' not in session or session['user_type'] != 'passenger':
-            return jsonify({"success": False, "message": "Only passengers can submit ratings"}), 401
-            
+        passenger_id, err = _require_passenger()
+        if err: return err
         data = request.get_json()
         driver_id = data.get('driver_id')
         rating = data.get('rating')
@@ -2065,7 +2068,7 @@ def submit_rating():
         conn = get_db_conn()
         c = conn.cursor()
         c.execute("INSERT INTO ratings (driver_id, passenger_id, ride_id, rating, comment) VALUES (?, ?, ?, ?, ?)",
-                  (driver_id, session['user_id'], ride_id, rating, comment))
+                  (driver_id, passenger_id, ride_id, rating, comment))
         
         # Update driver average rating Cache
         c.execute("UPDATE drivers SET rating = (SELECT AVG(rating) FROM ratings WHERE driver_id = ?) WHERE id = ?",
@@ -2179,10 +2182,8 @@ def verify_login_otp_driver():
 def get_driver_qr():
     """Get driver's QR code"""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-        
-        driver_id = session['user_id']
+        driver_id, err = _require_driver()
+        if err: return err
         
         conn = get_db_conn()
         c = conn.cursor()
@@ -2217,8 +2218,8 @@ def get_driver_qr():
 def scan_driver_qr():
     """Scan driver QR â€” verify HMAC signature and expiry"""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'passenger':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        passenger_id, err = _require_passenger()
+        if err: return err
 
         data = request.get_json()
         qr_data_str = data.get('qr_data', '')
@@ -2300,11 +2301,9 @@ def get_nearby_drivers():
 def update_driver_location():
     """Update driver's current location"""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-        
+        driver_id, err = _require_driver()
+        if err: return err
         data = request.get_json()
-        driver_id = session['user_id']
         lat = data.get('latitude')
         lng = data.get('longitude')
         
@@ -2322,11 +2321,9 @@ def update_driver_location():
 def update_upi_id():
     """Update driver's UPI ID for payments"""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-        
+        driver_id, err = _require_driver()
+        if err: return err
         data = request.get_json()
-        driver_id = session['user_id']
         upi_id = data.get('upi_id')
         
         conn = get_db_conn()
@@ -2598,11 +2595,8 @@ def complete_ride():
 def get_passenger_history():
     """Get passenger ride history"""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'passenger':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-        
-        passenger_id = session['user_id']
-        
+        passenger_id, err = _require_passenger()
+        if err: return err
         conn = get_db_conn()
         c = conn.cursor()
         
@@ -2649,11 +2643,8 @@ def get_passenger_history():
 def get_driver_history():
     """Get driver ride history"""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-        
-        driver_id = session['user_id']
-        
+        driver_id, err = _require_driver()
+        if err: return err
         conn = get_db_conn()
         c = conn.cursor()
         
@@ -2752,9 +2743,8 @@ def get_active_ride():
 def process_payment():
     """Process payment for a ride"""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'passenger':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
-        
+        passenger_id, err = _require_passenger()
+        if err: return err
         data = request.get_json()
         payment_id = data.get('payment_id')
         transaction_id = data.get('transaction_id', f"TXN{secrets.token_hex(8).upper()}")
@@ -2956,11 +2946,17 @@ def api_driver_confirm_payment():
 def get_profile():
     """Get user profile"""
     try:
-        if 'user_id' not in session:
+        current_user = get_current_user()
+        if not current_user:
             return jsonify({"success": False, "message": "Unauthorized"}), 401
         
-        user_id = session['user_id']
-        user_type = session['user_type']
+        user_id = current_user['user_id']
+        user_type = current_user['user_type']
+        # Also restore session for session-based routes
+        if 'user_id' not in session:
+            session['user_id'] = user_id
+            session['user_type'] = user_type
+            session.permanent = True
         
         conn = get_db_conn()
         c = conn.cursor()
@@ -3070,8 +3066,8 @@ def get_driver_payment_qr():
 def upload_payment_qr():
     """Upload / update driver's custom payment QR image"""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        driver_id, err = _require_driver()
+        if err: return err
 
         data = request.get_json()
         qr_image = data.get('qr_image', '').strip()  # base64 data URI
@@ -3082,8 +3078,6 @@ def upload_payment_qr():
         # Basic validation: must be a data URI
         if not qr_image.startswith('data:image/'):
             return jsonify({"success": False, "message": "Invalid image format. Must be a valid image."}), 400
-
-        driver_id = session['user_id']
 
         conn = get_db_conn()
         c = conn.cursor()
@@ -3614,8 +3608,8 @@ def ai_full_pipeline():
       Stores result on the driver record.
     """
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        driver_id, err = _require_driver()
+        if err: return err
 
         data     = request.get_json()
         id_photo = data.get('id_photo', '')   # Aadhaar image
@@ -3626,8 +3620,6 @@ def ai_full_pipeline():
         ocr_result  = extract_document_text(id_photo)
         face_result = compute_face_similarity(id_photo, selfie)
         pipeline    = run_verification_pipeline(ocr_result, face_result)
-
-        driver_id = session['user_id']
 
         # Save score & selfie to driver record
         enc_selfie = encrypt_document(selfie) if selfie else None
@@ -3716,12 +3708,12 @@ def send_renter_request():
     Creates a pending link request; owner gets a notification.
     """
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        driver_id, err = _require_driver()
+        if err: return err
 
         data        = request.get_json()
         owner_email = data.get('owner_email', '').strip()
-        renter_id   = session['user_id']
+        renter_id   = driver_id
 
         if not owner_email:
             return jsonify({"success": False, "message": "Owner email required"}), 400
@@ -3764,12 +3756,12 @@ def send_renter_request():
 def approve_renter():
     """Owner approves a renter linking request."""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        driver_id, err = _require_driver()
+        if err: return err
 
         data       = request.get_json()
         request_id = data.get('request_id')
-        owner_id   = session['user_id']
+        owner_id   = driver_id
 
         conn = get_db_conn()
         c = conn.cursor()
@@ -3797,10 +3789,10 @@ def approve_renter():
 @app.route('/api/driver/renter_requests', methods=['GET'])
 def get_renter_requests():
     """Owner fetches pending renter link requests."""
-    if 'user_id' not in session or session.get('user_type') != 'driver':
-        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    driver_id, err = _require_driver()
+    if err: return err
     try:
-        owner_id = session['user_id']
+        owner_id = driver_id
         conn = get_db_conn()
         c = conn.cursor()
         c.execute("""
@@ -3848,8 +3840,8 @@ RakshaRide Team
 def generate_share_token():
     """Passenger generates a public share link for their active ride."""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'passenger':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        passenger_id, err = _require_passenger()
+        if err: return err
 
         data    = request.get_json()
         ride_id = data.get('ride_id')
@@ -3862,7 +3854,7 @@ def generate_share_token():
         c.execute("""
             UPDATE rides SET share_token = ?, share_token_active = 1
             WHERE id = ? AND passenger_id = ?""",
-            (token, ride_id, session['user_id']))
+            (token, ride_id, passenger_id))
         conn.commit()
         conn.close()
 
@@ -3917,14 +3909,14 @@ def api_ride_track(token):
 def stop_sharing():
     """Deactivate share token."""
     try:
-        if 'user_id' not in session or session.get('user_type') != 'passenger':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        passenger_id, err = _require_passenger()
+        if err: return err
         data = request.get_json()
         ride_id = data.get('ride_id')
         conn = get_db_conn()
         c = conn.cursor()
         c.execute("UPDATE rides SET share_token_active = 0 WHERE id = ? AND passenger_id = ?",
-                  (ride_id, session['user_id']))
+                  (ride_id, passenger_id))
         conn.commit(); conn.close()
         return jsonify({"success": True, "message": "Live sharing stopped."})
     except Exception as e:
@@ -5667,6 +5659,7 @@ def api_get_passenger_location():
         return jsonify({"success": False, "message": "No location data"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+
 
 
 # ============================================================================

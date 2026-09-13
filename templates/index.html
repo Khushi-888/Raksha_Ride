@@ -6,6 +6,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/raksharide.css">
+<link rel="stylesheet" href="/static/css/21st-motion.css">
+<script src="/static/js/motion-ui.js" defer></script>
 <style>
 .hero-bg{background:linear-gradient(135deg,#FFFDE7 0%,#E3F2FD 60%,#EDE7F6 100%)}
 [data-theme="dark"] .hero-bg{background:linear-gradient(135deg,#0D1117 0%,#161B22 60%,#1C2333 100%)}
@@ -65,11 +67,17 @@
 <section class="hero hero-bg wave-section">
   <div class="container">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center">
-      <div class="hero-content slide-in-left">
-        <div class="hero-badge">🛡️ Verified & Safe Platform</div>
-        <h1 class="hero-title">
+      <div class="hero-content motion-fade-up">
+        <div class="safety-radar-container">
+          <div class="radar-dot-wrapper">
+            <div class="radar-ring"></div>
+            <div class="radar-dot"></div>
+          </div>
+          <span class="radar-text">Verified & Live Protected</span>
+        </div>
+        <h1 class="hero-title" style="margin-top:16px;">
           Your Ride,<br>
-          <span class="highlight">Your Safety</span><br>
+          <span class="highlight gradient-text-animated">Your Safety</span><br>
           Our Promise
         </h1>
         <p class="hero-desc">
@@ -77,17 +85,17 @@
           and pay securely. RakshaRide makes every trip safe and transparent.
         </p>
         <div class="hero-actions">
-          <a href="#main-boxes" class="btn btn-yellow btn-lg">🚀 Get Started</a>
-          <a href="#how" class="btn btn-outline btn-lg">📖 How It Works</a>
+          <a href="#main-boxes" class="shimmer-btn shimmer-btn-saffron">🚀 Get Started</a>
+          <a href="#how" class="shimmer-btn" style="background:transparent;border:1px solid var(--border);color:var(--text) !important;">📖 How It Works</a>
         </div>
       </div>
-      <div class="hero-visual" style="position:relative;height:400px">
+      <div class="hero-visual motion-scale-in" style="position:relative;height:400px">
         <div style="font-size:180px;text-align:center;line-height:1" class="hero-float">🚗</div>
-        <div class="floating-card" style="top:20px;right:0">
+        <div class="floating-card motion-glow-card" style="top:20px;right:0">
           <span style="font-size:24px">✅</span>
           <div><div style="font-weight:700;font-size:0.9rem">Verified Driver</div><div style="font-size:0.78rem;color:var(--text2)">Documents checked</div></div>
         </div>
-        <div class="floating-card" style="bottom:40px;left:0">
+        <div class="floating-card motion-glow-card" style="bottom:40px;left:0">
           <span style="font-size:24px">📍</span>
           <div><div style="font-weight:700;font-size:0.9rem">Live Tracking</div><div style="font-size:0.78rem;color:var(--text2)">Real-time GPS</div></div>
         </div>

@@ -36,7 +36,7 @@
   - Mark task complete when tests are written, run, and passing on unfixed code
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.8_
 
-- [-] 3. Fix for auth session persistence after page refresh
+- [x] 3. Fix for auth session persistence after page refresh
 
   - [x] 3.1 Implement the fix in `raksharide/static/js/app.js`
     - In the `login-form` submit handler, after `currentUser = drv; currentRole = 'driver';`, add three `localStorage.setItem` calls: `rr_token` (from `drv._token || ''`), `rr_user` (JSON of `{id, name, role}`), `rr_user_type` (`'driver'`)
@@ -58,11 +58,18 @@
     - Inside the `login()` route, after the `if user and check_password_hash(...)` check passes and before `session['user_id'] = user['id']`, add `session.permanent = True`
     - _Requirements: 2.6_
 
-  - [ ] 3.4 Implement the fix in `frontend/static/static/js/auth.js`
-    - Replace the existing `checkAuth()` function body with a version that, after `session_check` returns `logged_in: false`, checks for a token via `getToken()` and falls back to `GET http://localhost:5001/api/auth/me`; if that succeeds (`r2.ok` and `d2.user` present), returns `true`; otherwise calls `clearToken()` and redirects to login
+  - [x] 3.4 Implement the fix in `static/js/auth.js` checkAuth function
+    - **CRITICAL**: This is the MAIN PENDING TASK that needs implementation
+    - **Current Issue**: The `checkAuth()` function only checks `/api/session_check` and does not have a fallback to `GET /api/auth/me` when session check fails but a token exists in localStorage
+    - **Required Change**: After `session_check` returns `logged_in: false`, check for a token via `getToken()` and fall back to `GET http://localhost:5001/api/auth/me`; if that succeeds (`r2.ok` and `d2.user` present), return `true`; otherwise call `clearToken()` and redirect to login
+    - **Implementation Details**:
+      - After the session_check fails (d.logged_in is false), add: `const token = getToken();`
+      - If token exists, call: `const r2 = await authFetch('http://localhost:5001/api/auth/me');`
+      - If r2 is ok and has d2.user, return true (session restored via token)
+      - Otherwise, clear token and redirect to login as before
     - _Requirements: 2.4, 3.3_
 
-  - [~] 3.5 Verify bug condition exploration test now passes
+  - [ ] 3.5 Verify bug condition exploration test now passes
     - **Property 1: Expected Behavior** - Session Restored After Page Refresh
     - **IMPORTANT**: Re-run the SAME test from task 1 — do NOT write a new test
     - The test from task 1 encodes the expected behavior: after `DOMContentLoaded` fires with `rr_token` in `localStorage`, `GET /api/auth/me` is called and the correct dashboard is shown
@@ -70,14 +77,14 @@
     - **EXPECTED OUTCOME**: Test PASSES (confirms the `DOMContentLoaded` restore handler exists, calls the API, and restores the session)
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.7, 2.8_
 
-  - [~] 3.6 Verify preservation tests still pass
+  - [ ] 3.6 Verify preservation tests still pass
     - **Property 2: Preservation** - Non-Refresh Interactions Unchanged
     - **IMPORTANT**: Re-run the SAME tests from task 2 — do NOT write new tests
     - Run all preservation property tests from step 2 against the FIXED code
     - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions — logout, login errors, no-token landing, and dashboard navigation all behave identically to pre-fix behavior)
     - Confirm all tests still pass after fix (no regressions)
 
-- [~] 4. Checkpoint — Ensure all tests pass
+- [ ] 4. Checkpoint — Ensure all tests pass
   - Re-run the full test suite (exploration test + all preservation tests)
   - Confirm Property 1 (Bug Condition) now PASSES on fixed code
   - Confirm Property 2 (Preservation) still PASSES on fixed code

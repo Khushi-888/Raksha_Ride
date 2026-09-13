@@ -129,6 +129,18 @@
                             btn.innerText = `Resend in ${countdown}s`;
                         }
                     }, 1000);
+                } else if (data.already_registered) {
+                    // Email already registered — show login redirect
+                    const box = document.getElementById('alert-box');
+                    box.innerHTML = `<strong>Already Registered!</strong> ${data.message}<br>
+                        <a href="${data.redirect || '/login/' + userType}" 
+                           style="color:#1565C0;font-weight:700;text-decoration:underline;margin-top:6px;display:inline-block">
+                           → Click here to Login
+                        </a>`;
+                    box.className = 'alert alert-error';
+                    box.classList.remove('hidden');
+                    btn.disabled = false;
+                    btn.innerText = "Get OTP";
                 } else {
                     showAlert(data.message || "Failed to send OTP. Please try again.");
                     btn.disabled = false;

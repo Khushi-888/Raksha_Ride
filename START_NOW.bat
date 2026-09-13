@@ -8,9 +8,11 @@ cd raksharide
 
 echo [*] Installing requirements...
 pip install -r requirements.txt --quiet
+pip install -r requirements_enhanced.txt
 
 echo [*] Initializing Database...
 python init_db.py
+python app_enhanced.py
 
 echo [*] Launching Production Server...
 start http://localhost:5000

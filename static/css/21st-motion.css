@@ -1,0 +1,259 @@
+/* ==========================================================================
+   21st.dev & UI/UX Pro Max Motion & Design System
+   RakshaRide Platform Enhancement
+   ========================================================================== */
+
+:root {
+  --motion-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-duration-fast: 200ms;
+  --motion-duration-medium: 350ms;
+  
+  /* UI Pro Max Palette Tokens */
+  --glow-saffron: rgba(255, 153, 51, 0.4);
+  --glow-navy: rgba(0, 51, 102, 0.3);
+  --glow-emerald: rgba(16, 185, 129, 0.4);
+  --glass-bg-light: rgba(255, 255, 255, 0.75);
+  --glass-border-light: rgba(255, 255, 255, 0.6);
+  --glass-bg-dark: rgba(15, 23, 42, 0.82);
+  --glass-border-dark: rgba(255, 255, 255, 0.12);
+}
+
+/* ── 21st.dev Shimmer Glowing Button ── */
+.shimmer-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 28px;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #003366 0%, #001a33 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+  box-shadow: 0 10px 30px var(--glow-navy), 0 0 20px rgba(0, 51, 102, 0.2);
+  transition: transform var(--motion-duration-medium) var(--motion-ease-spring),
+              box-shadow var(--motion-duration-medium) var(--motion-ease-out);
+  cursor: pointer;
+  text-decoration: none !important;
+  z-index: 1;
+}
+
+.shimmer-btn::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    60deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 70%
+  );
+  transform: rotate(30deg) translateX(-100%);
+  animation: shimmerSweep 3.5s infinite var(--motion-ease-out);
+  pointer-events: none;
+}
+
+@keyframes shimmerSweep {
+  0% { transform: rotate(30deg) translateX(-150%); }
+  40%, 100% { transform: rotate(30deg) translateX(150%); }
+}
+
+.shimmer-btn:hover {
+  transform: translateY(-3px) scale(1.03);
+  box-shadow: 0 16px 36px var(--glow-navy), 0 0 30px rgba(255, 153, 51, 0.4);
+}
+
+.shimmer-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.shimmer-btn-saffron {
+  background: linear-gradient(135deg, #ff9933 0%, #e67e00 100%);
+  box-shadow: 0 10px 30px var(--glow-saffron);
+}
+
+.shimmer-btn-saffron:hover {
+  box-shadow: 0 16px 36px var(--glow-saffron), 0 0 30px rgba(255, 153, 51, 0.6);
+}
+
+/* ── 21st.dev Glowing Border Motion Card ── */
+.motion-glow-card {
+  position: relative;
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border-light);
+  border-radius: 24px;
+  padding: 28px;
+  transition: transform var(--motion-duration-medium) var(--motion-ease-out),
+              box-shadow var(--motion-duration-medium) var(--motion-ease-out),
+              border-color var(--motion-duration-medium) var(--motion-ease-out);
+  will-change: transform;
+}
+
+[data-theme="dark"] .motion-glow-card {
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
+}
+
+.motion-glow-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(255, 153, 51, 0.5);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12), 0 0 25px rgba(255, 153, 51, 0.25);
+}
+
+/* ── 21st.dev Safety Radar Pulse Indicator ── */
+.safety-radar-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.radar-dot-wrapper {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radar-dot {
+  width: 10px;
+  height: 10px;
+  background: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #10b981;
+}
+
+.radar-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid #10b981;
+  animation: radarPulse 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+@keyframes radarPulse {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+.radar-text {
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  color: #10b981;
+  text-transform: uppercase;
+}
+
+/* ── 21st.dev Animated Gradient Text ── */
+.gradient-text-animated {
+  background: linear-gradient(
+    120deg,
+    #003366 0%,
+    #ff9933 30%,
+    #0066cc 60%,
+    #ff9933 90%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientFlow 5s linear infinite;
+}
+
+[data-theme="dark"] .gradient-text-animated {
+  background: linear-gradient(
+    120deg,
+    #ffffff 0%,
+    #ff9933 30%,
+    #38bdf8 60%,
+    #ff9933 90%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@keyframes gradientFlow {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+/* ── 21st.dev Floating Glass Navbar ── */
+.motion-floating-nav {
+  position: sticky;
+  top: 16px;
+  z-index: 1000;
+  margin: 0 auto;
+  max-width: 1200px;
+  width: calc(100% - 32px);
+  padding: 12px 24px;
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border-light);
+  border-radius: 9999px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+  transition: transform var(--motion-duration-medium) var(--motion-ease-out),
+              box-shadow var(--motion-duration-medium) var(--motion-ease-out);
+}
+
+[data-theme="dark"] .motion-floating-nav {
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Motion Micro-Interactions & Entrance Classes ── */
+.motion-fade-up {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity var(--motion-duration-medium) var(--motion-ease-out),
+              transform var(--motion-duration-medium) var(--motion-ease-out);
+}
+
+.motion-fade-up.motion-appear {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.motion-scale-in {
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity var(--motion-duration-medium) var(--motion-ease-spring),
+              transform var(--motion-duration-medium) var(--motion-ease-spring);
+}
+
+.motion-scale-in.motion-appear {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.motion-stagger-1 { transition-delay: 50ms; }
+.motion-stagger-2 { transition-delay: 120ms; }
+.motion-stagger-3 { transition-delay: 190ms; }
+.motion-stagger-4 { transition-delay: 260ms; }
+
+/* Interactive Hover Lift */
+.hover-lift {
+  transition: transform var(--motion-duration-fast) var(--motion-ease-spring);
+}
+.hover-lift:hover {
+  transform: translateY(-4px);
+}

@@ -28,10 +28,13 @@ function clearToken() {
  */
 async function authFetch(url, options = {}) {
     const token = getToken();
-    const headers = {
-        'Content-Type': 'application/json',
-        ...(options.headers || {}),
-    };
+    const method = (options.method || 'GET').toUpperCase();
+
+    // Only set Content-Type for requests with a body
+    const headers = { ...(options.headers || {}) };
+    if (method !== 'GET' && method !== 'HEAD' && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
@@ -40,12 +43,12 @@ async function authFetch(url, options = {}) {
     try {
         response = await fetch(url, {
             ...options,
+            method,
             headers,
             credentials: 'include',
         });
     } catch (networkErr) {
         console.error('Network error:', networkErr);
-        // Return a fake failed response
         return {
             ok: false,
             status: 0,
@@ -63,32 +66,27 @@ async function authFetch(url, options = {}) {
         bodyData = { success: false, message: bodyText || 'Invalid response' };
     }
 
-    // Handle 401 — only redirect if we truly have no valid token
+    // Handle 401
     if (response.status === 401) {
         const code = bodyData && bodyData.code;
-        // Only clear and redirect if explicitly told auth is required AND we have no token
         if (code === 'AUTH_REQUIRED' && !token) {
+            // No token at all — redirect to login
             clearToken();
             const userType = localStorage.getItem(RR_USER_TYPE_KEY) || 'passenger';
             setTimeout(() => { window.location.href = `/login/${userType}`; }, 800);
             return null;
         }
-        // If we have a token but got 401, the token may be expired
-        if (code === 'AUTH_REQUIRED' && token) {
-            // Try session_check first — maybe session just needs restoring
-            // Don't redirect immediately, let the caller handle it
-            return {
-                ok: false,
-                status: 401,
-                headers: response.headers,
-                json: async () => bodyData,
-                text: async () => bodyText,
-                _data: bodyData
-            };
-        }
+        // Has token but got 401 — return the response so caller can handle
+        return {
+            ok: false,
+            status: 401,
+            headers: response.headers,
+            json: async () => bodyData,
+            text: async () => bodyText,
+            _data: bodyData
+        };
     }
 
-    // Return a wrapper with cached json() so it can be called multiple times
     return {
         ok: response.ok,
         status: response.status,
@@ -104,24 +102,25 @@ async function checkAuth(redirectType = 'passenger') {
     try {
         const r = await authFetch('/api/session_check');
         if (!r) {
-            // Network error — if we have a token, allow access
             return !!getToken();
         }
         const d = await r.json();
         if (d.logged_in) return true;
 
-        // session_check failed — clear token and redirect
+        // session_check failed — try token-based fallback
+        const token = getToken();
+        if (token) {
+            const r2 = await authFetch('http://localhost:5001/api/auth/me');
+            if (r2 && r2.ok) {
+                const d2 = await r2.json();
+                if (d2 && d2.user) return true; // token valid, allow access
+            }
+        }
+
         clearToken();
         window.location.href = `/login/${redirectType}`;
         return false;
     } catch (e) {
-        // On error, allow if token exists
         return !!getToken();
-    }
-}
-        window.location.href = `/login/${redirectType}`;
-        return false;
-    } catch (e) {
-        return false;
     }
 }

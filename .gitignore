@@ -9,16 +9,22 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Environment
+# Environment & Private Configuration (STRICT SECURITY)
 .env
+.env.*
+*.env
 .env.local
+.env.development
+.env.test
+.env.production
+credentials.json
+*.key
+document_encryption.key
+*.pem
+*.secret
 venv/
 env/
 .venv/
-
-# Security keys
-*.key
-document_encryption.key
 
 # Uploaded files (too large for git)
 static/uploads/
@@ -33,9 +39,11 @@ test_*.py
 brute_test*.py
 add_*.py
 build_*.py
+scratch/
 
 # Windows
 Thumbs.db
+Desktop.ini
 
 # Archives
 *.zip
