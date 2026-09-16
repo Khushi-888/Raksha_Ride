@@ -23,7 +23,7 @@ Open: http://localhost:5000
 ## Admin Panel
 - URL: http://localhost:5000/admin
 - Username: `admin`
-- Password: `admin@RakshaRide2024`
+- Password: `admin@***********`
 
 ## Deploy on Render
 Render auto-detects `Procfile` and deploys automatically on push to GitHub.
@@ -33,6 +33,6 @@ Render auto-detects `Procfile` and deploys automatically on push to GitHub.
 |---|---|
 | `SECRET_KEY` | any random string |
 | `GMAIL_EMAIL` | riksharide2026@gmail.com |
-| `GMAIL_APP_PASSWORD` | evsztunveoqilawu |
+| `GMAIL_APP_PASSWORD` | evsz********** |
 | `FLASK_ENV` | production |
 | `APP_URL` | https://raksharide.onrender.com |
