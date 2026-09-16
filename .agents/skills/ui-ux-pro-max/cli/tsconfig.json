@@ -12,6 +12,6 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", ".vscode/ts-hover-prettify.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
