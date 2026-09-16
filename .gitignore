@@ -1,15 +1,4 @@
-# Database (ephemeral on Render — but backup/ is committed for restore)
-*.db
-!backup/*.db
-*.sqlite
-*.sqlite3
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-
-# Environment & Private Configuration (STRICT SECURITY)
+# Environment & Private Configuration
 .env
 .env.*
 *.env
@@ -17,41 +6,3 @@ __pycache__/
 .env.development
 .env.test
 .env.production
-credentials.json
-*.key
-document_encryption.key
-*.pem
-*.secret
-venv/
-env/
-.venv/
-
-# Uploaded files (too large for git)
-static/uploads/
-
-# Logs
-*.log
-
-# Dev/fix scripts (not needed on server)
-fix_*.py
-check_*.py
-test_*.py
-brute_test*.py
-add_*.py
-build_*.py
-scratch/
-
-# Windows
-Thumbs.db
-Desktop.ini
-
-# Archives
-*.zip
-
-# Node
-Antigravity_Node/
-node_modules/
-
-# IDE
-.vscode/
-.idea/
