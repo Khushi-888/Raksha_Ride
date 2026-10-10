@@ -585,6 +585,22 @@
                 <div class="modal-field"><label>Total Rides</label><span id="mRides">—</span></div>
                 <div class="modal-field"><label>Total Earned</label><span id="mEarned">—</span></div>
             </div>
+
+            <!-- SerpApi Automated Sanity & Fraud Check -->
+            <div id="sanityCheckSection" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 14px; margin: 14px 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="font-weight: 700; font-size: 13px; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+                        <span>🔍</span> Driver &amp; Vehicle Sanity Check (SerpApi)
+                    </div>
+                    <button id="btnRunSanityCheck" onclick="runSanityCheck()" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                        Run Sanity Check
+                    </button>
+                </div>
+                <div id="sanityCheckResult" style="font-size: 12px; color: #94a3b8; line-height: 1.4;">
+                    Run automated screening for public records, fraud signals, stolen vehicle reports, or e-challans.
+                </div>
+            </div>
+
             <div class="modal-field">
                 <label>Admin Notes</label>
                 <textarea class="notes-input" id="adminNotes" placeholder="e.g. Documents clear, RC verified..."></textarea>
@@ -761,6 +777,10 @@
             document.getElementById('mRides').textContent = dr.total_rides || 0;
             document.getElementById('mEarned').textContent = '₹' + (dr.total_earned || 0);
             document.getElementById('adminNotes').value = dr.admin_notes || '';
+            document.getElementById('sanityCheckResult').innerHTML =
+                'Run automated screening for public records, fraud signals, stolen vehicle reports, or e-challans.';
+            const sBtn = document.getElementById('btnRunSanityCheck');
+            if (sBtn) { sBtn.disabled = false; sBtn.textContent = 'Run Sanity Check'; }
             document.getElementById('reviewModal').classList.add('open');
             ['aadhaar','rc','license','photo'].forEach(t => {
                 const el = document.getElementById('docTab-' + t);
@@ -774,6 +794,52 @@
         function closeModal() {
             document.getElementById('reviewModal').classList.remove('open');
             currentDriverId = null;
+        }
+
+        
+        // ── SerpApi Driver Sanity Check ────────────────────────────────
+        async function runSanityCheck() {
+            if (!currentDriverId) return;
+            const btn = document.getElementById('btnRunSanityCheck');
+            const resBox = document.getElementById('sanityCheckResult');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Checking...'; }
+            resBox.innerHTML = '<div style="color:#94a3b8">Querying SerpApi Google search index and verifying vehicle plate...</div>';
+
+            try {
+                const res = await fetch(`/api/admin/driver_sanity_check?driver_id=${currentDriverId}`);
+                const data = await res.json();
+                if (data.success) {
+                    const riskColor = data.risk_level === 'HIGH' ? '#ef4444' : (data.risk_level === 'MEDIUM' ? '#f59e0b' : '#22c55e');
+                    const statusBadge = `<span style="background:${riskColor}22;color:${riskColor};border:1px solid ${riskColor}55;padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px">${data.status} (Risk: ${data.risk_level})</span>`;
+
+                    let findingsHtml = '';
+                    if (data.findings && data.findings.length > 0) {
+                        findingsHtml = '<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;max-height:110px;overflow-y:auto">' +
+                            data.findings.map(f => `
+                                <div style="padding:6px 8px;background:rgba(0,0,0,0.25);border-radius:6px;font-size:11px">
+                                    <a href="${f.link}" target="_blank" style="color:#38bdf8;text-decoration:none;font-weight:600">${f.title || 'Source'}</a>
+                                    <div style="color:#94a3b8;font-size:10px;margin-top:2px">${f.snippet || ''}</div>
+                                </div>
+                            `).join('') + '</div>';
+                    }
+
+                    resBox.innerHTML = `
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                            <span style="font-weight:700;color:#e2e8f0">${data.vehicle_number} (${data.driver_name})</span>
+                            ${statusBadge}
+                        </div>
+                        <div style="color:#cbd5e1;font-size:12px;margin-bottom:4px">${data.summary}</div>
+                        ${findingsHtml}
+                        <div style="margin-top:6px;font-size:10px;color:#64748b">Source: ${data.source} • Checked at: ${data.checked_at}</div>
+                    `;
+                } else {
+                    resBox.innerHTML = `<div style="color:#ef4444">Check failed: ${data.message}</div>`;
+                }
+            } catch (e) {
+                resBox.innerHTML = `<div style="color:#ef4444">Error: ${e.message}</div>`;
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Re-check'; }
+            }
         }
 
         async function loadDoc(type) {
@@ -863,291 +929,4 @@
         setInterval(() => { loadDrivers(); loadSummary(); }, 30000);
     </script>
 </body>
-</html>
-
-    <!-- Main -->
-    <div class="main">
-        <div class="page-header">
-            <h1>Driver Verification Panel</h1>
-            <p>Review, approve, or reject driver KYC documents before they can go online.</p>
-        </div>
-
-        <!-- Stats -->
-        <div class="stats">
-            <div class="stat pending">
-                <div class="label">⏳ Pending</div>
-                <div class="num" id="statPending">—</div>
-            </div>
-            <div class="stat approved">
-                <div class="label">✅ Approved</div>
-                <div class="num" id="statApproved">—</div>
-            </div>
-            <div class="stat rejected">
-                <div class="label">❌ Rejected</div>
-                <div class="num" id="statRejected">—</div>
-            </div>
-            <div class="stat total">
-                <div class="label">📋 Total Drivers</div>
-                <div class="num" id="statTotal">—</div>
-            </div>
-        </div>
-
-        <!-- Filter Tabs -->
-        <div class="tabs">
-            <div class="tab active" id="tab-all" onclick="setFilter('all')">All</div>
-            <div class="tab" id="tab-pending" onclick="setFilter('pending')">⏳ Pending</div>
-            <div class="tab" id="tab-approved" onclick="setFilter('approved')">✅ Approved</div>
-            <div class="tab" id="tab-rejected" onclick="setFilter('rejected')">❌ Rejected</div>
-        </div>
-
-        <!-- Table -->
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Driver</th>
-                        <th>Unique ID</th>
-                        <th>Vehicle</th>
-                        <th>Aadhaar (masked)</th>
-                        <th>Registered</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="driversTable">
-                    <tr>
-                        <td colspan="7" class="empty">Loading…</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Review Modal -->
-    <div class="modal-overlay" id="reviewModal">
-        <div class="modal">
-            <h2>👤 Driver Review — <span id="modalDriverName"></span></h2>
-
-            <!-- Doc Tabs -->
-            <div class="doc-tabs">
-                <div class="doc-tab active" id="docTab-aadhaar" onclick="loadDoc('aadhaar')">Aadhaar Card</div>
-                <div class="doc-tab" id="docTab-rc" onclick="loadDoc('rc')">RC Book</div>
-            </div>
-            <div id="docContainer">
-                <div class="no-doc">Loading document…</div>
-            </div>
-
-            <!-- Driver Info Grid -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0;">
-                <div class="modal-field"><label>Mobile</label><span id="mMobile">—</span></div>
-                <div class="modal-field"><label>Email</label><span id="mEmail">—</span></div>
-                <div class="modal-field"><label>Vehicle</label><span id="mVehicle">—</span></div>
-                <div class="modal-field"><label>RC Number</label><span id="mRC">—</span></div>
-                <div class="modal-field"><label>Aadhaar</label><span id="mAadhaar">—</span></div>
-                <div class="modal-field"><label>Unique ID</label><span id="mUID">—</span></div>
-            </div>
-
-            <div class="modal-field">
-                <label>Admin Notes (optional)</label>
-                <textarea class="notes-input" id="adminNotes"
-                    placeholder="e.g. Documents clear, RC verified..."></textarea>
-            </div>
-
-            <div class="modal-actions">
-                <button class="btn-approve" onclick="approveDriver()" id="btnApprove">✅ Approve</button>
-                <button class="btn-approve" onclick="finalVerify()" id="btnFinalVerify" style="background: rgba(129, 140, 248, 0.2); border-color: #818cf8; color: #818cf8;">🛡️ Verify & Notify</button>
-                <button class="btn-reject" onclick="rejectDriver()" id="btnReject">❌ Reject</button>
-                <button class="modal-close" onclick="closeModal()">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Toast -->
-    <div class="toast" id="toast"></div>
-
-    <script>
-        let allDrivers = [];
-        let currentFilter = 'all';
-        let currentDriverId = null;
-
-        // ── Load Drivers ──────────────────────────────────────────────
-        async function loadDrivers() {
-            try {
-                const res = await fetch('/api/admin/pending_drivers');
-                const d = await res.json();
-                if (!d.success) { showToast('Failed to load: ' + d.message, 'error'); return; }
-                allDrivers = d.drivers;
-                updateStats();
-                renderTable();
-            } catch (e) { showToast('Network error loading drivers', 'error'); }
-        }
-
-        function updateStats() {
-            const counts = { pending: 0, approved: 0, rejected: 0 };
-            allDrivers.forEach(dr => { if (counts[dr.verification_status] !== undefined) counts[dr.verification_status]++; });
-            document.getElementById('statPending').textContent = counts.pending;
-            document.getElementById('statApproved').textContent = counts.approved;
-            document.getElementById('statRejected').textContent = counts.rejected;
-            document.getElementById('statTotal').textContent = allDrivers.length;
-        }
-
-        function renderTable() {
-            const tbody = document.getElementById('driversTable');
-            const filtered = currentFilter === 'all' ? allDrivers : allDrivers.filter(d => d.verification_status === currentFilter);
-            if (!filtered.length) { tbody.innerHTML = `<tr><td colspan="7" class="empty">No drivers in this category.</td></tr>`; return; }
-
-            tbody.innerHTML = filtered.map(dr => `
-    <tr>
-      <td><strong>${dr.name}</strong><br/><span style="color:rgba(255,255,255,0.4);font-size:12px;">${dr.email}</span></td>
-      <td><code style="color:#818cf8;font-size:12px;">${dr.unique_id || '—'}</code></td>
-      <td>${dr.vehicle_type} · ${dr.vehicle_number}</td>
-      <td><code style="font-size:12px;color:#f59e0b">${dr.aadhaar_masked}</code></td>
-      <td style="font-size:12px;color:rgba(255,255,255,0.5);">${dr.registered_at ? dr.registered_at.slice(0, 10) : '—'}</td>
-      <td><span class="status-badge status-${dr.verification_status}">${dr.verification_status}</span></td>
-      <td>
-        <div class="actions">
-          <button class="btn-view" onclick="openReview(${dr.id})">🔍 Review</button>
-          ${dr.verification_status !== 'approved' ? `<button class="btn-approve" onclick="quickApprove(${dr.id})">✅</button>` : ''}
-          ${dr.verification_status !== 'rejected' ? `<button class="btn-reject"  onclick="quickReject(${dr.id})">❌</button>` : ''}
-        </div>
-      </td>
-    </tr>`).join('');
-        }
-
-        function setFilter(f) {
-            currentFilter = f;
-            ['all', 'pending', 'approved', 'rejected'].forEach(t => {
-                document.getElementById('tab-' + t).classList.toggle('active', t === f);
-            });
-            renderTable();
-        }
-
-        // ── Review Modal ──────────────────────────────────────────────
-        function openReview(driverId) {
-            const dr = allDrivers.find(d => d.id === driverId);
-            if (!dr) return;
-            currentDriverId = driverId;
-
-            document.getElementById('modalDriverName').textContent = dr.name;
-            document.getElementById('mMobile').textContent = dr.mobile;
-            document.getElementById('mEmail').textContent = dr.email;
-            document.getElementById('mVehicle').textContent = `${dr.vehicle_type} · ${dr.vehicle_number}`;
-            document.getElementById('mRC').textContent = dr.rc_number;
-            document.getElementById('mAadhaar').textContent = dr.aadhaar_masked;
-            document.getElementById('mUID').textContent = dr.unique_id || 'Not assigned';
-            document.getElementById('adminNotes').value = dr.admin_notes || '';
-            document.getElementById('reviewModal').classList.add('open');
-
-            // Reset doc tabs
-            ['aadhaar', 'rc'].forEach(t => document.getElementById('docTab-' + t).classList.remove('active'));
-            document.getElementById('docTab-aadhaar').classList.add('active');
-            loadDoc('aadhaar');
-        }
-
-        function closeModal() {
-            document.getElementById('reviewModal').classList.remove('open');
-            currentDriverId = null;
-        }
-
-        async function loadDoc(type) {
-            if (!currentDriverId) return;
-            ['aadhaar', 'rc'].forEach(t => document.getElementById('docTab-' + t).classList.remove('active'));
-            document.getElementById('docTab-' + type).classList.add('active');
-            document.getElementById('docContainer').innerHTML = '<div class="no-doc">⏳ Decrypting document…</div>';
-            try {
-                const res = await fetch(`/api/admin/view_doc?driver_id=${currentDriverId}&doc_type=${type}`);
-                const d = await res.json();
-                if (!d.success || !d.doc) {
-                    document.getElementById('docContainer').innerHTML = '<div class="no-doc">No document uploaded.</div>';
-                    return;
-                }
-                document.getElementById('docContainer').innerHTML = `<img src="${d.doc}" class="doc-img" alt="${type} document"/>`;
-            } catch (e) {
-                document.getElementById('docContainer').innerHTML = '<div class="no-doc">Failed to load document.</div>';
-            }
-        }
-
-        // ── Approve / Reject ──────────────────────────────────────────
-        async function approveDriver() {
-            if (!currentDriverId) return;
-            const notes = document.getElementById('adminNotes').value.trim();
-            await doVerdict('/api/admin/approve_driver', { driver_id: currentDriverId, notes }, 'approved');
-            closeModal();
-        }
-
-        async function rejectDriver() {
-            if (!currentDriverId) return;
-            const notes = document.getElementById('adminNotes').value.trim() || 'Documents could not be verified.';
-            await doVerdict('/api/admin/reject_driver', { driver_id: currentDriverId, notes }, 'rejected');
-            closeModal();
-        }
-
-        async function finalVerify() {
-            if (!currentDriverId) return;
-            try {
-                const res = await fetch('/api/admin/final_verification', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ driver_id: currentDriverId })
-                });
-                const d = await res.json();
-                if (d.success) {
-                    showToast(d.message, 'success');
-                    const dr = allDrivers.find(dr => dr.id === currentDriverId);
-                    if (dr) { dr.verification_status = 'approved'; }
-                    updateStats(); renderTable();
-                    closeModal();
-                } else { showToast('Error: ' + d.message, 'error'); }
-            } catch (e) { showToast('Network error', 'error'); }
-        }
-
-        async function quickApprove(id) {
-            await doVerdict('/api/admin/approve_driver', { driver_id: id, notes: 'Verified by admin' }, 'approved');
-        }
-        async function quickReject(id) {
-            await doVerdict('/api/admin/reject_driver', { driver_id: id, notes: 'Documents insufficient' }, 'rejected');
-        }
-
-        async function doVerdict(url, body, status) {
-            try {
-                const res = await fetch(url, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-                });
-                const d = await res.json();
-                if (d.success) {
-                    showToast(d.message, 'success');
-                    // Update local state
-                    const dr = allDrivers.find(dr => dr.id === body.driver_id);
-                    if (dr) { dr.verification_status = status; dr.admin_notes = body.notes; }
-                    updateStats(); renderTable();
-                } else { showToast('Error: ' + d.message, 'error'); }
-            } catch (e) { showToast('Network error', 'error'); }
-        }
-
-        // ── Toast ─────────────────────────────────────────────────────
-        function showToast(msg, type = 'info') {
-            const t = document.getElementById('toast');
-            t.textContent = (type === 'success' ? '✅ ' : type === 'error' ? '❌ ' : 'ℹ️ ') + msg;
-            t.style.borderColor = type === 'success' ? 'rgba(34,197,94,0.4)' : type === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.12)';
-            t.style.display = 'block';
-            setTimeout(() => t.style.display = 'none', 3500);
-        }
-
-        // ── Logout ────────────────────────────────────────────────────
-        async function doLogout() {
-            await fetch('/api/admin/logout', { method: 'POST' });
-            window.location.href = '/admin';
-        }
-
-        // ── Close modal on overlay click ──────────────────────────────
-        document.getElementById('reviewModal').addEventListener('click', function (e) {
-            if (e.target === this) closeModal();
-        });
-
-        // ── Init ──────────────────────────────────────────────────────
-        loadDrivers();
-        setInterval(loadDrivers, 30000); // Auto-refresh every 30s
-    </script>
-</body>
-
 </html>

@@ -140,9 +140,11 @@
                 const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({ credential: email, email, password })
                 });
                 const data = await res.json();
+                if (btn) { btn.disabled = false; btn.innerText = 'Verify & Authenticate'; }
                 if (data.success) {
                     if (data.requires_otp) {
                         document.getElementById('password-section').classList.add('hidden');
@@ -151,13 +153,31 @@
                         showAlert("Identity verified. Enter OTP from email.", "success");
                         otpBoxes[0].focus();
                     } else {
+                        // Store token if returned and purge old state
+                        if (data.token) {
+                            localStorage.removeItem('rr_token');
+                            localStorage.removeItem('rr_user_type');
+                            localStorage.removeItem('rr_user_id');
+                            localStorage.removeItem('rr_user');
+                            localStorage.removeItem('user');
+                            localStorage.removeItem('rakshaUser');
+                            sessionStorage.clear();
+                            localStorage.setItem('rr_token', data.token);
+                            localStorage.setItem('rr_user_type', userType);
+                        }
+
+                        let targetUrl = data.redirect_url || `/dashboard/${userType}`;
+                        if (data.token && !targetUrl.includes('token=')) {
+                            targetUrl += (targetUrl.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(data.token);
+                        }
+
                         // Success without OTP - Show the redirection button
                         const alertBox = document.getElementById('alert-box');
                         alertBox.innerHTML = `
                             <div class="flex flex-col items-center gap-3">
                                 <p style="font-weight: 600; color: #2E7D32;">✅ ${data.message || "Login Successful"}</p>
                                 <button class="btn btn-secondary" style="width: 100%; font-weight: 800;" 
-                                    onclick="window.location.href='${data.redirect_url}'">
+                                    onclick="window.location.href='${targetUrl}'">
                                     Continue to Portal ➔
                                 </button>
                             </div>
@@ -166,23 +186,18 @@
                         alertBox.classList.remove('hidden');
                         document.getElementById('password-section').classList.add('hidden');
                         
-                        // Store token if returned
-                        if (data.token) {
-                            localStorage.setItem('rr_token', data.token);
-                            localStorage.setItem('rr_user_type', userType);
-                        }
-                        
                         // Also automatically redirect after a short delay if they don't click
                         setTimeout(() => {
                             if (window.location.pathname === '/login/driver' || window.location.pathname === '/login/passenger') {
-                                window.location.href = data.redirect_url;
+                                window.location.href = targetUrl;
                             }
-                        }, 2000);
+                        }, 1500);
                     }
                 } else {
                     showAlert(data.message || "Invalid credentials.");
                 }
             } catch (err) { 
+                if (btn) { btn.disabled = false; btn.innerText = 'Verify & Authenticate'; }
                 console.error(err);
                 showAlert("Handshake Failed."); 
             }
@@ -199,16 +214,42 @@
                 const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({ email, otp })
                 });
                 const data = await res.json();
                 if (data.success) {
+                    // Purge stale storage before setting fresh auth
+                    localStorage.removeItem('rr_token');
+                    localStorage.removeItem('rr_user_type');
+                    localStorage.removeItem('rr_user_id');
+                    localStorage.removeItem('rr_user');
+                    localStorage.removeItem('user');
+                    localStorage.removeItem('rakshaUser');
+                    sessionStorage.clear();
+
+                    if (data.user) {
+                        localStorage.setItem('user', JSON.stringify(data.user));
+                    }
+                    if (data.token) {
+                        localStorage.setItem('rr_token', data.token);
+                        localStorage.setItem('rr_user_type', userType);
+                        if (data.user && data.user.id) {
+                            localStorage.setItem('rr_user_id', data.user.id);
+                        }
+                    }
+
+                    let targetUrl = `/dashboard/${userType}`;
+                    if (data.token) {
+                        targetUrl += '?token=' + encodeURIComponent(data.token);
+                    }
+
                     const alertBox = document.getElementById('alert-box');
                     alertBox.innerHTML = `
                         <div class="flex flex-col items-center gap-3">
                             <p style="font-weight: 600; color: #2E7D32;">✅ Access Granted</p>
                             <button class="btn btn-secondary" style="width: 100%; font-weight: 800;" 
-                                onclick="window.location.href='/dashboard/${userType}'">
+                                onclick="window.location.href='${targetUrl}'">
                                 Open Dashboard ➔
                             </button>
                         </div>
@@ -216,15 +257,8 @@
                     alertBox.className = "alert alert-success block";
                     alertBox.classList.remove('hidden');
                     document.getElementById('otp-section').classList.add('hidden');
-                    
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    // Store JWT token for API authentication
-                    if (data.token) {
-                        localStorage.setItem('rr_token', data.token);
-                        localStorage.setItem('rr_user_type', userType);
-                        localStorage.setItem('rr_user_id', data.user ? data.user.id : '');
-                    }
-                    setTimeout(() => window.location.href = `/dashboard/${userType}`, 1500);
+
+                    setTimeout(() => window.location.href = targetUrl, 1200);
                 } else {
                     showAlert(data.message || "Invalid token.");
                 }

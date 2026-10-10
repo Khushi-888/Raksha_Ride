@@ -17,5 +17,6 @@ cryptography>=41.0.0       # Document AES encryption (Fernet)
 
 # Optional / Nice-to-have
 # flask-limiter>=3.5.0     # Rate limiting (OTP endpoints)
-# python-dotenv==1.0.0     # Environment variable management
-# requests==2.31.0         # HTTP client (for 3rd-party KYC APIs)
+python-dotenv==1.0.0     # Environment variable management
+requests==2.31.0         # HTTP client (for 3rd-party KYC APIs and SerpApi)
+google-search-results==2.4.2 # SerpApi client

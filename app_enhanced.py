@@ -119,6 +119,14 @@ except ImportError:
 
 CORS(app, supports_credentials=True, origins="*")
 
+# Register SerpApi Blueprint
+try:
+    from services.serpapi_routes import serpapi_bp
+    app.register_blueprint(serpapi_bp)
+    print("[OK] SerpApi blueprint registered successfully")
+except Exception as e:
+    print(f"[WARN] Could not register SerpApi blueprint: {e}")
+
 # Base URL
 BASE_URL = os.environ.get('APP_URL', 'http://localhost:5000')
 
@@ -502,6 +510,7 @@ def init_db():
         ('drivers', 'license_number',       'TEXT'),
         ('drivers', 'gender',               'TEXT DEFAULT "Any"'),
         ('passengers', 'unique_id',         'TEXT'),
+        ('passengers', 'mobile',            'TEXT'),
         ('passengers', 'aadhaar_number',    'TEXT'),
         ('passengers', 'aadhaar_doc',       'TEXT'),
         ('passengers', 'emergency_mobile',  'TEXT'),
@@ -520,6 +529,12 @@ def init_db():
             conn.commit()
         except Exception:
             pass  # Column already exists
+
+    try:
+        c.execute("UPDATE passengers SET mobile = phone WHERE mobile IS NULL OR mobile = ''")
+        conn.commit()
+    except Exception:
+        pass
 
     # â”€â”€ Documents table (Owner-Renter document vault) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     c.execute('''CREATE TABLE IF NOT EXISTS driver_documents (
@@ -994,27 +1009,43 @@ def send_otp():
         if not rate_limit(f"otp_{email}", limit=3, window=60):
             return jsonify({"success": False, "message": "Too many requests. Wait 60 seconds."}), 429
 
-        # Check already registered — return a clear redirect hint instead of a hard error
+        # Check already registered — check role-specifically if provided
+        target_role = (data.get('type') or data.get('user_type') or data.get('role') or '').strip().lower()
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT id FROM passengers WHERE email = ?", (email,))
-        if c.fetchone():
-            conn.close()
-            return jsonify({
-                "success": False,
-                "already_registered": True,
-                "redirect": "/login/passenger",
-                "message": "This email is already registered as a passenger. Please login instead."
-            }), 400
-        c.execute("SELECT id FROM drivers WHERE email = ?", (email,))
-        if c.fetchone():
-            conn.close()
-            return jsonify({
-                "success": False,
-                "already_registered": True,
-                "redirect": "/login/driver",
-                "message": "This email is already registered as a driver. Please login instead."
-            }), 400
+        if target_role == 'driver':
+            c.execute("SELECT id FROM drivers WHERE email = ?", (email,))
+            if c.fetchone():
+                conn.close()
+                return jsonify({
+                    "success": False,
+                    "already_registered": True,
+                    "redirect": "/login/driver",
+                    "message": "This email is already registered as a driver. Please login instead."
+                }), 400
+        elif target_role == 'passenger':
+            c.execute("SELECT id FROM passengers WHERE email = ?", (email,))
+            if c.fetchone():
+                conn.close()
+                return jsonify({
+                    "success": False,
+                    "already_registered": True,
+                    "redirect": "/login/passenger",
+                    "message": "This email is already registered as a passenger. Please login instead."
+                }), 400
+        else:
+            c.execute("SELECT id FROM drivers WHERE email = ?", (email,))
+            d_exists = c.fetchone()
+            c.execute("SELECT id FROM passengers WHERE email = ?", (email,))
+            p_exists = c.fetchone()
+            if d_exists and p_exists:
+                conn.close()
+                return jsonify({
+                    "success": False,
+                    "already_registered": True,
+                    "redirect": "/login/driver",
+                    "message": "This email is already registered. Please login instead."
+                }), 400
 
         # Generate OTP and save to DB immediately
         otp = generate_otp()
@@ -1923,6 +1954,7 @@ def login_driver():
         
         conn.close()
         
+        redirect_dest = f"/change_password?token={token}" if requires_password_change else f"/dashboard/driver?token={token}"
         return jsonify({
             "success": True,
             "message": "Login successful",
@@ -1930,7 +1962,7 @@ def login_driver():
             "user_type": "driver",
             "driver_id": driver['id'],
             "unique_id": driver['unique_id'],
-            "redirect_url": "/change_password" if requires_password_change else "/dashboard/driver"
+            "redirect_url": redirect_dest
         })
         
     except Exception as e:
@@ -1939,8 +1971,17 @@ def login_driver():
 
 @app.route('/change_password')
 def change_password_page():
-    if 'user_id' not in session:
-        return render_template('login_govt.html')
+    token_param = request.args.get('token', '')
+    if token_param:
+        from auth_utils import decode_token
+        payload = decode_token(token_param)
+        if payload and payload.get('user_type') == 'driver':
+            session['user_id'] = payload['user_id']
+            session['user_type'] = 'driver'
+            session['name'] = payload.get('name', '')
+            session.permanent = True
+    if 'user_id' not in session or session.get('user_type') != 'driver':
+        return render_template('login_govt.html', type='driver')
     return render_template('change_password.html')
 
 @app.route('/api/update_password', methods=['POST'])
@@ -3093,11 +3134,22 @@ def upload_payment_qr():
 # NOTE: /api/get_payment_qr is defined later with better dual-auth — duplicate removed here
 
 
-@app.route('/api/logout', methods=['POST'])
+@app.route('/api/logout', methods=['POST', 'GET'])
 def logout():
-    """Logout user"""
+    """Logout user and clear session completely"""
     session.clear()
-    return jsonify({"success": True, "message": "Logged out successfully"})
+    resp = jsonify({"success": True, "message": "Logged out successfully"})
+    cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
+    resp.delete_cookie(cookie_name)
+    return resp
+
+@app.route('/logout')
+def logout_redirect():
+    session.clear()
+    resp = redirect('/')
+    cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
+    resp.delete_cookie(cookie_name)
+    return resp
 
 
 # ============================================================================
@@ -4890,8 +4942,8 @@ def api_session_check():
     """
     user = get_current_user()
     if user:
-        # Restore Flask session from JWT so session-based routes work
-        if 'user_id' not in session:
+        # Restore or sync Flask session from JWT so session-based routes work
+        if 'user_id' not in session or session.get('user_type') != user.get('user_type'):
             session['user_id']   = user.get('user_id')
             session['user_type'] = user.get('user_type')
             session['name']      = user.get('name')
@@ -4908,6 +4960,49 @@ def api_session_check():
         "user_type": None,
         "name":      None
     })
+
+
+@app.route('/api/auth/me', methods=['GET'])
+def api_auth_me():
+    """Returns profile of currently authenticated user (supports both token and session)."""
+    user = get_current_user()
+    if not user:
+        return jsonify({"success": False, "message": "Authentication required", "code": "AUTH_REQUIRED"}), 401
+
+    uid = user.get('user_id')
+    utype = user.get('user_type')
+    try:
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        if utype == 'driver':
+            c.execute("""SELECT id, name, email, mobile, vehicle_number, vehicle_type, rc_number,
+                                rating, total_rides, total_earned, unique_id, role, verification_status
+                         FROM drivers WHERE id = ?""", (uid,))
+            row = c.fetchone()
+            conn.close()
+            if not row:
+                return jsonify({"success": False, "message": "Driver not found"}), 404
+            u_data = dict(row)
+            u_data['role'] = 'driver'
+            u_data['user_type'] = 'driver'
+            return jsonify({"success": True, "user": u_data})
+        elif utype == 'passenger':
+            c.execute("""SELECT id, name, email, phone, total_rides, total_spent, unique_id
+                         FROM passengers WHERE id = ?""", (uid,))
+            row = c.fetchone()
+            conn.close()
+            if not row:
+                return jsonify({"success": False, "message": "Passenger not found"}), 404
+            u_data = dict(row)
+            u_data['role'] = 'passenger'
+            u_data['user_type'] = 'passenger'
+            return jsonify({"success": True, "user": u_data})
+        else:
+            conn.close()
+            return jsonify({"success": True, "user": user})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/test_email')
 def api_test_email():
@@ -5607,6 +5702,59 @@ def api_fare_estimate():
             "duration_minutes": round(mins, 1)
         }
         return jsonify({"success": True, "fare": fare, "breakdown": breakdown})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/live_eta', methods=['GET'])
+def api_live_eta():
+    """Calculate live ETA between driver and passenger using SerpApi Route Directions."""
+    user = get_current_user()
+    if not user:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+
+    try:
+        driver_id = request.args.get('driver_id', type=int)
+        passenger_id = request.args.get('passenger_id', type=int)
+        if not driver_id or not passenger_id:
+             return jsonify({"success": False, "message": "driver_id and passenger_id required"}), 400
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+
+        # Get driver location
+        c.execute("SELECT latitude, longitude FROM live_locations WHERE user_id=? AND role='driver' ORDER BY timestamp DESC LIMIT 1", (driver_id,))
+        driver_loc = c.fetchone()
+        if not driver_loc:
+            c.execute("SELECT latitude, longitude FROM drivers WHERE id=?", (driver_id,))
+            driver_loc = c.fetchone()
+
+        # Get passenger location
+        c.execute("SELECT latitude, longitude FROM live_locations WHERE user_id=? AND role='passenger' ORDER BY timestamp DESC LIMIT 1", (passenger_id,))
+        pass_loc = c.fetchone()
+        if not pass_loc:
+            c.execute("SELECT latitude, longitude FROM passengers WHERE id=?", (passenger_id,))
+            pass_loc = c.fetchone()
+
+        conn.close()
+
+        if not driver_loc or not pass_loc:
+             return jsonify({"success": False, "message": "Location data missing for ETA"}), 404
+
+        d_lat, d_lng = driver_loc
+        p_lat, p_lng = pass_loc
+
+        # Use SerpApi to get route directions
+        from services.serpapi_service import get_route_directions
+        route_info = get_route_directions(d_lat, d_lng, p_lat, p_lng)
+        return jsonify({
+            "success": True,
+            "eta_mins": route_info.get("duration_mins", 0),
+            "eta_text": route_info.get("duration_text", "Unknown"),
+            "distance_km": route_info.get("distance_km", 0),
+            "distance_text": route_info.get("distance_text", "Unknown")
+        })
+
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 

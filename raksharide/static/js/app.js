@@ -756,9 +756,7 @@
             // If a real JWT token exists, silently validate it in the background.
             // On failure (expired / deleted account) we log out cleanly.
             if (savedToken) {
-                var API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-                    ? 'http://localhost:5000'
-                    : '';   // same origin on Render
+                var API_BASE = window.location.origin || '';
 
                 fetch(API_BASE + '/api/auth/me', {
                     headers: { 'Authorization': 'Bearer ' + savedToken }

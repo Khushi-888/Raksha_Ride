@@ -18,7 +18,11 @@ function setToken(token, userType) {
 function clearToken() {
     localStorage.removeItem(RR_TOKEN_KEY);
     localStorage.removeItem(RR_USER_TYPE_KEY);
+    localStorage.removeItem('rr_user_id');
+    localStorage.removeItem('rr_user');
     localStorage.removeItem('user');
+    localStorage.removeItem('rakshaUser');
+    sessionStorage.clear();
 }
 
 /**
@@ -97,7 +101,7 @@ async function authFetch(url, options = {}) {
     };
 }
 
-/** Check if user is authenticated */
+/** Check if user is authenticated and matches requested role */
 async function checkAuth(redirectType = 'passenger') {
     try {
         const r = await authFetch('/api/session_check');
@@ -105,15 +109,31 @@ async function checkAuth(redirectType = 'passenger') {
             return !!getToken();
         }
         const d = await r.json();
-        if (d.logged_in) return true;
+        if (d.logged_in) {
+            // Ensure matching role if specified
+            if (redirectType && d.user_type && d.user_type !== redirectType) {
+                clearToken();
+                window.location.href = `/login/${redirectType}`;
+                return false;
+            }
+            return true;
+        }
 
         // session_check failed — try token-based fallback
         const token = getToken();
         if (token) {
-            const r2 = await authFetch('http://localhost:5001/api/auth/me');
+            const r2 = await authFetch('/api/auth/me');
             if (r2 && r2.ok) {
                 const d2 = await r2.json();
-                if (d2 && d2.user) return true; // token valid, allow access
+                if (d2 && d2.user) {
+                    const role = d2.user.role || d2.user.user_type;
+                    if (redirectType && role && role !== redirectType) {
+                        clearToken();
+                        window.location.href = `/login/${redirectType}`;
+                        return false;
+                    }
+                    return true; // token valid, allow access
+                }
             }
         }
 

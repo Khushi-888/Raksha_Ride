@@ -1151,15 +1151,39 @@ function shareQR() {
 // ── LOGOUT ────────────────────────────────────────────────────────────────────
 async function logout() {
   try { await authFetch('/api/logout', { method: 'POST' }); } catch (e) {}
+  localStorage.removeItem('rr_token');
+  localStorage.removeItem('rr_user_type');
+  localStorage.removeItem('rr_user_id');
+  localStorage.removeItem('rr_user');
+  localStorage.removeItem('user');
+  localStorage.removeItem('rakshaUser');
+  sessionStorage.clear();
   window.location.href = '/';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 (async function init() {
-  const token = localStorage.getItem('rr_token') || '';
+  // Support ?token= in URL (e.g. from login redirect)
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlToken = urlParams.get('token');
+  if (urlToken) {
+    localStorage.setItem('rr_token', urlToken);
+    localStorage.setItem('rr_user_type', 'driver');
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
 
-  // If no token at all — go to login immediately
-  if (!token) {
+  const token = localStorage.getItem('rr_token') || '';
+  const userType = localStorage.getItem('rr_user_type') || '';
+
+  // If no token or role is explicitly passenger, clear and redirect to driver login
+  if (!token || (userType && userType !== 'driver')) {
+    if (userType && userType !== 'driver') {
+      localStorage.removeItem('rr_token');
+      localStorage.removeItem('rr_user_type');
+      localStorage.removeItem('rr_user_id');
+      localStorage.removeItem('rr_user');
+      localStorage.removeItem('user');
+    }
     window.location.href = '/login/driver';
     return;
   }
@@ -1172,20 +1196,21 @@ async function logout() {
       return;
     }
     const d = await r.json();
-    if (!d.logged_in) {
-      // session_check failed but we have a token — token may still be valid
-      // The session_check endpoint will restore session from JWT on next call
-      // Try once more after a short delay
+    if (!d.logged_in || (d.user_type && d.user_type !== 'driver')) {
+      // session_check failed or wrong role — retry once (Render restart scenario)
       await new Promise(res => setTimeout(res, 500));
       const r2 = await authFetch('/api/session_check', { credentials: 'include' });
       if (r2) {
         const d2 = await r2.json();
-        if (!d2.logged_in) {
-          // Token is truly invalid/expired
+        if (!d2.logged_in || (d2.user_type && d2.user_type !== 'driver')) {
+          // Token is truly invalid/expired or wrong role
           localStorage.removeItem('rr_token');
           localStorage.removeItem('rr_user_type');
-          showToast('Session expired — please login again', 'warn');
-          setTimeout(() => window.location.href = '/login/driver', 1500);
+          localStorage.removeItem('rr_user_id');
+          localStorage.removeItem('rr_user');
+          localStorage.removeItem('user');
+          showToast('Session expired or unauthorized — please login again', 'warn');
+          setTimeout(() => window.location.href = '/login/driver', 1200);
           return;
         }
       }

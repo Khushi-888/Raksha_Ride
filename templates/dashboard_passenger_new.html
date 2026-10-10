@@ -21,6 +21,14 @@
 .info-row:last-child{border-bottom:none}
 .info-label{font-size:0.82rem;color:var(--text2);font-weight:600}
 .info-value{font-weight:700;font-size:0.88rem;text-align:right;max-width:60%}
+.autocomplete-dropdown{position:absolute;top:calc(100% + 4px);left:22px;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,0.22);max-height:250px;overflow-y:auto;z-index:2000}
+.autocomplete-item{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s;display:flex;align-items:flex-start;gap:10px;text-align:left}
+.autocomplete-item:last-child{border-bottom:none}
+.autocomplete-item:hover{background:var(--bg2)}
+.autocomplete-icon{font-size:1.1rem;flex-shrink:0;margin-top:2px}
+.autocomplete-title{font-weight:700;font-size:0.88rem;color:var(--text);line-height:1.3}
+.autocomplete-sub{font-size:0.75rem;color:var(--text2);margin-top:2px;line-height:1.2}
+.safety-pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:700;margin-right:6px}
 </style>
 </head>
 <body>
@@ -253,21 +261,45 @@
         <div class="dash-title">🗺️ Live Tracking</div>
         <button class="btn btn-blue" onclick="endRide()" id="endRideBtn" style="display:none">🏁 End Ride</button>
       </div>
-      <!-- Pickup / Dropoff selector -->
+      <!-- Pickup / Dropoff selector (SerpApi Powered Autocomplete & Safety News) -->
       <div id="routeSelector" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px">
-        <div style="font-weight:700;margin-bottom:12px;font-size:0.9rem">📌 Set Your Route</div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:12px;height:12px;border-radius:50%;background:#4CAF50;flex-shrink:0"></div>
-            <input class="form-input" id="pickupInput" placeholder="📍 Pickup location" style="flex:1" oninput="checkRouteReady()">
-            <button class="btn btn-sm btn-outline" onclick="useCurrentAsPickup()" title="Use my current location">📍 My Location</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-weight:700;font-size:0.92rem">📌 Plan Your Journey &amp; Route</div>
+          <span id="routeCalcBadge" style="display:none;font-size:0.75rem;padding:3px 8px;border-radius:12px;background:rgba(33,150,243,0.15);color:#1976D2;font-weight:700">Calculating route...</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <!-- Pickup input with dropdown -->
+          <div style="position:relative">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:12px;height:12px;border-radius:50%;background:#4CAF50;flex-shrink:0"></div>
+              <input class="form-input" id="pickupInput" placeholder="📍 Search pickup address (e.g. Hawa Mahal, Jaipur)" style="flex:1" autocomplete="off">
+              <button class="btn btn-sm btn-outline" onclick="useCurrentAsPickup()" title="Use my current location">📍 My Location</button>
+            </div>
+            <div id="pickupSuggestions" class="autocomplete-dropdown" style="display:none"></div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:12px;height:12px;border-radius:50%;background:#C62828;flex-shrink:0"></div>
-            <input class="form-input" id="dropoffInput" placeholder="🏁 Where do you want to go?" oninput="checkRouteReady()">
+          <!-- Dropoff input with dropdown -->
+          <div style="position:relative">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:12px;height:12px;border-radius:50%;background:#C62828;flex-shrink:0"></div>
+              <input class="form-input" id="dropoffInput" placeholder="🏁 Search destination address (e.g. Jaipur Airport, Terminal 2)" style="flex:1" autocomplete="off">
+            </div>
+            <div id="dropoffSuggestions" class="autocomplete-dropdown" style="display:none"></div>
           </div>
         </div>
-        <div style="font-size:0.78rem;color:var(--text2);margin-top:8px">💡 Tap on the map to set pickup (green) or dropoff (red) point</div>
+
+        <!-- Pre-Ride Safety Intelligence Widget (Google News via SerpApi) -->
+        <div id="safetyContextWidget" style="display:none;margin-top:14px;background:linear-gradient(135deg,rgba(25,118,210,0.07),rgba(255,193,7,0.1));border:1px solid rgba(25,118,210,0.25);border-radius:12px;padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSafetyAlertsList()">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:1.1rem">🛡️</span>
+              <div style="font-size:0.85rem;font-weight:700;color:var(--text)">Live Route Safety Intelligence (<span id="safetyCityLabel">Jaipur</span>)</div>
+            </div>
+            <span id="safetyToggleArrow" style="font-size:0.8rem;color:var(--text2);cursor:pointer">▼</span>
+          </div>
+          <div id="safetyAlertsList" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <div style="font-size:0.78rem;color:var(--text2);margin-top:10px">💡 Type to search structured Google Maps places or tap on map to set pickup/dropoff</div>
         <!-- Start Ride button — shown only when both fields filled AND driver connected -->
         <div id="startRideContainer" style="display:none;margin-top:14px">
           <button class="btn btn-yellow btn-full btn-lg" onclick="startRideFromRoute()" id="startRideRouteBtn">
@@ -350,6 +382,7 @@ let passengerData = {};
 let nearbyMap = null, passengerMap = null;
 let passengerMarker = null, driverMarker = null;
 let pickupMarker = null, dropoffMarker = null;
+let selectedPickup = null, selectedDropoff = null, routePolyline = null;
 let mapClickMode = 'pickup'; // 'pickup' or 'dropoff'
 let trackingInterval = null, rideStartTime = null, totalDistance = 0, lastPos = null;
 let selectedDriver = null, activeRideId = null;
@@ -614,9 +647,15 @@ async function confirmDriver() {
     const r = await authFetch('/api/start_ride', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ driver_id: selectedDriver.id, latitude: lat, longitude: lng,
-        pickup_location: document.getElementById('pickupInput')?.value || 'Current Location',
-        dropoff_location: document.getElementById('dropoffInput')?.value || 'Destination' })
+      body: JSON.stringify({
+        driver_id: selectedDriver.id,
+        latitude: selectedPickup ? selectedPickup.lat : lat,
+        longitude: selectedPickup ? selectedPickup.lng : lng,
+        dropoff_lat: selectedDropoff ? selectedDropoff.lat : null,
+        dropoff_lng: selectedDropoff ? selectedDropoff.lng : null,
+        pickup_location: selectedPickup ? selectedPickup.title : (document.getElementById('pickupInput')?.value || 'Current Location'),
+        dropoff_location: selectedDropoff ? selectedDropoff.title : (document.getElementById('dropoffInput')?.value || 'Destination')
+      })
     });
     const d = await r.json();
     if (d.success) {
@@ -737,16 +776,19 @@ function initPassengerMap() {
       pickupMarker = L.marker([lat, lng], { icon: makePaxIcon('#4CAF50', '📍') })
         .addTo(passengerMap).bindPopup('<b>📍 Pickup Point</b>').openPopup();
       document.getElementById('pickupInput').value = label;
+      selectedPickup = { lat, lng, title: label, address: label };
       mapClickMode = 'dropoff';
-      showToast('Pickup set! Now tap to set dropoff 🏁', 'info');
+      showToast('Pickup set! Now search or tap map for dropoff 🏁', 'info');
     } else {
       if (dropoffMarker) passengerMap.removeLayer(dropoffMarker);
       dropoffMarker = L.marker([lat, lng], { icon: makePaxIcon('#C62828', '🏁') })
         .addTo(passengerMap).bindPopup('<b>🏁 Dropoff Point</b>').openPopup();
       document.getElementById('dropoffInput').value = label;
+      selectedDropoff = { lat, lng, title: label, address: label };
       mapClickMode = 'pickup';
       showToast('Route set! Confirm driver to start ride.', 'success');
     }
+    updateRouteAndPricing();
     checkRouteReady();
   });
 
@@ -770,7 +812,9 @@ function useCurrentAsPickup() {
   if (!navigator.geolocation) { showToast('GPS not available', 'warn'); return; }
   navigator.geolocation.getCurrentPosition(pos => {
     const lat = pos.coords.latitude, lng = pos.coords.longitude;
-    document.getElementById('pickupInput').value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    const label = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    document.getElementById('pickupInput').value = label;
+    selectedPickup = { lat, lng, title: 'My Current Location', address: label };
     if (pickupMarker) passengerMap?.removeLayer(pickupMarker);
     if (passengerMap) {
       pickupMarker = L.marker([lat, lng], { icon: makePaxIcon('#4CAF50', '📍') })
@@ -778,9 +822,230 @@ function useCurrentAsPickup() {
       passengerMap.setView([lat, lng], 15);
     }
     mapClickMode = 'dropoff';
-    showToast('Pickup set to your current location! Now tap map for dropoff.', 'success');
+    showToast('Pickup set to your location! Now search or tap map for dropoff.', 'success');
+    updateRouteAndPricing();
     checkRouteReady();
   }, () => showToast('Could not get location', 'error'), { enableHighAccuracy: true, timeout: 8000 });
+}
+
+
+// ── SERPAPI AUTOCOMPLETE & REAL-TIME ROUTING ──────────────────────────────────
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
+function _parseCoords(str) {
+  if (!str) return null;
+  if (typeof str === 'object' && str.lat && str.lng) return str;
+  const match = String(str).match(/([+-]?\d+\.?\d*)\s*,\s*([+-]?\d+\.?\d*)/);
+  if (match) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+  if (selectedPickup && (selectedPickup.title === str || selectedPickup.address === str)) return selectedPickup;
+  if (selectedDropoff && (selectedDropoff.title === str || selectedDropoff.address === str)) return selectedDropoff;
+  return null;
+}
+
+async function searchAddressAutocomplete(type, query) {
+  const container = document.getElementById(type === 'pickup' ? 'pickupSuggestions' : 'dropoffSuggestions');
+  if (!container) return;
+  
+  if (!query || query.length < 2) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  let latBias = lastPos?.lat || 26.9124;
+  let lngBias = lastPos?.lng || 75.7873;
+
+  try {
+    const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}&lat=${latBias}&lng=${lngBias}`);
+    const data = await res.json();
+    if (data.success && data.results && data.results.length > 0) {
+      container.innerHTML = data.results.map((r, i) => `
+        <div class="autocomplete-item" onclick="onSelectAutocomplete('${type}', ${i})">
+          <div class="autocomplete-icon">${type === 'pickup' ? '📍' : '🏁'}</div>
+          <div>
+            <div class="autocomplete-title">${r.title || r.address}</div>
+            <div class="autocomplete-sub">${r.address || ''}</div>
+          </div>
+        </div>
+      `).join('');
+      container._results = data.results;
+      container.style.display = 'block';
+    } else {
+      container.style.display = 'none';
+    }
+  } catch (e) {
+    console.warn('[Autocomplete] Geocode failed:', e);
+    container.style.display = 'none';
+  }
+}
+
+function onSelectAutocomplete(type, index) {
+  const container = document.getElementById(type === 'pickup' ? 'pickupSuggestions' : 'dropoffSuggestions');
+  const place = container?._results?.[index];
+  if (!place) return;
+
+  const input = document.getElementById(type === 'pickup' ? 'pickupInput' : 'dropoffInput');
+  if (input) input.value = place.title || place.address;
+  container.style.display = 'none';
+
+  const lat = place.latitude, lng = place.longitude;
+
+  if (type === 'pickup') {
+    selectedPickup = { lat, lng, title: place.title || place.address, address: place.address };
+    if (pickupMarker && passengerMap) passengerMap.removeLayer(pickupMarker);
+    if (passengerMap) {
+      pickupMarker = L.marker([lat, lng], { icon: makePaxIcon('#4CAF50', '📍') })
+        .addTo(passengerMap).bindPopup(`<b>📍 ${place.title}</b><br>${place.address || ''}`).openPopup();
+      passengerMap.setView([lat, lng], 15);
+    }
+    mapClickMode = 'dropoff';
+    showToast(`Pickup: ${place.title}`, 'success');
+  } else {
+    selectedDropoff = { lat, lng, title: place.title || place.address, address: place.address };
+    if (dropoffMarker && passengerMap) passengerMap.removeLayer(dropoffMarker);
+    if (passengerMap) {
+      dropoffMarker = L.marker([lat, lng], { icon: makePaxIcon('#C62828', '🏁') })
+        .addTo(passengerMap).bindPopup(`<b>🏁 ${place.title}</b><br>${place.address || ''}`).openPopup();
+    }
+    showToast(`Dropoff: ${place.title}`, 'success');
+  }
+
+  updateRouteAndPricing();
+  checkRouteReady();
+}
+
+async function updateRouteAndPricing() {
+  const p = selectedPickup || _parseCoords(document.getElementById('pickupInput')?.value);
+  const d = selectedDropoff || _parseCoords(document.getElementById('dropoffInput')?.value);
+
+  if (!p || !d) return;
+
+  const badge = document.getElementById('routeCalcBadge');
+  if (badge) { badge.style.display = 'inline-block'; badge.textContent = 'Calculating route...'; }
+
+  try {
+    const pickupTitle = selectedPickup?.title || document.getElementById('pickupInput')?.value || '';
+    const dropoffTitle = selectedDropoff?.title || document.getElementById('dropoffInput')?.value || '';
+
+    const url = `/api/route?lat1=${p.lat}&lng1=${p.lng}&lat2=${d.lat}&lng2=${d.lng}&pickup=${encodeURIComponent(pickupTitle)}&dropoff=${encodeURIComponent(dropoffTitle)}`;
+    const r = await fetch(url);
+    const data = await r.json();
+
+    if (data.success) {
+      document.getElementById('t-dist').textContent = data.distance_km.toFixed(2);
+      document.getElementById('t-time').textContent = data.duration_mins;
+      document.getElementById('t-fare').textContent = '₹' + data.fare;
+
+      if (badge) {
+        badge.textContent = `✅ ${data.distance_text} • ₹${data.fare}`;
+        badge.style.background = 'rgba(76, 175, 80, 0.15)';
+        badge.style.color = '#2E7D32';
+      }
+
+      if (passengerMap) {
+        if (routePolyline) passengerMap.removeLayer(routePolyline);
+        routePolyline = L.polyline([[p.lat, p.lng], [d.lat, d.lng]], {
+          color: '#1565C0',
+          weight: 4,
+          opacity: 0.85,
+          dashArray: '8, 8'
+        }).addTo(passengerMap);
+        passengerMap.fitBounds([[p.lat, p.lng], [d.lat, d.lng]], { padding: [50, 50] });
+      }
+
+      fetchSafetyContext(pickupTitle, p.lat, p.lng);
+    }
+  } catch (err) {
+    console.warn('[Routing] Route calculation error:', err);
+    if (badge) badge.style.display = 'none';
+  }
+}
+
+async function fetchSafetyContext(cityQuery, lat, lng) {
+  const widget = document.getElementById('safetyContextWidget');
+  const list = document.getElementById('safetyAlertsList');
+  const label = document.getElementById('safetyCityLabel');
+  if (!widget || !list) return;
+
+  let city = (cityQuery || '').split(',')[0].trim() || 'Jaipur';
+  if (city.match(/^[0-9.-]/)) city = 'Jaipur';
+
+  try {
+    const r = await fetch(`/api/nearby_safety?city=${encodeURIComponent(city)}&lat=${lat}&lng=${lng}`);
+    const data = await r.json();
+    if (data.success && data.alerts && data.alerts.length > 0) {
+      if (label) label.textContent = data.location || city;
+      list.innerHTML = data.alerts.map(a => {
+        let catColor = '#1565C0', catBg = '#E3F2FD';
+        if (a.category === 'Traffic Advisory') { catColor = '#E65100'; catBg = '#FFF3E0'; }
+        else if (a.category === 'Road Incident') { catColor = '#C62828'; catBg = '#FFEBEE'; }
+        else if (a.category === 'Route Alert') { catColor = '#F57F17'; catBg = '#FFFDE7'; }
+
+        return `
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:0.8rem">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+              <span class="safety-pill" style="background:${catBg};color:${catColor}">${a.category}</span>
+              <span style="font-weight:700;color:var(--text)">${a.title}</span>
+            </div>
+            <div style="color:var(--text2);font-size:0.75rem">${a.snippet}</div>
+            <div style="font-size:0.7rem;color:var(--text3);margin-top:2px">${a.source} • ${a.date}</div>
+          </div>
+        `;
+      }).join('');
+      widget.style.display = 'block';
+    }
+  } catch (e) {
+    console.warn('[SafetyNews] Fetch error:', e);
+  }
+}
+
+function toggleSafetyAlertsList() {
+  const list = document.getElementById('safetyAlertsList');
+  const arrow = document.getElementById('safetyToggleArrow');
+  if (!list) return;
+  if (list.style.display === 'none') {
+    list.style.display = 'flex';
+    if (arrow) arrow.textContent = '▲';
+  } else {
+    list.style.display = 'none';
+    if (arrow) arrow.textContent = '▼';
+  }
+}
+
+function setupAutocompleteListeners() {
+  const pInput = document.getElementById('pickupInput');
+  const dInput = document.getElementById('dropoffInput');
+
+  if (pInput) {
+    pInput.addEventListener('input', debounce((e) => {
+      searchAddressAutocomplete('pickup', e.target.value.trim());
+      checkRouteReady();
+    }, 350));
+  }
+
+  if (dInput) {
+    dInput.addEventListener('input', debounce((e) => {
+      searchAddressAutocomplete('dropoff', e.target.value.trim());
+      checkRouteReady();
+    }, 350));
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#pickupSuggestions') && e.target.id !== 'pickupInput') {
+      const pSug = document.getElementById('pickupSuggestions');
+      if (pSug) pSug.style.display = 'none';
+    }
+    if (!e.target.closest('#dropoffSuggestions') && e.target.id !== 'dropoffInput') {
+      const dSug = document.getElementById('dropoffSuggestions');
+      if (dSug) dSug.style.display = 'none';
+    }
+  });
 }
 
 function checkRouteReady() {
@@ -830,9 +1095,12 @@ async function startRideFromRoute() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         driver_id: selectedDriver.id,
-        latitude: lat, longitude: lng,
-        pickup_location: pickup,
-        dropoff_location: dropoff
+        latitude: selectedPickup ? selectedPickup.lat : lat,
+        longitude: selectedPickup ? selectedPickup.lng : lng,
+        dropoff_lat: selectedDropoff ? selectedDropoff.lat : null,
+        dropoff_lng: selectedDropoff ? selectedDropoff.lng : null,
+        pickup_location: selectedPickup ? selectedPickup.title : pickup,
+        dropoff_location: selectedDropoff ? selectedDropoff.title : dropoff
       })
     });
     if (!r) { showToast('Network error', 'error'); return; }
@@ -1234,18 +1502,69 @@ async function _doSendSOS(overrideEmail) {
 function showSOSOverlay(d) {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(198,40,40,0.96);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:white;text-align:center;padding:24px;overflow-y:auto';
+
+  let emergencyHelpCards = '';
+  if (d.nearest_help) {
+    const police = (d.nearest_help.police || [])[0];
+    const hospital = (d.nearest_help.hospitals || [])[0];
+    
+    let policeHtml = '';
+    if (police) {
+      policeHtml = `
+        <div style="background:white;color:#111;border-radius:12px;padding:12px 16px;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,0.2)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:800;color:#1565C0;font-size:0.95rem">🚓 Nearest Police: ${police.name}</span>
+            <span style="font-size:0.78rem;background:#E3F2FD;color:#1565C0;padding:2px 8px;border-radius:12px;font-weight:700">${police.distance_text || 'Nearby'}</span>
+          </div>
+          <div style="font-size:0.8rem;color:#555;margin:4px 0">${police.address}</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <a href="tel:${police.phone}" style="flex:1;background:#C62828;color:white;padding:8px 12px;border-radius:8px;text-decoration:none;font-weight:700;font-size:0.85rem;text-align:center">📞 Call Police (${police.phone})</a>
+            ${police.maps_url ? `<a href="${police.maps_url}" target="_blank" style="background:#1565C0;color:white;padding:8px 12px;border-radius:8px;text-decoration:none;font-weight:700;font-size:0.85rem;text-align:center">🗺️ Directions</a>` : ''}
+          </div>
+        </div>`;
+    }
+
+    let hospHtml = '';
+    if (hospital) {
+      hospHtml = `
+        <div style="background:white;color:#111;border-radius:12px;padding:12px 16px;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,0.2)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:800;color:#2E7D32;font-size:0.95rem">🏥 Nearest Hospital: ${hospital.name}</span>
+            <span style="font-size:0.78rem;background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:12px;font-weight:700">${hospital.distance_text || 'Nearby'}</span>
+          </div>
+          <div style="font-size:0.8rem;color:#555;margin:4px 0">${hospital.address}</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <a href="tel:${hospital.phone}" style="flex:1;background:#2E7D32;color:white;padding:8px 12px;border-radius:8px;text-decoration:none;font-weight:700;font-size:0.85rem;text-align:center">📞 Call Hospital (${hospital.phone})</a>
+            ${hospital.maps_url ? `<a href="${hospital.maps_url}" target="_blank" style="background:#1565C0;color:white;padding:8px 12px;border-radius:8px;text-decoration:none;font-weight:700;font-size:0.85rem;text-align:center">🗺️ Directions</a>` : ''}
+          </div>
+        </div>`;
+    }
+
+    if (policeHtml || hospHtml) {
+      emergencyHelpCards = `
+        <div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:10px;margin:8px 0">
+          <div style="font-weight:800;font-size:0.85rem;letter-spacing:0.5px;color:rgba(255,255,255,0.9)">🛡️ LOCAL EMERGENCY CONTACTS (Powered by SerpApi):</div>
+          ${policeHtml}
+          ${hospHtml}
+        </div>`;
+    }
+  }
+
   overlay.innerHTML = `
-    <div style="font-size:72px">🚨</div>
-    <h1 style="font-size:1.8rem;margin:0;font-weight:900">SOS ALERT SENT!</h1>
-    <p style="font-size:1rem;opacity:0.95;max-width:360px;margin:0">${d.message}</p>
-    <p style="font-size:0.85rem;opacity:0.8;margin:0">Emergency contact has been notified.</p>
+    <div style="font-size:64px">🚨</div>
+    <h1 style="font-size:1.8rem;margin:0;font-weight:900">SOS ALERT DISPATCHED!</h1>
+    <p style="font-size:0.95rem;opacity:0.95;max-width:380px;margin:0">${d.message}</p>
+    <p style="font-size:0.85rem;opacity:0.85;margin:0">Emergency contact notified with your live coordinates.</p>
+    ${emergencyHelpCards}
     ${d.maps_link && d.maps_link !== 'Location unavailable'
-      ? `<a href="${d.maps_link}" target="_blank" style="background:white;color:#C62828;padding:14px 28px;border-radius:10px;font-weight:900;text-decoration:none;font-size:0.95rem;display:block;width:100%;max-width:280px;text-align:center;box-sizing:border-box">📍 View Your Location on Maps</a>`
-      : `<div style="background:rgba(255,255,255,0.15);border-radius:10px;padding:12px 20px;font-size:0.85rem">📍 Getting your location...</div>`}
-    <p style="font-size:0.82rem;opacity:0.7;margin:0">Call <strong>112</strong> if in immediate danger</p>
-    <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.2);border:2px solid white;color:white;padding:12px 28px;border-radius:10px;cursor:pointer;font-weight:700;font-size:0.95rem;width:100%;max-width:280px">✕ Close</button>`;
+      ? `<a href="${d.maps_link}" target="_blank" style="background:white;color:#C62828;padding:12px 24px;border-radius:10px;font-weight:900;text-decoration:none;font-size:0.95rem;display:block;width:100%;max-width:320px;text-align:center;box-sizing:border-box">📍 Open My Location on Google Maps</a>`
+      : `<div style="background:rgba(255,255,255,0.15);border-radius:10px;padding:10px 20px;font-size:0.85rem">📍 Resolving GPS location...</div>`}
+    <div style="display:flex;gap:10px;width:100%;max-width:320px">
+      <a href="tel:112" style="flex:1;background:#FFD600;color:#000;padding:12px;border-radius:10px;text-decoration:none;font-weight:900;font-size:1rem;text-align:center">📞 DIAL 112</a>
+      <button onclick="this.closest('div').parentElement.remove()" style="flex:1;background:rgba(255,255,255,0.2);border:2px solid white;color:white;padding:12px;border-radius:10px;cursor:pointer;font-weight:700;font-size:0.95rem">✕ Dismiss</button>
+    </div>`;
   document.body.appendChild(overlay);
-  setTimeout(() => overlay.remove(), 25000);
+  setTimeout(() => overlay.remove(), 45000);
 }
 
 // ── GEOFENCING ─────────────────────────────────────────────────────────────────
@@ -1332,15 +1651,39 @@ function stopGeofencing(rideId) {
 }
 async function logout() {
   try { await authFetch('/api/logout', { method: 'POST' }); } catch (e) {}
+  localStorage.removeItem('rr_token');
+  localStorage.removeItem('rr_user_type');
+  localStorage.removeItem('rr_user_id');
+  localStorage.removeItem('rr_user');
+  localStorage.removeItem('user');
+  localStorage.removeItem('rakshaUser');
+  sessionStorage.clear();
   window.location.href = '/';
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────────
 (async function init() {
-  const token = localStorage.getItem('rr_token') || '';
+  // Support ?token= in URL (e.g. from redirect)
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlToken = urlParams.get('token');
+  if (urlToken) {
+    localStorage.setItem('rr_token', urlToken);
+    localStorage.setItem('rr_user_type', 'passenger');
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
 
-  // If no token at all — go to login immediately
-  if (!token) {
+  const token = localStorage.getItem('rr_token') || '';
+  const userType = localStorage.getItem('rr_user_type') || '';
+
+  // If no token or role is explicitly driver, clear and redirect to passenger login
+  if (!token || (userType && userType !== 'passenger')) {
+    if (userType && userType !== 'passenger') {
+      localStorage.removeItem('rr_token');
+      localStorage.removeItem('rr_user_type');
+      localStorage.removeItem('rr_user_id');
+      localStorage.removeItem('rr_user');
+      localStorage.removeItem('user');
+    }
     window.location.href = '/login/passenger';
     return;
   }
@@ -1353,17 +1696,20 @@ async function logout() {
       return;
     }
     const d = await r.json();
-    if (!d.logged_in) {
-      // Token exists but session_check failed — retry once (Render restart scenario)
+    if (!d.logged_in || (d.user_type && d.user_type !== 'passenger')) {
+      // Token exists but session_check failed or wrong role — retry once (Render restart scenario)
       await new Promise(res => setTimeout(res, 500));
       const r2 = await authFetch('/api/session_check', { credentials: 'include' });
       if (r2) {
         const d2 = await r2.json();
-        if (!d2.logged_in) {
+        if (!d2.logged_in || (d2.user_type && d2.user_type !== 'passenger')) {
           localStorage.removeItem('rr_token');
           localStorage.removeItem('rr_user_type');
-          showToast('Session expired — please login again', 'warn');
-          setTimeout(() => window.location.href = '/login/passenger', 1500);
+          localStorage.removeItem('rr_user_id');
+          localStorage.removeItem('rr_user');
+          localStorage.removeItem('user');
+          showToast('Session expired or unauthorized — please login again', 'warn');
+          setTimeout(() => window.location.href = '/login/passenger', 1200);
           return;
         }
       }
@@ -1374,6 +1720,7 @@ async function logout() {
 
   loadPassengerData();
   startPassengerGPS();
+  setupAutocompleteListeners();
   // Keep Render awake — ping every 14 minutes
   setInterval(() => fetch('/ping').catch(() => {}), 14 * 60 * 1000);
 })();
