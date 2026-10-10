@@ -3,7 +3,7 @@ RakshaRide Enhanced - Complete Ride Sharing Platform
 Includes: QR Code System, Ride Management, Payment Integration, History Tracking
 """
 
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_cors import CORS
 import sqlite3
 import uuid
@@ -27,21 +27,25 @@ from auth_utils import generate_token, get_current_user, require_auth
 
 # ── DUAL AUTH HELPERS ─────────────────────────────────────────────────────────
 def _driver_id():
-    """Return driver user_id from session OR JWT token. None if not authenticated."""
+    """Return driver user_id from JWT token OR session. None if not authenticated as driver."""
+    u = get_current_user()
+    if u:
+        if u.get('user_type') == 'driver':
+            return u['user_id']
+        return None
     if session.get('user_type') == 'driver' and session.get('user_id'):
         return session['user_id']
-    u = get_current_user()
-    if u and u.get('user_type') == 'driver':
-        return u['user_id']
     return None
 
 def _passenger_id():
-    """Return passenger user_id from session OR JWT token. None if not authenticated."""
+    """Return passenger user_id from JWT token OR session. None if not authenticated as passenger."""
+    u = get_current_user()
+    if u:
+        if u.get('user_type') == 'passenger':
+            return u['user_id']
+        return None
     if session.get('user_type') == 'passenger' and session.get('user_id'):
         return session['user_id']
-    u = get_current_user()
-    if u and u.get('user_type') == 'passenger':
-        return u['user_id']
     return None
 
 def _require_driver():
@@ -2546,11 +2550,13 @@ def api_road_distance():
 
 @app.route('/api/complete_ride', methods=['POST'])
 def complete_ride():
-    """Complete a ride — PASSENGER ONLY"""
-    pid, err = _require_passenger()
-    if err: return err
+    """Complete a ride — supports both passenger and driver"""
+    did = _driver_id()
+    pid = _passenger_id()
+    if not did and not pid:
+        return jsonify({"success": False, "message": "Authentication required", "code": "AUTH_REQUIRED"}), 401
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         ride_id = data.get('ride_id')
         distance_km = float(data.get('distance_km') or 0)
 
@@ -2560,7 +2566,7 @@ def complete_ride():
         conn = get_db_conn()
         c = conn.cursor()
 
-        # Verify ride belongs to this passenger
+        # Verify ride exists
         c.execute("SELECT passenger_id, driver_id, start_time, status FROM rides WHERE id = ?", (ride_id,))
         result = c.fetchone()
         if not result:
@@ -2569,16 +2575,23 @@ def complete_ride():
 
         passenger_id, driver_id, start_time_str, status = result
 
-        if str(passenger_id) != str(pid):
+        # Verify caller has permission
+        if did and str(driver_id) != str(did):
+            conn.close()
+            return jsonify({"success": False, "message": "Not your ride"}), 403
+        if pid and not did and str(passenger_id) != str(pid):
             conn.close()
             return jsonify({"success": False, "message": "Not your ride"}), 403
 
-        if status != 'active':
+        if status not in ['active', 'pending']:
             conn.close()
-            return jsonify({"success": False, "message": "Ride is not active"}), 400
+            return jsonify({"success": False, "message": "Ride is already completed or cancelled"}), 400
 
         # Calculate fare
-        start_time = datetime.fromisoformat(start_time_str.replace(' ', 'T'))
+        try:
+            start_time = datetime.fromisoformat(start_time_str.replace(' ', 'T')) if start_time_str else datetime.now()
+        except Exception:
+            start_time = datetime.now()
         end_time = datetime.now()
         duration_minutes = int((end_time - start_time).total_seconds() / 60)
         fare = calculate_fare(duration_minutes, distance_km)
@@ -3984,13 +3997,12 @@ def upload_driver_document():
     RENTER cannot upload RC â€” only OWNER can.
     """
     try:
-        if 'user_id' not in session or session.get('user_type') != 'driver':
-            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        uploader_id, err = _require_driver()
+        if err: return err
 
         data     = request.get_json()
         doc_type = data.get('doc_type', '').upper()
         image    = data.get('image', '')
-        uploader_id = session['user_id']
 
         if not doc_type or not image:
             return jsonify({"success": False, "message": "doc_type and image required"}), 400
@@ -4041,10 +4053,9 @@ def upload_driver_document():
 @app.route('/api/driver/my_documents', methods=['GET'])
 def get_my_documents():
     """List uploaded documents for current driver (no file data, metadata only)."""
-    if 'user_id' not in session or session.get('user_type') != 'driver':
-        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    driver_id, err = _require_driver()
+    if err: return err
     try:
-        driver_id = session['user_id']
         conn = get_db_conn()
         c = conn.cursor()
         c.execute("""
@@ -4346,16 +4357,8 @@ def _resolve_document_preview(file_data):
 
 @app.route('/api/get_driver_documents')
 def api_get_driver_documents():
-    # Accept both session auth (dashboard) and JWT token auth
-    uid = None
-    if 'user_id' in session and session.get('user_type') == 'driver':
-        uid = session['user_id']
-    else:
-        current_user = get_current_user()
-        if current_user and current_user.get('user_type') == 'driver':
-            uid = current_user['user_id']
-    if not uid:
-        return jsonify({"success": False, "message": "Driver authentication required"}), 401
+    uid, err = _require_driver()
+    if err: return err
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -4419,13 +4422,8 @@ def api_get_driver_documents():
 @app.route('/api/get_document/<doc_type>')
 def api_get_single_document(doc_type):
     """Serve a single document — ONLY for the owning driver (not passengers)"""
-    uid = session.get('user_id') if session.get('user_type') == 'driver' else None
-    if not uid:
-        cu = get_current_user()
-        if cu and cu.get('user_type') == 'driver':
-            uid = cu['user_id']
-    if not uid:
-        return jsonify({"success": False, "message": "Driver authentication required"}), 401
+    uid, err = _require_driver()
+    if err: return err
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -4453,13 +4451,8 @@ def api_get_single_document(doc_type):
 
 @app.route('/api/get_payment_qr')
 def api_get_payment_qr():
-    uid = session.get('user_id') if session.get('user_type') == 'driver' else None
-    if not uid:
-        cu = get_current_user()
-        if cu and cu.get('user_type') == 'driver':
-            uid = cu['user_id']
-    if not uid:
-        return jsonify({"success": False}), 401
+    uid, err = _require_driver()
+    if err: return err
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
