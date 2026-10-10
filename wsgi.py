@@ -32,13 +32,13 @@ def _setup_db():
         return
 
     # On Render (Linux), use /tmp for runtime storage
-    on_render = os.path.exists('/tmp') and os.environ.get('RENDER', '')
-    if on_render or os.path.exists('/tmp'):
+    on_render = bool(os.environ.get('RENDER') or os.environ.get('RENDER_INSTANCE_ID'))
+    if on_render or (os.path.exists('/tmp') and os.name != 'nt'):
         tmp_db = '/tmp/database_enhanced.db'
         os.environ['DB_PATH'] = tmp_db
 
         if os.path.exists(tmp_db) and os.path.getsize(tmp_db) > 5000:
-            print(f"[DB] ✅ Using existing /tmp DB ({os.path.getsize(tmp_db)} bytes)")
+            print(f"[DB] [OK] Using existing /tmp DB ({os.path.getsize(tmp_db)} bytes)")
             return
 
         # /tmp DB missing or too small — try to restore
@@ -51,7 +51,7 @@ def _setup_db():
         )
         if os.path.exists(repo_backup) and os.path.getsize(repo_backup) > 5000:
             shutil.copy2(repo_backup, tmp_db)
-            print(f"[DB] ✅ Restored from repo backup ({os.path.getsize(tmp_db)} bytes)")
+            print(f"[DB] [OK] Restored from repo backup ({os.path.getsize(tmp_db)} bytes)")
             return
 
         # Try 2: Download from GitHub raw URL
@@ -62,12 +62,12 @@ def _setup_db():
             if resp.status_code == 200 and len(resp.content) > 5000:
                 with open(tmp_db, 'wb') as f:
                     f.write(resp.content)
-                print(f"[DB] ✅ Downloaded from GitHub ({len(resp.content)} bytes)")
+                print(f"[DB] [OK] Downloaded from GitHub ({len(resp.content)} bytes)")
                 return
             else:
-                print(f"[DB] ⚠️ GitHub download failed: HTTP {resp.status_code}")
+                print(f"[DB] [WARN] GitHub download failed: HTTP {resp.status_code}")
         except Exception as e:
-            print(f"[DB] ⚠️ GitHub download error: {e}")
+            print(f"[DB] [WARN] GitHub download error: {e}")
 
         # Try 3: Copy from repo root (if committed)
         repo_root_db = os.path.join(
@@ -76,10 +76,10 @@ def _setup_db():
         )
         if os.path.exists(repo_root_db) and os.path.getsize(repo_root_db) > 5000:
             shutil.copy2(repo_root_db, tmp_db)
-            print(f"[DB] ✅ Copied from repo root ({os.path.getsize(tmp_db)} bytes)")
+            print(f"[DB] [OK] Copied from repo root ({os.path.getsize(tmp_db)} bytes)")
             return
 
-        print("[DB] ℹ️ Starting with fresh database (no backup found)")
+        print("[DB] [INFO] Starting with fresh database (no backup found)")
 
     else:
         # Local development — use file in project root
