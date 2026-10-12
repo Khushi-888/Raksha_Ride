@@ -103,8 +103,7 @@ Navigate to: `http://localhost:5000`
 
 ### Admin Panel
 - **URL:** `http://localhost:5000/admin`
-- **Username:** `admin`
-- **Password:** `admin@RakshaRide2024`
+
 
 ### Environment Variables (`.env`)
 | Variable | Description |
